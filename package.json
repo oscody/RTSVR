@@ -4,14 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "iwsdk dev up --open --foreground",
-    "dev:runtime": "vite",
-    "dev:down": "iwsdk dev down",
-    "dev:status": "iwsdk dev status",
-    "reference:status": "iwsdk reference status",
-    "reference:warmup": "iwsdk reference warmup",
-    "build": "vite build",
-    "preview": "vite preview"
+    "dev": "bash scripts/with-supported-node.sh iwsdk dev up --open --foreground",
+    "dev:runtime": "bash scripts/with-supported-node.sh vite",
+    "dev:down": "bash scripts/with-supported-node.sh iwsdk dev down",
+    "dev:status": "bash scripts/with-supported-node.sh iwsdk dev status",
+    "reference:status": "bash scripts/with-supported-node.sh iwsdk reference status",
+    "reference:warmup": "bash scripts/with-supported-node.sh iwsdk reference warmup",
+    "build": "bash scripts/with-supported-node.sh vite build",
+    "preview": "bash scripts/with-supported-node.sh vite preview"
   },
   "dependencies": {
     "@iwsdk/core": "0.4.2",
