@@ -1,59 +1,40 @@
 import {
   AssetManifest,
   AssetType,
-  Mesh,
-  MeshBasicMaterial,
-  PlaneGeometry,
   SessionMode,
-  SRGBColorSpace,
-  AssetManager,
+  Vector3,
   World,
 } from "@iwsdk/core";
+import { addSceneLighting, createPanels, createScenario } from "./scenario.js";
+import { CombatSystem } from "./systems/combat.js";
+import { CommandPanelSystem } from "./systems/command-panel.js";
+import { ConstructionSystem } from "./systems/construction.js";
+import { EconomySystem } from "./systems/economy.js";
+import { MatchStateSystem } from "./systems/match-state.js";
+import { ProductionSystem } from "./systems/production.js";
+import { SelectionSystem } from "./systems/selection.js";
 
-import {
-  AudioSource,
-  DistanceGrabbable,
-  MovementMode,
-  Interactable,
-  PanelUI,
-  PlaybackMode,
-  ScreenSpace,
-} from "@iwsdk/core";
-
-import { EnvironmentType, LocomotionEnvironment } from "@iwsdk/core";
-
-import { PanelSystem } from "./panel.js";
-
-import { Robot } from "./robot.js";
-
-import { RobotSystem } from "./robot.js";
+const model = (filename: string): AssetManifest[string] => ({
+  url: `/gltf/kenney-space-kit/${filename}.glb`,
+  type: AssetType.GLTF,
+  priority: "critical",
+});
 
 const assets: AssetManifest = {
-  chimeSound: {
-    url: "/audio/chime.mp3",
-    type: AssetType.Audio,
-    priority: "background",
-  },
-  webxr: {
-    url: "/textures/webxr.png",
-    type: AssetType.Texture,
-    priority: "critical",
-  },
-  environmentDesk: {
-    url: "./gltf/environmentDesk/environmentDesk.gltf",
-    type: AssetType.GLTF,
-    priority: "critical",
-  },
-  plantSansevieria: {
-    url: "./gltf/plantSansevieria/plantSansevieria.gltf",
-    type: AssetType.GLTF,
-    priority: "critical",
-  },
-  robot: {
-    url: "./gltf/robot/robot.gltf",
-    type: AssetType.GLTF,
-    priority: "critical",
-  },
+  terrain: model("terrain"),
+  platformLarge: model("platform_large"),
+  platformStraight: model("platform_straight"),
+  platformEnd: model("platform_end"),
+  platformSmall: model("platform_small"),
+  hangarLargeA: model("hangar_largeA"),
+  satelliteDish: model("satelliteDish"),
+  rover: model("rover"),
+  rockCrystals: model("rock_crystals"),
+  rockCrystalsLargeA: model("rock_crystalsLargeA"),
+  hangarSmallA: model("hangar_smallA"),
+  craftCargoB: model("craft_cargoB"),
+  craftMiner: model("craft_miner"),
+  turretSingle: model("turret_single"),
 };
 
 World.create(document.getElementById("scene-container") as HTMLDivElement, {
@@ -64,81 +45,26 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     features: { handTracking: true, layers: true },
   },
   features: {
-    locomotion: { useWorker: true },
-    grabbing: true,
+    locomotion: false,
+    grabbing: false,
     physics: false,
     sceneUnderstanding: false,
     environmentRaycast: false,
   },
 }).then((world) => {
-  const { camera } = world;
-
-  camera.position.set(-4, 1.5, -6);
-  camera.rotateY(-Math.PI * 0.75);
-
-  const { scene: envMesh } = AssetManager.getGLTF("environmentDesk")!;
-  envMesh.rotateY(Math.PI);
-  envMesh.position.set(0, -0.1, 0);
   world
-    .createTransformEntity(envMesh)
-    .addComponent(LocomotionEnvironment, { type: EnvironmentType.STATIC });
+    .registerSystem(SelectionSystem)
+    .registerSystem(EconomySystem)
+    .registerSystem(ConstructionSystem)
+    .registerSystem(ProductionSystem)
+    .registerSystem(CombatSystem)
+    .registerSystem(MatchStateSystem)
+    .registerSystem(CommandPanelSystem);
 
-  const { scene: plantMesh } = AssetManager.getGLTF("plantSansevieria")!;
+  addSceneLighting(world);
+  createScenario(world);
+  createPanels(world);
 
-  plantMesh.position.set(1.2, 0.85, -1.8);
-
-  world
-    .createTransformEntity(plantMesh)
-    .addComponent(Interactable)
-    .addComponent(DistanceGrabbable, {
-      movementMode: MovementMode.MoveFromTarget,
-    });
-
-  const { scene: robotMesh } = AssetManager.getGLTF("robot")!;
-  // defaults for AR
-  robotMesh.position.set(-1.2, 0.4, -1.8);
-  robotMesh.scale.setScalar(1);
-
-  robotMesh.position.set(-1.2, 0.95, -1.8);
-  robotMesh.scale.setScalar(0.5);
-
-  world
-    .createTransformEntity(robotMesh)
-    .addComponent(Interactable)
-    .addComponent(Robot)
-    .addComponent(AudioSource, {
-      src: "./audio/chime.mp3",
-      maxInstances: 3,
-      playbackMode: PlaybackMode.FadeRestart,
-    });
-
-  const panelEntity = world
-    .createTransformEntity()
-    .addComponent(PanelUI, {
-      config: "./ui/welcome.json",
-      maxHeight: 0.8,
-      maxWidth: 1.6,
-    })
-    .addComponent(Interactable)
-    .addComponent(ScreenSpace, {
-      top: "20px",
-      left: "20px",
-      height: "40%",
-    });
-  panelEntity.object3D!.position.set(0, 1.29, -1.9);
-
-  const webxrLogoTexture = AssetManager.getTexture("webxr")!;
-  webxrLogoTexture.colorSpace = SRGBColorSpace;
-  const logoBanner = new Mesh(
-    new PlaneGeometry(3.39, 0.96),
-    new MeshBasicMaterial({
-      map: webxrLogoTexture,
-      transparent: true,
-    }),
-  );
-  world.createTransformEntity(logoBanner);
-  logoBanner.position.set(0, 1, 1.8);
-  logoBanner.rotateY(Math.PI);
-
-  world.registerSystem(PanelSystem).registerSystem(RobotSystem);
+  world.camera.position.set(0, 2.35, 3.7);
+  world.camera.lookAt(new Vector3(0, 0.85, -2.15));
 });

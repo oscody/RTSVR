@@ -1,0 +1,47 @@
+<style>
+  .result-panel {
+    width: 64;
+    padding: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: #111c31;
+    border-color: #73e9a1;
+    border-width: 0.22;
+    border-radius: 2.4;
+  }
+
+  .result-title {
+    color: #8af2ad;
+    font-size: 4.4;
+    font-weight: bold;
+    text-align: center;
+  }
+
+  .result-body {
+    color: #e5edf8;
+    font-size: 2.1;
+    text-align: center;
+    margin-top: 1.2;
+  }
+
+  .result-button {
+    width: 80%;
+    padding: 1.5;
+    margin-top: 1.8;
+    background-color: #f3f7ff;
+    color: #0b1322;
+    border-radius: 1.2;
+    font-size: 2.2;
+    font-weight: bold;
+    text-align: center;
+    cursor: pointer;
+  }
+</style>
+
+<div class="result-panel">
+  <span id="result-title" class="result-title">MISSION COMPLETE</span>
+  <span id="result-body" class="result-body">The enemy emplacement is down.</span>
+  <button id="result-reset-button" class="result-button">Reset Scenario</button>
+</div>
+

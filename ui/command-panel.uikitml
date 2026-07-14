@@ -1,0 +1,90 @@
+<style>
+  .panel {
+    width: 58;
+    padding: 2.5;
+    display: flex;
+    flex-direction: column;
+    background-color: #101a2c;
+    border-color: #4a668f;
+    border-width: 0.16;
+    border-radius: 2.2;
+  }
+
+  .eyebrow {
+    color: #76d9ff;
+    font-size: 1.7;
+    font-weight: bold;
+    letter-spacing: 0.12;
+  }
+
+  .title {
+    color: #ffffff;
+    font-size: 4.2;
+    font-weight: bold;
+    margin-top: 0.5;
+  }
+
+  .selected {
+    color: #a9f7c4;
+    font-size: 2.7;
+    font-weight: bold;
+    margin-top: 1.4;
+  }
+
+  .stat {
+    color: #d7e2f1;
+    font-size: 2;
+    margin-top: 0.65;
+  }
+
+  .status {
+    min-height: 8;
+    padding: 1.4;
+    margin-top: 1.4;
+    background-color: #172740;
+    color: #dcecff;
+    border-radius: 1;
+    font-size: 1.85;
+  }
+
+  .primary {
+    width: 100%;
+    padding: 1.7;
+    margin-top: 1.5;
+    background-color: #68e59a;
+    color: #07140d;
+    border-radius: 1.2;
+    border-width: 0.1;
+    border-color: #c7ffdc;
+    font-size: 2.3;
+    font-weight: bold;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .secondary {
+    width: 100%;
+    padding: 1.25;
+    margin-top: 0.9;
+    background-color: #263a59;
+    color: #e9f2ff;
+    border-radius: 1.1;
+    border-width: 0.1;
+    border-color: #58749e;
+    font-size: 1.9;
+    text-align: center;
+    cursor: pointer;
+  }
+</style>
+
+<div class="panel">
+  <span class="eyebrow">FIELD COMMAND</span>
+  <span class="title">CRYSTAL FRONT</span>
+  <span id="selected-text" class="selected">Mining rover</span>
+  <span id="resources-text" class="stat">0 crystals</span>
+  <span id="factory-text" class="stat">Locked | 30 crystals</span>
+  <span id="base-health-text" class="stat">Base 100 | Enemy 100</span>
+  <span id="status-text" class="status">Select the rover, then start harvesting crystals.</span>
+  <button id="action-button" class="primary">Start Harvesting</button>
+  <button id="reset-button" class="secondary">Reset Scenario</button>
+</div>
