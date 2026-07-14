@@ -18,6 +18,7 @@ import {
   Combat,
   EnemyObjective,
   FactoryState,
+  GameState,
   Health,
   PlayerBase,
   Presentation,
@@ -42,13 +43,16 @@ function modelRoot(
   const root = new Group();
   root.name = name;
   root.position.copy(position);
-  const entity = world.createTransformEntity(root, parent);
   const gltf = AssetManager.getGLTF(key);
   if (!gltf) throw new Error(`Missing preloaded GLB: ${key}`);
   const model = gltf.scene;
   model.name = `${name}_Model`;
   model.scale.setScalar(scale);
-  world.createTransformEntity(model, entity);
+  // Attach the model directly to the root Group, not as a separate transform
+  // entity — the XR ray raycast only sees meshes within the interactable
+  // entity's own Object3D subtree, so a child entity is invisible to it.
+  root.add(model);
+  const entity = world.createTransformEntity(root, parent);
   return { entity, model };
 }
 
@@ -169,6 +173,10 @@ export function createScenario(world: World): void {
   rootObject.position.set(0, BOARD_Y, -2.15);
   const root = world.createTransformEntity(rootObject);
   addTabletopScenery(world, root);
+
+  const stateObject = new Object3D();
+  stateObject.name = "RTSGameState";
+  world.createTransformEntity(stateObject, root).addComponent(GameState);
 
   const orderMarker = new Mesh(
     new RingGeometry(0.28, 0.36, 32),

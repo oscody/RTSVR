@@ -13,6 +13,7 @@ import { EconomySystem } from "./systems/economy.js";
 import { MatchStateSystem } from "./systems/match-state.js";
 import { ProductionSystem } from "./systems/production.js";
 import { SelectionSystem } from "./systems/selection.js";
+import { StateMirrorSystem } from "./systems/state-mirror.js";
 
 const model = (filename: string): AssetManifest[string] => ({
   url: `/gltf/kenney-space-kit/${filename}.glb`,
@@ -59,7 +60,8 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(ProductionSystem)
     .registerSystem(CombatSystem)
     .registerSystem(MatchStateSystem)
-    .registerSystem(CommandPanelSystem);
+    .registerSystem(CommandPanelSystem)
+    .registerSystem(StateMirrorSystem);
 
   addSceneLighting(world);
   createScenario(world);

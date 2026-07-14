@@ -48,6 +48,17 @@ export const Combat = createComponent("RTSCombat", {
 export const PlayerBase = createComponent("RTSPlayerBase", {});
 export const EnemyObjective = createComponent("RTSEnemyObjective", {});
 
+// ECS-visible mirror of `runtime` (one singleton entity, created in scenario.ts).
+// Read-only: observe via ecs_query_entity/ecs_diff; drive the game through input.
+export const GameState = createComponent("RTSGameState", {
+  resources: { type: Types.Int32, default: 0 },
+  match: { type: Types.String, default: "playing" },
+  status: { type: Types.String, default: "" },
+  selectedKind: { type: Types.String, default: "none" },
+  selectedIndex: { type: Types.Int32, default: -1 },
+  revision: { type: Types.Int32, default: 0 },
+});
+
 type MatchState = "playing" | "won" | "lost";
 
 export const runtime = {

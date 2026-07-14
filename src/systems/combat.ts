@@ -9,6 +9,10 @@ import {
 } from "../game-state.js";
 
 const ATTACK_RANGE = 0.78;
+// Firing tolerance: the approach converges asymptotically onto ATTACK_RANGE,
+// and the final sub-ulp Float32 steps can leave distance permanently a few
+// nanometers above it, freezing the tank without ever firing.
+const ATTACK_EPSILON = 0.01;
 const TANK_SPEED = 0.62;
 
 export class CombatSystem extends createSystem({
@@ -28,7 +32,7 @@ export class CombatSystem extends createSystem({
       const dz = targetObject.position.z - tankObject.position.z;
       const distance = Math.sqrt(dx * dx + dz * dz);
       tankObject.rotation.y = Math.atan2(dx, dz);
-      if (distance > ATTACK_RANGE) {
+      if (distance > ATTACK_RANGE + ATTACK_EPSILON) {
         const step = Math.min(distance - ATTACK_RANGE, TANK_SPEED * delta);
         tankObject.position.x += (dx / distance) * step;
         tankObject.position.z += (dz / distance) * step;
