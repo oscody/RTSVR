@@ -1,0 +1,5 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="RTSResourceNode" description="EliCS component: ResourceNode">
+    <IntAttribute name="remaining" defaultValue="999"/>
+  </Component>
+</ComponentSchema>

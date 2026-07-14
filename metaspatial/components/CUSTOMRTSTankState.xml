@@ -1,0 +1,5 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="RTSTankState" description="EliCS component: TankState">
+    <BooleanAttribute name="ready" defaultValue="false"/>
+  </Component>
+</ComponentSchema>

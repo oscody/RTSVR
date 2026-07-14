@@ -1,0 +1,92 @@
+entities:
+  com.meta.models.Scene:
+  - components:
+      com.meta.components.Name: {}
+      com.meta.components.Scene:
+        nodes:
+        - ref:hangar_smallA
+    tag: Scene
+  com.meta.models.SceneNode:
+  - components:
+      com.meta.components.Animatable: {}
+      com.meta.components.Name:
+        name: hangar_smallA
+      com.meta.components.PointerNodeInverseComponent: {}
+      com.meta.components.SceneNode:
+        rotation.data:
+        - 1
+        - 0
+        - 0
+        - 0
+        rotation.format: Quaternion
+        scale:
+        - 1
+        - 1
+        - 1
+        translation:
+        - 2
+        - 0
+        - 1.5
+        componentVersion: 1
+        children:
+        - ref:gate1
+        - ref:gate
+      com.meta.components.SceneNodeMesh:
+        mesh: ref:Mesh hangar_smallA
+      com.meta.components.Visibility:
+        visible: true
+    tag: hangar_smallA
+  - components:
+      com.meta.components.Animatable: {}
+      com.meta.components.Name:
+        name: gate
+      com.meta.components.PointerNodeInverseComponent: {}
+      com.meta.components.SceneNode:
+        rotation.data:
+        - 1
+        - 0
+        - 0
+        - 0
+        rotation.format: Quaternion
+        scale:
+        - 1
+        - 1
+        - 1
+        translation:
+        - 0
+        - 9.6743946187416441e-09
+        - -0.84999996423721313
+        componentVersion: 1
+      com.meta.components.SceneNodeMesh:
+        mesh: ref:Mesh gate
+      com.meta.components.Visibility:
+        visible: true
+    tag: gate1
+  - components:
+      com.meta.components.Animatable: {}
+      com.meta.components.Name:
+        name: gate
+      com.meta.components.PointerNodeInverseComponent: {}
+      com.meta.components.SceneNode:
+        rotation.data:
+        - -4.3711388286737929e-08
+        - 0
+        - -1
+        - 0
+        rotation.format: Quaternion
+        scale:
+        - 1
+        - 1
+        - 1
+        translation:
+        - 0
+        - 9.6743946187416441e-09
+        - 0.84999990463256836
+        componentVersion: 1
+      com.meta.components.SceneNodeMesh:
+        mesh: ref:Mesh gate
+      com.meta.components.Visibility:
+        visible: true
+    tag: gate
+metadata:
+  version: 1.35

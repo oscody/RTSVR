@@ -21,14 +21,10 @@ const model = (filename: string): AssetManifest[string] => ({
   priority: "critical",
 });
 
+// Static board geometry (terrain tiles, table) lives in the GLXF level; this
+// manifest only carries the models code spawns at runtime via AssetManager.
 const assets: AssetManifest = {
-  terrain: model("terrain"),
-  platformLarge: model("platform_large"),
-  platformStraight: model("platform_straight"),
-  platformEnd: model("platform_end"),
-  platformSmall: model("platform_small"),
   hangarLargeA: model("hangar_largeA"),
-  satelliteDish: model("satelliteDish"),
   rover: model("rover"),
   rockCrystals: model("rock_crystals"),
   rockCrystalsLargeA: model("rock_crystalsLargeA"),
@@ -40,6 +36,7 @@ const assets: AssetManifest = {
 
 World.create(document.getElementById("scene-container") as HTMLDivElement, {
   assets,
+  level: "./glxf/Composition.glxf",
   xr: {
     sessionMode: SessionMode.ImmersiveVR,
     offer: "always",

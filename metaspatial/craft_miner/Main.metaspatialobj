@@ -1,0 +1,87 @@
+scene: docref:Main.scene
+entities:
+  com.meta.models.AssetFolder:
+  - components:
+      com.meta.components.AssetFolder:
+        assets:
+        - ref:dark
+        - ref:metal
+        - ref:metalDark
+        - ref:metalRed
+        - ref:Mesh craft_miner
+      com.meta.components.Name:
+        name: craft_miner
+  com.meta.models.AssetRoot:
+  - components:
+      com.meta.components.AssetMetadata: {}
+      com.meta.components.AssetRoot:
+        defaultScene: ref:Scene
+        scenes:
+        - ref:Scene
+  com.meta.models.Geometry:
+  - components:
+      com.meta.components.Geometry:
+        data: binary/Geometry3.bin
+        mode: Triangles
+    tag: Geometry3
+  - components:
+      com.meta.components.Geometry:
+        data: binary/Geometry2.bin
+        mode: Triangles
+    tag: Geometry2
+  - components:
+      com.meta.components.Geometry:
+        data: binary/Geometry1.bin
+        mode: Triangles
+    tag: Geometry1
+  - components:
+      com.meta.components.Geometry:
+        data: binary/Geometry.bin
+        mode: Triangles
+    tag: Geometry
+  com.meta.models.Material:
+  - uri: docref:materials/metalDark.metaspatialmaterial
+    tag: metalDark
+  - uri: docref:materials/metal.metaspatialmaterial
+    tag: metal
+  - uri: docref:materials/dark.metaspatialmaterial
+    tag: dark
+  - uri: docref:materials/metalRed.metaspatialmaterial
+    tag: metalRed
+  com.meta.models.Mesh:
+  - components:
+      com.meta.components.Mesh:
+        morphTargetNames: []
+        morphTargetWeights: []
+        primitives:
+        - ref:Primitive1
+        - ref:Primitive3
+        - ref:Primitive2
+        - ref:Primitive
+      com.meta.components.Name:
+        name: Mesh craft_miner
+      com.meta.components.PointerNodeInverseComponent: {}
+    tag: Mesh craft_miner
+  com.meta.models.Primitive:
+  - components:
+      com.meta.components.Primitive:
+        geometry: ref:Geometry1
+        material: ref:metalDark
+    tag: Primitive3
+  - components:
+      com.meta.components.Primitive:
+        geometry: ref:Geometry2
+        material: ref:metal
+    tag: Primitive2
+  - components:
+      com.meta.components.Primitive:
+        geometry: ref:Geometry3
+        material: ref:dark
+    tag: Primitive1
+  - components:
+      com.meta.components.Primitive:
+        geometry: ref:Geometry
+        material: ref:metalRed
+    tag: Primitive
+metadata:
+  version: 1.35

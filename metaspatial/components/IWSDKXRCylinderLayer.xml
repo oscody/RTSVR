@@ -1,0 +1,10 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="XRCylinderLayer" description="Cylinder composition layer for WebXR">
+    <FloatAttribute name="radius" defaultValue="2f"/>
+    <FloatAttribute name="centralAngle" defaultValue="0f"/>
+    <FloatAttribute name="aspectRatio" defaultValue="2f"/>
+    <IntAttribute name="pixelWidth" defaultValue="1024"/>
+    <IntAttribute name="pixelHeight" defaultValue="1024"/>
+    <BooleanAttribute name="stencil" defaultValue="false"/>
+  </Component>
+</ComponentSchema>

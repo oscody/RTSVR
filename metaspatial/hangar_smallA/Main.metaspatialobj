@@ -1,0 +1,162 @@
+scene: docref:Main.scene
+entities:
+  com.meta.models.AssetFolder:
+  - components:
+      com.meta.components.AssetFolder:
+        assets:
+        - ref:dark
+        - ref:metal
+        - ref:metalDark
+        - ref:metalRed
+        - ref:Mesh gate
+        - ref:Mesh gate1
+        - ref:Mesh hangar_smallA
+      com.meta.components.Name:
+        name: hangar_smallA
+  com.meta.models.AssetRoot:
+  - components:
+      com.meta.components.AssetMetadata: {}
+      com.meta.components.AssetRoot:
+        defaultScene: ref:Scene
+        scenes:
+        - ref:Scene
+  com.meta.models.Geometry:
+  - components:
+      com.meta.components.Geometry:
+        data: binary/Geometry8.bin
+        mode: Triangles
+    tag: Geometry8
+  - components:
+      com.meta.components.Geometry:
+        data: binary/Geometry7.bin
+        mode: Triangles
+    tag: Geometry7
+  - components:
+      com.meta.components.Geometry:
+        data: binary/Geometry6.bin
+        mode: Triangles
+    tag: Geometry6
+  - components:
+      com.meta.components.Geometry:
+        data: binary/Geometry5.bin
+        mode: Triangles
+    tag: Geometry5
+  - components:
+      com.meta.components.Geometry:
+        data: binary/Geometry4.bin
+        mode: Triangles
+    tag: Geometry4
+  - components:
+      com.meta.components.Geometry:
+        data: binary/Geometry3.bin
+        mode: Triangles
+    tag: Geometry3
+  - components:
+      com.meta.components.Geometry:
+        data: binary/Geometry2.bin
+        mode: Triangles
+    tag: Geometry2
+  - components:
+      com.meta.components.Geometry:
+        data: binary/Geometry1.bin
+        mode: Triangles
+    tag: Geometry1
+  - components:
+      com.meta.components.Geometry:
+        data: binary/Geometry.bin
+        mode: Triangles
+    tag: Geometry
+  com.meta.models.Material:
+  - uri: docref:materials/metalRed.metaspatialmaterial
+    tag: metalRed
+  - uri: docref:materials/metal.metaspatialmaterial
+    tag: metal
+  - uri: docref:materials/dark.metaspatialmaterial
+    tag: dark
+  - uri: docref:materials/metalDark.metaspatialmaterial
+    tag: metalDark
+  com.meta.models.Mesh:
+  - components:
+      com.meta.components.Mesh:
+        morphTargetNames: []
+        morphTargetWeights: []
+        primitives:
+        - ref:Primitive6
+        - ref:Primitive4
+        - ref:Primitive3
+      com.meta.components.Name:
+        name: Mesh gate
+      com.meta.components.PointerNodeInverseComponent: {}
+    tag: Mesh gate1
+  - components:
+      com.meta.components.Mesh:
+        morphTargetNames: []
+        morphTargetWeights: []
+        primitives:
+        - ref:Primitive
+        - ref:Primitive1
+        - ref:Primitive8
+      com.meta.components.Name:
+        name: Mesh hangar_smallA
+      com.meta.components.PointerNodeInverseComponent: {}
+    tag: Mesh hangar_smallA
+  - components:
+      com.meta.components.Mesh:
+        morphTargetNames: []
+        morphTargetWeights: []
+        primitives:
+        - ref:Primitive2
+        - ref:Primitive7
+        - ref:Primitive5
+      com.meta.components.Name:
+        name: Mesh gate
+      com.meta.components.PointerNodeInverseComponent: {}
+    tag: Mesh gate
+  com.meta.models.Primitive:
+  - components:
+      com.meta.components.Primitive:
+        geometry: ref:Geometry
+        material: ref:metalRed
+    tag: Primitive8
+  - components:
+      com.meta.components.Primitive:
+        geometry: ref:Geometry1
+        material: ref:metal
+    tag: Primitive7
+  - components:
+      com.meta.components.Primitive:
+        geometry: ref:Geometry3
+        material: ref:metalDark
+    tag: Primitive6
+  - components:
+      com.meta.components.Primitive:
+        geometry: ref:Geometry4
+        material: ref:dark
+    tag: Primitive5
+  - components:
+      com.meta.components.Primitive:
+        geometry: ref:Geometry2
+        material: ref:metal
+    tag: Primitive4
+  - components:
+      com.meta.components.Primitive:
+        geometry: ref:Geometry5
+        material: ref:dark
+    tag: Primitive3
+  - components:
+      com.meta.components.Primitive:
+        geometry: ref:Geometry6
+        material: ref:metalDark
+    tag: Primitive2
+  - components:
+      com.meta.components.Primitive:
+        geometry: ref:Geometry8
+        material: ref:metalDark
+    tag: Primitive1
+  - components:
+      com.meta.components.Primitive:
+        geometry: ref:Geometry7
+        material: ref:metal
+    tag: Primitive
+metadata:
+  version: 1.35

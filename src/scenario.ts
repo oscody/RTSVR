@@ -136,43 +136,13 @@ function makeSelectable(
     });
 }
 
-function addTabletopScenery(
-  world: World,
-  root: ReturnType<World["createTransformEntity"]>,
-): void {
-  const board = new Mesh(
-    new BoxGeometry(4.8, 0.14, 3.15),
-    new MeshStandardMaterial({ color: 0x182338, roughness: 0.82, metalness: 0.12 }),
-  );
-  board.name = "CommandTable";
-  board.position.y = -0.1;
-  world.createTransformEntity(board, root);
-
-  const tilePositions = [
-    [-1.75, -1.05], [-0.9, -1.05], [0, -1.05], [0.9, -1.05], [1.75, -1.05],
-    [-1.75, 0], [-0.9, 0], [0, 0], [0.9, 0], [1.75, 0],
-    [-1.75, 1.05], [-0.9, 1.05], [0, 1.05], [0.9, 1.05], [1.75, 1.05],
-  ];
-  for (let index = 0; index < tilePositions.length; index += 1) {
-    const [x, z] = tilePositions[index];
-    const { model } = modelRoot(
-      world,
-      root,
-      "terrain",
-      `BoardTile_${index}`,
-      new Vector3(x, 0, z),
-      0.78,
-    );
-    model.rotation.y = (index % 4) * (Math.PI / 2);
-  }
-}
-
+// The static board (CommandTable + BoardTile_* terrain grid) is authored in
+// Meta Spatial Editor (metaspatial/) and loaded via the GLXF level in index.ts.
 export function createScenario(world: World): void {
   const rootObject = new Group();
   rootObject.name = "RTS_Tabletop";
   rootObject.position.set(0, BOARD_Y, -2.15);
   const root = world.createTransformEntity(rootObject);
-  addTabletopScenery(world, root);
 
   const stateObject = new Object3D();
   stateObject.name = "RTSGameState";
@@ -204,10 +174,6 @@ export function createScenario(world: World): void {
   const baseHealth = addHealthBar(world, base.entity, 1.05);
   base.entity.addComponent(PlayerBase).addComponent(Health, { current: 100, maximum: 100 });
   makeSelectable(world, base.entity, "base", 0.58, baseHealth);
-  const dish = AssetManager.getGLTF("satelliteDish")!.scene;
-  dish.scale.setScalar(0.22);
-  dish.position.set(0, 0.88, 0);
-  world.createTransformEntity(dish, base.entity);
 
   const worker = modelRoot(
     world,

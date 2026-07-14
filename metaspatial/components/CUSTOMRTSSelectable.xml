@@ -1,0 +1,5 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="RTSSelectable" description="EliCS component: Selectable">
+    <StringAttribute name="kind" defaultValue="object"/>
+  </Component>
+</ComponentSchema>

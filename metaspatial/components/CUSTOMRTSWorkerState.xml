@@ -1,0 +1,7 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="RTSWorkerState" description="EliCS component: WorkerState">
+    <StringAttribute name="stage" defaultValue="idle"/>
+    <FloatAttribute name="timer" defaultValue="0f"/>
+    <IntAttribute name="cargo" defaultValue="0"/>
+  </Component>
+</ComponentSchema>

@@ -1,0 +1,6 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="RTSHealth" description="EliCS component: Health">
+    <FloatAttribute name="current" defaultValue="100f"/>
+    <FloatAttribute name="maximum" defaultValue="100f"/>
+  </Component>
+</ComponentSchema>
