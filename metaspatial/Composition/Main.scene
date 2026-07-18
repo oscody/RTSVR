@@ -5,21 +5,7 @@ entities:
       com.meta.components.Scene:
         nodes:
         - ref:CommandTable
-        - ref:BoardTile_0
-        - ref:BoardTile_1
-        - ref:BoardTile_2
-        - ref:BoardTile_3
-        - ref:BoardTile_4
-        - ref:BoardTile_5
-        - ref:BoardTile_6
-        - ref:BoardTile_7
-        - ref:BoardTile_8
-        - ref:BoardTile_9
-        - ref:BoardTile_10
-        - ref:BoardTile_11
-        - ref:BoardTile_12
-        - ref:BoardTile_13
-        - ref:BoardTile_14
+        - ref:GameBoard
     tag: Scene
   com.meta.models.SceneNode:
   - components:
@@ -33,13 +19,13 @@ entities:
       com.meta.components.SceneNode:
         rotation.format: Euler
         scale:
-        - 12
+        - 16.125
         - 0.34999999403953552
-        - 7.875
+        - 16.125
         translation:
         - 0
         - 0.62000000476837158
-        - -2.1500000953674316
+        - -3
         componentVersion: 1
       com.meta.components.Visibility:
         visible: true
@@ -48,331 +34,23 @@ entities:
       com.meta.components.Animatable: {}
       com.meta.components.DocumentReference:
         transformType: None
-        documentReference: projref:BoardTile_1/Main.metaspatialobj
+        documentReference: projref:GameBoard2/Main.metaspatialobj
       com.meta.components.Name:
-        name: BoardTile_0
+        name: GameBoard
       com.meta.components.PointerNodeInverseComponent: {}
       com.meta.components.SceneNode:
         rotation.format: Euler
         scale:
-        - 0.77999997138977051
-        - 0.77999997138977051
-        - 0.77999997138977051
+        - 1
+        - 1
+        - 1
         translation:
-        - -3.309999942779541
+        - 0
         - 0.72000002861022949
-        - -4.369999885559082
+        - -3
         componentVersion: 1
       com.meta.components.Visibility:
         visible: true
-    tag: BoardTile_0
-  - components:
-      com.meta.components.Animatable: {}
-      com.meta.components.DocumentReference:
-        transformType: None
-        documentReference: projref:BoardTile_2/Main.metaspatialobj
-      com.meta.components.Name:
-        name: BoardTile_1
-      com.meta.components.PointerNodeInverseComponent: {}
-      com.meta.components.SceneNode:
-        rotation.format: Euler
-        scale:
-        - 0.77999997138977051
-        - 0.77999997138977051
-        - 0.77999997138977051
-        translation:
-        - -2.4600000381469727
-        - 0.72000002861022949
-        - -4.369999885559082
-        componentVersion: 1
-      com.meta.components.Visibility:
-        visible: true
-    tag: BoardTile_1
-  - components:
-      com.meta.components.Animatable: {}
-      com.meta.components.DocumentReference:
-        transformType: None
-        documentReference: projref:BoardTile_3/Main.metaspatialobj
-      com.meta.components.Name:
-        name: BoardTile_2
-      com.meta.components.PointerNodeInverseComponent: {}
-      com.meta.components.SceneNode:
-        rotation.format: Euler
-        scale:
-        - 0.77999997138977051
-        - 0.77999997138977051
-        - 0.77999997138977051
-        translation:
-        - -1.559999942779541
-        - 0.72000002861022949
-        - -4.369999885559082
-        componentVersion: 1
-      com.meta.components.Visibility:
-        visible: true
-    tag: BoardTile_2
-  - components:
-      com.meta.components.Animatable: {}
-      com.meta.components.DocumentReference:
-        transformType: None
-        documentReference: projref:BoardTile_4/Main.metaspatialobj
-      com.meta.components.Name:
-        name: BoardTile_3
-      com.meta.components.PointerNodeInverseComponent: {}
-      com.meta.components.SceneNode:
-        rotation.format: Euler
-        scale:
-        - 0.77999997138977051
-        - 0.77999997138977051
-        - 0.77999997138977051
-        translation:
-        - -0.6600000262260437
-        - 0.72000002861022949
-        - -4.369999885559082
-        componentVersion: 1
-      com.meta.components.Visibility:
-        visible: true
-    tag: BoardTile_3
-  - components:
-      com.meta.components.Animatable: {}
-      com.meta.components.DocumentReference:
-        transformType: None
-        documentReference: projref:BoardTile_5/Main.metaspatialobj
-      com.meta.components.Name:
-        name: BoardTile_4
-      com.meta.components.PointerNodeInverseComponent: {}
-      com.meta.components.SceneNode:
-        rotation.format: Euler
-        scale:
-        - 0.77999997138977051
-        - 0.77999997138977051
-        - 0.77999997138977051
-        translation:
-        - 0.18999999761581421
-        - 0.72000002861022949
-        - -4.369999885559082
-        componentVersion: 1
-      com.meta.components.Visibility:
-        visible: true
-    tag: BoardTile_4
-  - components:
-      com.meta.components.Animatable: {}
-      com.meta.components.DocumentReference:
-        transformType: None
-        documentReference: projref:BoardTile_6/Main.metaspatialobj
-      com.meta.components.Name:
-        name: BoardTile_5
-      com.meta.components.PointerNodeInverseComponent: {}
-      com.meta.components.SceneNode:
-        rotation.format: Euler
-        scale:
-        - 0.77999997138977051
-        - 0.77999997138977051
-        - 0.77999997138977051
-        translation:
-        - -3.309999942779541
-        - 0.72000002861022949
-        - -3.3199999332427979
-        componentVersion: 1
-      com.meta.components.Visibility:
-        visible: true
-    tag: BoardTile_5
-  - components:
-      com.meta.components.Animatable: {}
-      com.meta.components.DocumentReference:
-        transformType: None
-        documentReference: projref:BoardTile_7/Main.metaspatialobj
-      com.meta.components.Name:
-        name: BoardTile_6
-      com.meta.components.PointerNodeInverseComponent: {}
-      com.meta.components.SceneNode:
-        rotation.format: Euler
-        scale:
-        - 0.77999997138977051
-        - 0.77999997138977051
-        - 0.77999997138977051
-        translation:
-        - -2.4600000381469727
-        - 0.72000002861022949
-        - -3.3199999332427979
-        componentVersion: 1
-      com.meta.components.Visibility:
-        visible: true
-    tag: BoardTile_6
-  - components:
-      com.meta.components.Animatable: {}
-      com.meta.components.DocumentReference:
-        transformType: None
-        documentReference: projref:BoardTile_8/Main.metaspatialobj
-      com.meta.components.Name:
-        name: BoardTile_7
-      com.meta.components.PointerNodeInverseComponent: {}
-      com.meta.components.SceneNode:
-        rotation.format: Euler
-        scale:
-        - 0.77999997138977051
-        - 0.77999997138977051
-        - 0.77999997138977051
-        translation:
-        - -1.559999942779541
-        - 0.72000002861022949
-        - -3.3199999332427979
-        componentVersion: 1
-      com.meta.components.Visibility:
-        visible: true
-    tag: BoardTile_7
-  - components:
-      com.meta.components.Animatable: {}
-      com.meta.components.DocumentReference:
-        transformType: None
-        documentReference: projref:BoardTile_9/Main.metaspatialobj
-      com.meta.components.Name:
-        name: BoardTile_8
-      com.meta.components.PointerNodeInverseComponent: {}
-      com.meta.components.SceneNode:
-        rotation.format: Euler
-        scale:
-        - 0.77999997138977051
-        - 0.77999997138977051
-        - 0.77999997138977051
-        translation:
-        - -0.6600000262260437
-        - 0.72000002861022949
-        - -3.3199999332427979
-        componentVersion: 1
-      com.meta.components.Visibility:
-        visible: true
-    tag: BoardTile_8
-  - components:
-      com.meta.components.Animatable: {}
-      com.meta.components.DocumentReference:
-        transformType: None
-        documentReference: projref:BoardTile_10/Main.metaspatialobj
-      com.meta.components.Name:
-        name: BoardTile_9
-      com.meta.components.PointerNodeInverseComponent: {}
-      com.meta.components.SceneNode:
-        rotation.format: Euler
-        scale:
-        - 0.77999997138977051
-        - 0.77999997138977051
-        - 0.77999997138977051
-        translation:
-        - 0.18999999761581421
-        - 0.72000002861022949
-        - -3.3199999332427979
-        componentVersion: 1
-      com.meta.components.Visibility:
-        visible: true
-    tag: BoardTile_9
-  - components:
-      com.meta.components.Animatable: {}
-      com.meta.components.DocumentReference:
-        transformType: None
-        documentReference: projref:BoardTile_11/Main.metaspatialobj
-      com.meta.components.Name:
-        name: BoardTile_10
-      com.meta.components.PointerNodeInverseComponent: {}
-      com.meta.components.SceneNode:
-        rotation.format: Euler
-        scale:
-        - 0.77999997138977051
-        - 0.77999997138977051
-        - 0.77999997138977051
-        translation:
-        - -3.309999942779541
-        - 0.72000002861022949
-        - -2.2699999809265137
-        componentVersion: 1
-      com.meta.components.Visibility:
-        visible: true
-    tag: BoardTile_10
-  - components:
-      com.meta.components.Animatable: {}
-      com.meta.components.DocumentReference:
-        transformType: None
-        documentReference: projref:BoardTile_12/Main.metaspatialobj
-      com.meta.components.Name:
-        name: BoardTile_11
-      com.meta.components.PointerNodeInverseComponent: {}
-      com.meta.components.SceneNode:
-        rotation.format: Euler
-        scale:
-        - 0.77999997138977051
-        - 0.77999997138977051
-        - 0.77999997138977051
-        translation:
-        - -2.4600000381469727
-        - 0.72000002861022949
-        - -2.2699999809265137
-        componentVersion: 1
-      com.meta.components.Visibility:
-        visible: true
-    tag: BoardTile_11
-  - components:
-      com.meta.components.Animatable: {}
-      com.meta.components.DocumentReference:
-        transformType: None
-        documentReference: projref:BoardTile_13/Main.metaspatialobj
-      com.meta.components.Name:
-        name: BoardTile_12
-      com.meta.components.PointerNodeInverseComponent: {}
-      com.meta.components.SceneNode:
-        rotation.format: Euler
-        scale:
-        - 0.77999997138977051
-        - 0.77999997138977051
-        - 0.77999997138977051
-        translation:
-        - -1.559999942779541
-        - 0.72000002861022949
-        - -2.2699999809265137
-        componentVersion: 1
-      com.meta.components.Visibility:
-        visible: true
-    tag: BoardTile_12
-  - components:
-      com.meta.components.Animatable: {}
-      com.meta.components.DocumentReference:
-        transformType: None
-        documentReference: projref:BoardTile_14/Main.metaspatialobj
-      com.meta.components.Name:
-        name: BoardTile_13
-      com.meta.components.PointerNodeInverseComponent: {}
-      com.meta.components.SceneNode:
-        rotation.format: Euler
-        scale:
-        - 0.77999997138977051
-        - 0.77999997138977051
-        - 0.77999997138977051
-        translation:
-        - -0.6600000262260437
-        - 0.72000002861022949
-        - -2.2699999809265137
-        componentVersion: 1
-      com.meta.components.Visibility:
-        visible: true
-    tag: BoardTile_13
-  - components:
-      com.meta.components.Animatable: {}
-      com.meta.components.DocumentReference:
-        transformType: None
-        documentReference: projref:BoardTile_15/Main.metaspatialobj
-      com.meta.components.Name:
-        name: BoardTile_14
-      com.meta.components.PointerNodeInverseComponent: {}
-      com.meta.components.SceneNode:
-        rotation.format: Euler
-        scale:
-        - 0.77999997138977051
-        - 0.77999997138977051
-        - 0.77999997138977051
-        translation:
-        - 0.18999999761581421
-        - 0.72000002861022949
-        - -2.2699999809265137
-        componentVersion: 1
-      com.meta.components.Visibility:
-        visible: true
-    tag: BoardTile_14
+    tag: GameBoard
 metadata:
   version: 1.35

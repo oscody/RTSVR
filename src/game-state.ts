@@ -48,6 +48,19 @@ export const Combat = createComponent("RTSCombat", {
 export const PlayerBase = createComponent("RTSPlayerBase", {});
 export const EnemyObjective = createComponent("RTSEnemyObjective", {});
 
+// Live board-cell cursor, published by the single invisible BoardSurface
+// collider over the GameBoard mesh (baked by scripts/generate_board.py — keep
+// GRID/PITCH in sync). Per-cell collider entities are impossible at 40x40:
+// elics preallocates component stores for 1000 entities and IWSDK does not
+// expose entityCapacity, so the cell is derived from the ray hit point.
+export const BoardCursor = createComponent("RTSBoardCursor", {
+  hoverX: { type: Types.Int16, default: -1 },
+  hoverY: { type: Types.Int16, default: -1 },
+  pressX: { type: Types.Int16, default: -1 },
+  pressY: { type: Types.Int16, default: -1 },
+  pressRevision: { type: Types.Int32, default: 0 },
+});
+
 // ECS-visible mirror of `runtime` (one singleton entity, created in scenario.ts).
 // Read-only: observe via ecs_query_entity/ecs_diff; drive the game through input.
 export const GameState = createComponent("RTSGameState", {

@@ -1,0 +1,9 @@
+<ComponentSchema packageName="com.iwsdk.components">
+  <Component name="RTSBoardCursor" description="EliCS component: BoardCursor">
+    <IntAttribute name="hoverX" defaultValue="0"/>
+    <IntAttribute name="hoverY" defaultValue="0"/>
+    <IntAttribute name="pressX" defaultValue="0"/>
+    <IntAttribute name="pressY" defaultValue="0"/>
+    <IntAttribute name="pressRevision" defaultValue="0"/>
+  </Component>
+</ComponentSchema>

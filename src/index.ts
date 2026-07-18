@@ -64,6 +64,8 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
   createScenario(world);
   createPanels(world);
 
-  world.camera.position.set(0, 2.35, 3.7);
-  world.camera.lookAt(new Vector3(0, 0.85, -2.15));
+  // City-builder-style framing: angled close-up with the board filling the
+  // frame (their camera sits ~1.2 board-widths from center, 1.45m above it).
+  world.camera.position.set(3.6, 3.1, 1.9);
+  world.camera.lookAt(new Vector3(0, 0.8, -3.0));
 });

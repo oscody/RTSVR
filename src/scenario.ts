@@ -15,6 +15,7 @@ import {
   World,
 } from "@iwsdk/core";
 import {
+  BoardCursor,
   Combat,
   EnemyObjective,
   FactoryState,
@@ -136,13 +137,64 @@ function makeSelectable(
     });
 }
 
-// The static board (CommandTable + BoardTile_* terrain grid) is authored in
-// Meta Spatial Editor (metaspatial/) and loaded via the GLXF level in index.ts.
+// The static board visuals (CommandTable + the 24x24 GameBoard mesh) are
+// authored in Meta Spatial Editor (metaspatial/) and loaded via the GLXF
+// level in index.ts. The clickable cell grid below must stay aligned with
+// scripts/generate_board.py (same GRID/PITCH, board center at world z -2.55).
+const BOARD_GRID = 40;
+const BOARD_PITCH = 0.15;
+const BOARD_LOCAL_Z = -0.85; // world -3.0 relative to the tabletop root
+
+function addBoardSurface(
+  world: World,
+  root: ReturnType<World["createTransformEntity"]>,
+): void {
+  const extent = BOARD_GRID * BOARD_PITCH;
+  const surface = new Mesh(
+    new BoxGeometry(extent, 0.01, extent),
+    new MeshBasicMaterial({ colorWrite: false, depthWrite: false }),
+  );
+  surface.name = "BoardSurface";
+  surface.position.set(0, 0.005, BOARD_LOCAL_Z);
+  const entity = world
+    .createTransformEntity(surface, root)
+    .addComponent(BoardCursor)
+    .addComponent(RayInteractable);
+
+  const half = (BOARD_GRID - 1) / 2;
+  const toCell = (event: { point?: Vector3 }): [number, number] | null => {
+    const point = event.point;
+    if (!point) return null;
+    const local = surface.worldToLocal(point.clone());
+    const gx = Math.round(local.x / BOARD_PITCH + half);
+    const gy = Math.round(local.z / BOARD_PITCH + half);
+    if (gx < 0 || gy < 0 || gx >= BOARD_GRID || gy >= BOARD_GRID) return null;
+    return [gx, gy];
+  };
+  surface.addEventListener("pointermove", (event) => {
+    const cell = toCell(event as { point?: Vector3 });
+    entity.setValue(BoardCursor, "hoverX", cell ? cell[0] : -1);
+    entity.setValue(BoardCursor, "hoverY", cell ? cell[1] : -1);
+  });
+  surface.addEventListener("pointerdown", (event) => {
+    const cell = toCell(event as { point?: Vector3 });
+    if (!cell) return;
+    entity.setValue(BoardCursor, "pressX", cell[0]);
+    entity.setValue(BoardCursor, "pressY", cell[1]);
+    entity.setValue(
+      BoardCursor,
+      "pressRevision",
+      (entity.getValue(BoardCursor, "pressRevision") ?? 0) + 1,
+    );
+  });
+}
+
 export function createScenario(world: World): void {
   const rootObject = new Group();
   rootObject.name = "RTS_Tabletop";
   rootObject.position.set(0, BOARD_Y, -2.15);
   const root = world.createTransformEntity(rootObject);
+  addBoardSurface(world, root);
 
   const stateObject = new Object3D();
   stateObject.name = "RTSGameState";
