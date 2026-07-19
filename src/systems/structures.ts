@@ -3,11 +3,12 @@ import {
   Box3,
   Group,
   Object3D,
+  RayInteractable,
   Vector3,
   createSystem,
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
-import { boardState } from "./state.js";
+import { Unit, boardState } from "./state.js";
 
 // Placement is tile-aligned: footprint in tiles, centered between the listed
 // grid columns/rows, one empty tile between neighboring structures.
@@ -21,6 +22,8 @@ interface StructureSpec {
   gridY: [number, number];
   /** counter-rotation for models whose geometry is baked in diagonally */
   yawDeg?: number;
+  /** commandable friendly unit: attaches Unit {kind} + RayInteractable */
+  unit?: string;
 }
 
 const STRUCTURES: StructureSpec[] = [
@@ -67,8 +70,8 @@ const STRUCTURES: StructureSpec[] = [
   { asset: "rockLargeB", name: "RockLargeB3", widthTiles: 1, gridX: [14, 14], gridY: [6, 6], yawDeg: 270 },
 
   // Crew — flanking the command center's front corners.
-  { asset: "astronautA", name: "AstronautA", widthTiles: 1, gridX: [9, 9], gridY: [12, 12], yawDeg: 180 },
-  { asset: "astronautB", name: "AstronautB", widthTiles: 1, gridX: [13, 13], gridY: [12, 12], yawDeg: 180 },
+  { asset: "astronautA", name: "AstronautA", widthTiles: 1, gridX: [9, 9], gridY: [12, 12], yawDeg: 180, unit: "astronaut" },
+  { asset: "astronautB", name: "AstronautB", widthTiles: 1, gridX: [13, 13], gridY: [12, 12], yawDeg: 180, unit: "astronaut" },
 
   // Aliens — ringing the outskirts, facing inward.
   { asset: "alien", name: "Alien1", widthTiles: 1, gridX: [1, 1], gridY: [1, 1], yawDeg: 180 },
@@ -83,10 +86,10 @@ const STRUCTURES: StructureSpec[] = [
   { asset: "alien", name: "Alien10", widthTiles: 1, gridX: [3, 3], gridY: [22, 22] },
 
   // Craft — the fleet lined up in front of the command center.
-  { asset: "rover", name: "Rover", widthTiles: 1, gridX: [10, 10], gridY: [13, 13], yawDeg: 180 },
-  { asset: "craftMiner", name: "CraftMiner", widthTiles: 1, gridX: [11, 11], gridY: [13, 13], yawDeg: 180 },
-  { asset: "craftCargoA", name: "CraftCargo", widthTiles: 1, gridX: [12, 12], gridY: [13, 13], yawDeg: 180 },
-  { asset: "craftRacer", name: "CraftRacer", widthTiles: 1, gridX: [13, 13], gridY: [13, 13], yawDeg: 180 },
+  { asset: "rover", name: "Rover", widthTiles: 1, gridX: [10, 10], gridY: [13, 13], yawDeg: 180, unit: "rover" },
+  { asset: "craftMiner", name: "CraftMiner", widthTiles: 1, gridX: [11, 11], gridY: [13, 13], yawDeg: 180, unit: "miner" },
+  { asset: "craftCargoA", name: "CraftCargo", widthTiles: 1, gridX: [12, 12], gridY: [13, 13], yawDeg: 180, unit: "cargo" },
+  { asset: "craftRacer", name: "CraftRacer", widthTiles: 1, gridX: [13, 13], gridY: [13, 13], yawDeg: 180, unit: "racer" },
 
   // Base defense — turret guarding the southwest approach.
   { asset: "turretSingle", name: "TurretSingle", widthTiles: 1, gridX: [9, 9], gridY: [14, 14], yawDeg: 180 },
@@ -138,7 +141,12 @@ export class StructuresSystem extends createSystem({}) {
       const [wx1, wz1] = gridToWorld(x1, y1);
       holder.position.set((wx0 + wx1) / 2, 0.006, (wz0 + wz1) / 2);
       holder.add(model);
-      this.world.createTransformEntity(holder, { parent: root });
+      const entity = this.world.createTransformEntity(holder, { parent: root });
+      if (spec.unit) {
+        entity
+          .addComponent(Unit, { kind: spec.unit })
+          .addComponent(RayInteractable);
+      }
     }
   }
 }

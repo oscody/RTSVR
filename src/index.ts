@@ -6,6 +6,7 @@ import {
 } from "@iwsdk/core";
 import { BoardSystem } from "./systems/board.js";
 import { InteractionSystem } from "./systems/interaction.js";
+import { MovementSystem } from "./systems/movement.js";
 import { StructuresSystem } from "./systems/structures.js";
 
 const assets: AssetManifest = {
@@ -75,5 +76,6 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
   world
     .registerSystem(BoardSystem)
     .registerSystem(StructuresSystem)
-    .registerSystem(InteractionSystem);
+    .registerSystem(InteractionSystem)
+    .registerSystem(MovementSystem);
 });

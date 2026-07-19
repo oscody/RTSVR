@@ -1,0 +1,54 @@
+import { createSystem } from "@iwsdk/core";
+import { gridToWorld } from "./board.js";
+import { Unit, boardState } from "./state.js";
+
+const UNIT_SPEED = 0.35; // meters per second across the tabletop
+// Arrival tolerance — a move-to-threshold check without an epsilon can stall
+// on Float32 rounding (the pre-reset tank bug).
+const ARRIVAL_EPSILON = 0.005;
+
+export class MovementSystem extends createSystem({
+  units: { required: [Unit] },
+}) {
+  update(delta: number): void {
+    this.queries.units.entities.forEach((unit) => {
+      if (!unit.getValue(Unit, "hasOrder")) return;
+      const holder = unit.object3D;
+      if (!holder) return;
+
+      const [targetX, targetZ] = gridToWorld(
+        unit.getValue(Unit, "orderX") ?? 0,
+        unit.getValue(Unit, "orderY") ?? 0,
+      );
+      const dx = targetX - holder.position.x;
+      const dz = targetZ - holder.position.z;
+      const distance = Math.sqrt(dx * dx + dz * dz);
+
+      if (distance <= ARRIVAL_EPSILON) {
+        holder.position.x = targetX;
+        holder.position.z = targetZ;
+        unit.setValue(Unit, "hasOrder", false);
+        if (boardState.selectedUnit === unit) {
+          hideOrderMarker();
+        }
+        return;
+      }
+
+      const step = Math.min(distance, UNIT_SPEED * delta);
+      holder.position.x += (dx / distance) * step;
+      holder.position.z += (dz / distance) * step;
+      holder.rotation.y = Math.atan2(dx, dz);
+
+      // Keep the selection ring under the moving unit.
+      if (boardState.selectedUnit === unit) {
+        const ring = boardState.selectionMarker?.object3D;
+        if (ring) ring.position.set(holder.position.x, ring.position.y, holder.position.z);
+      }
+    });
+  }
+}
+
+function hideOrderMarker(): void {
+  const marker = boardState.orderMarker?.object3D;
+  if (marker) marker.visible = false;
+}

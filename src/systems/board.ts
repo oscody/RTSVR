@@ -11,7 +11,8 @@ import {
   RayInteractable,
   createSystem,
 } from "@iwsdk/core";
-import { BoardMarker, BoardTile, boardState } from "./state.js";
+import { Object3D, RingGeometry } from "@iwsdk/core";
+import { BoardMarker, BoardTile, SelectionState, boardState } from "./state.js";
 
 export const GRID_SIZE = 24;
 export const TILE_SIZE = 0.18;
@@ -109,5 +110,30 @@ export class BoardSystem extends createSystem({}) {
     boardState.selectionMarker = this.world
       .createTransformEntity(selectionMesh, { parent: root })
       .addComponent(BoardMarker, { kind: "selection" });
+
+    // Order marker — an orange ring at an accepted move destination.
+    const orderMesh = new Mesh(
+      new RingGeometry(TILE_SIZE * 0.38, TILE_SIZE * 0.5, 32),
+      new MeshBasicMaterial({
+        color: 0xffbd59,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+      }),
+    );
+    orderMesh.name = "BoardOrderMarker";
+    orderMesh.rotateX(-Math.PI / 2);
+    orderMesh.position.y = 0.024;
+    orderMesh.visible = false;
+    boardState.orderMarker = this.world
+      .createTransformEntity(orderMesh, { parent: root })
+      .addComponent(BoardMarker, { kind: "order" });
+
+    // ECS-visible selection singleton.
+    const selectionObject = new Object3D();
+    selectionObject.name = "SelectionState";
+    boardState.selection = this.world
+      .createTransformEntity(selectionObject, { parent: root })
+      .addComponent(SelectionState);
   }
 }
