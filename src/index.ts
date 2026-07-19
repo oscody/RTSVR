@@ -5,6 +5,7 @@ import {
   World,
 } from "@iwsdk/core";
 import { BoardSystem } from "./systems/board.js";
+import { InteractionSystem } from "./systems/interaction.js";
 
 const assets: AssetManifest = {
   terrain: {
@@ -36,5 +37,5 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     },
   },
 }).then((world) => {
-  world.registerSystem(BoardSystem);
+  world.registerSystem(BoardSystem).registerSystem(InteractionSystem);
 });

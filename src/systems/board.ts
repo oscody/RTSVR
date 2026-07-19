@@ -4,16 +4,14 @@ import {
   Color,
   DirectionalLight,
   Group,
-  Hovered,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
   RayInteractable,
-  Types,
-  createComponent,
   createSystem,
 } from "@iwsdk/core";
+import { BoardMarker, BoardTile, boardState } from "./state.js";
 
 export const GRID_SIZE = 24;
 export const TILE_SIZE = 0.18;
@@ -24,16 +22,11 @@ export function gridToWorld(x: number, y: number): [number, number] {
   return [x * TILE_SIZE - offset, y * TILE_SIZE - offset];
 }
 
-export const BoardTile = createComponent("BoardTile", {
-  x: { type: Types.Int16, default: 0 },
-  y: { type: Types.Int16, default: 0 },
-});
-
-function makeMarker(): Mesh {
+function makeMarker(color: number): Mesh {
   const marker = new Mesh(
     new PlaneGeometry(TILE_SIZE * 1.08, TILE_SIZE * 1.08),
     new MeshBasicMaterial({
-      color: 0xfacc15,
+      color,
       transparent: true,
       opacity: 0.42,
       depthWrite: false,
@@ -45,11 +38,7 @@ function makeMarker(): Mesh {
   return marker;
 }
 
-export class BoardSystem extends createSystem({
-  hoveredTiles: { required: [BoardTile, Hovered] },
-}) {
-  private hoverMarker!: Mesh;
-
+export class BoardSystem extends createSystem({}) {
   init(): void {
     this.world.scene.background = new Color(0xb8d8f1);
 
@@ -105,23 +94,16 @@ export class BoardSystem extends createSystem({
       }
     }
 
-    this.hoverMarker = makeMarker();
-    this.world.createTransformEntity(this.hoverMarker, { parent: root });
+    const hoverMesh = makeMarker(0xfacc15);
+    hoverMesh.name = "BoardHoverMarker";
+    boardState.hoverMarker = this.world
+      .createTransformEntity(hoverMesh, { parent: root })
+      .addComponent(BoardMarker, { kind: "hover" });
 
-    this.cleanupFuncs.push(
-      this.queries.hoveredTiles.subscribe("qualify", (entity) => {
-        const [worldX, worldZ] = gridToWorld(
-          entity.getValue(BoardTile, "x") ?? 0,
-          entity.getValue(BoardTile, "y") ?? 0,
-        );
-        this.hoverMarker.position.set(worldX, 0.023, worldZ);
-        this.hoverMarker.visible = true;
-      }),
-      this.queries.hoveredTiles.subscribe("disqualify", () => {
-        if (this.queries.hoveredTiles.entities.size === 0) {
-          this.hoverMarker.visible = false;
-        }
-      }),
-    );
+    const selectionMesh = makeMarker(0x38bdf8);
+    selectionMesh.name = "BoardSelectionMarker";
+    boardState.selectionMarker = this.world
+      .createTransformEntity(selectionMesh, { parent: root })
+      .addComponent(BoardMarker, { kind: "selection" });
   }
 }
