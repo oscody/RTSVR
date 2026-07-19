@@ -6,6 +6,7 @@ import {
 } from "@iwsdk/core";
 import { BoardSystem } from "./systems/board.js";
 import { InteractionSystem } from "./systems/interaction.js";
+import { StructuresSystem } from "./systems/structures.js";
 
 const assets: AssetManifest = {
   terrain: {
@@ -13,6 +14,40 @@ const assets: AssetManifest = {
     type: AssetType.GLTF,
     priority: "critical",
   },
+  commandCenter: {
+    url: "/gltf/kenney_style_command_center.glb",
+    type: AssetType.GLTF,
+    priority: "critical",
+  },
+  aircraft_factory: {
+    url: "/gltf/kenney_style_aircraft_factory.glb",
+    type: AssetType.GLTF,
+    priority: "critical",
+  },
+  hangarLargeA: {
+    url: "/gltf/kenney-space-kit/hangar_largeA.glb",
+    type: AssetType.GLTF,
+    priority: "critical",
+  },
+  rock: { url: "/gltf/terrain/rock.glb", type: AssetType.GLTF, priority: "critical" },
+  rockCrystals: { url: "/gltf/terrain/rock_crystals.glb", type: AssetType.GLTF, priority: "critical" },
+  rockCrystalsLargeA: { url: "/gltf/terrain/rock_crystalsLargeA.glb", type: AssetType.GLTF, priority: "critical" },
+  rockCrystalsLargeB: { url: "/gltf/terrain/rock_crystalsLargeB.glb", type: AssetType.GLTF, priority: "critical" },
+  rockLargeA: { url: "/gltf/terrain/rock_largeA.glb", type: AssetType.GLTF, priority: "critical" },
+  rockLargeB: { url: "/gltf/terrain/rock_largeB.glb", type: AssetType.GLTF, priority: "critical" },
+  rocksSmallA: { url: "/gltf/terrain/rocks_smallA.glb", type: AssetType.GLTF, priority: "critical" },
+  rocksSmallB: { url: "/gltf/terrain/rocks_smallB.glb", type: AssetType.GLTF, priority: "critical" },
+  astronautA: { url: "/gltf/astronautA.glb", type: AssetType.GLTF, priority: "critical" },
+  astronautB: { url: "/gltf/astronautB.glb", type: AssetType.GLTF, priority: "critical" },
+  alien: { url: "/gltf/alien.glb", type: AssetType.GLTF, priority: "critical" },
+  craftCargoA: { url: "/gltf/craft/craft_cargoA.glb", type: AssetType.GLTF, priority: "critical" },
+  craftMiner: { url: "/gltf/craft/craft_miner.glb", type: AssetType.GLTF, priority: "critical" },
+  craftRacer: { url: "/gltf/craft/craft_racer.glb", type: AssetType.GLTF, priority: "critical" },
+  rover: { url: "/gltf/craft/rover.glb", type: AssetType.GLTF, priority: "critical" },
+  turretSingle: { url: "/gltf/equipment/turret_single.glb", type: AssetType.GLTF, priority: "critical" },
+  meteor: { url: "/gltf/terrain/meteor/meteor.glb", type: AssetType.GLTF, priority: "critical" },
+  meteorDetailed: { url: "/gltf/terrain/meteor/meteor_detailed.glb", type: AssetType.GLTF, priority: "critical" },
+  meteorHalf: { url: "/gltf/terrain/meteor/meteor_half.glb", type: AssetType.GLTF, priority: "critical" },
 };
 
 World.create(document.getElementById("scene-container") as HTMLDivElement, {
@@ -37,5 +72,8 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     },
   },
 }).then((world) => {
-  world.registerSystem(BoardSystem).registerSystem(InteractionSystem);
+  world
+    .registerSystem(BoardSystem)
+    .registerSystem(StructuresSystem)
+    .registerSystem(InteractionSystem);
 });

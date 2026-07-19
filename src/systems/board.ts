@@ -46,6 +46,7 @@ export class BoardSystem extends createSystem({}) {
     rootObject.name = "BoardRoot";
     rootObject.position.set(0, BOARD_Y, 0);
     const root = this.world.createTransformEntity(rootObject);
+    boardState.boardRoot = root;
 
     const sun = new DirectionalLight(0xffffff, 2.4);
     sun.position.set(2.5, 4, 3);

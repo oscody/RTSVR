@@ -10,6 +10,7 @@ export const BoardMarker = createComponent("BoardMarker", {
 });
 
 export const boardState = {
+  boardRoot: null as Entity | null,
   hoverMarker: null as Entity | null,
   selectionMarker: null as Entity | null,
   hoveredTile: null as Entity | null,
