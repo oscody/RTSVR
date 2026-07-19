@@ -80,6 +80,9 @@ export class BoardSystem extends createSystem({}) {
         const gltf = AssetManager.getGLTF("terrain");
         if (!gltf) throw new Error("terrain.glb not preloaded");
         const tile = gltf.scene;
+        // The GLB's node carries a baked (2, 0, 1.5) pivot offset — re-center
+        // so the drawn tile, raycast proxy, and marker math all agree.
+        tile.children.forEach((child) => child.position.set(0, 0, 0));
         tile.name = `Tile_${x}_${y}`;
         const [worldX, worldZ] = gridToWorld(x, y);
         tile.position.set(worldX, 0, worldZ);
