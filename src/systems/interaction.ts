@@ -1,6 +1,16 @@
-import { Entity, Hovered, Pressed, createSystem } from "@iwsdk/core";
-import { gridToWorld, worldToGrid } from "./board.js";
-import { BoardTile, SelectionState, Unit, boardState } from "./state.js";
+import {
+  Entity,
+  Hovered,
+  Mesh,
+  MeshBasicMaterial,
+  Pressed,
+  createSystem,
+} from "@iwsdk/core";
+import { GRID_SIZE, gridToWorld, worldToGrid } from "./board.js";
+import { BoardTile, Enemy, SelectionState, Unit, boardState } from "./state.js";
+
+const ORDER_COLOR = 0xffbd59; // valid destination
+const BLOCKED_COLOR = 0xff5050; // clicked a blocked/occupied tile
 
 function markerToLocal(markerEntity: Entity | null, x: number, z: number): void {
   const marker = markerEntity?.object3D;
@@ -26,6 +36,15 @@ function moveMarker(markerEntity: Entity | null, tile: Entity | null): void {
   markerToLocal(markerEntity, worldX, worldZ);
 }
 
+function setOrderMarker(tileX: number, tileY: number, color: number): void {
+  const marker = boardState.orderMarker?.object3D as Mesh | undefined;
+  if (!marker) return;
+  (marker.material as MeshBasicMaterial).color.setHex(color);
+  const [worldX, worldZ] = gridToWorld(tileX, tileY);
+  marker.position.set(worldX, marker.position.y, worldZ);
+  marker.visible = true;
+}
+
 function publishSelection(unit: Entity | null): void {
   const selection = boardState.selection;
   if (!selection) return;
@@ -46,6 +65,7 @@ export class InteractionSystem extends createSystem({
   hoveredTiles: { required: [BoardTile, Hovered] },
   pressedTiles: { required: [BoardTile, Pressed] },
   pressedUnits: { required: [Unit, Pressed] },
+  pressedEnemies: { required: [Enemy, Pressed] },
   units: { required: [Unit] },
 }) {
   init(): void {
@@ -60,7 +80,8 @@ export class InteractionSystem extends createSystem({
           moveMarker(boardState.hoverMarker, null);
         }
       }),
-      // Click a unit: select it (click the selected unit again to deselect).
+      // Click a friendly unit: always (re)select — approach applies to
+      // enemies and blocked terrain only (user decision 2026-07-19).
       this.queries.pressedUnits.subscribe("qualify", (entity) => {
         if (boardState.selectedUnit === entity) {
           boardState.selectedUnit = null;
@@ -76,33 +97,98 @@ export class InteractionSystem extends createSystem({
         }
         publishSelection(entity);
       }),
-      // Click a tile: with a unit selected this is a move order; otherwise
-      // it is a plain tile selection (kept for future build placement).
+      // Click an enemy with a unit selected: approach — walk to the open
+      // tile "in front of" it (nearest the mover). Orange marker at the
+      // destination; the enemy itself is the implied target.
+      this.queries.pressedEnemies.subscribe("qualify", (entity) => {
+        const unit = boardState.selectedUnit;
+        const enemyObject = entity.object3D;
+        if (!unit || !enemyObject) return;
+        const [ex, ey] = worldToGrid(enemyObject.position.x, enemyObject.position.z);
+        const dest = this.nearestOpenAdjacent(ex, ey, unit);
+        if (!dest) {
+          setOrderMarker(ex, ey, BLOCKED_COLOR);
+          return;
+        }
+        this.issueOrder(unit, dest[0], dest[1]);
+        setOrderMarker(dest[0], dest[1], ORDER_COLOR);
+      }),
+      // Click a tile: open → move there. Blocked or occupied → approach the
+      // nearest open adjacent tile, with a RED marker on the clicked tile.
       this.queries.pressedTiles.subscribe("qualify", (entity) => {
         const unit = boardState.selectedUnit;
         if (unit) {
-          // Orders into blocked terrain (rocks, buildings, aliens) are refused.
-          if (entity.getValue(BoardTile, "terrain") === "blocked") return;
-          // Orders onto a tile currently occupied by another unit are refused
-          // (units move, so occupancy is checked live, not stamped).
           const tx = entity.getValue(BoardTile, "x") ?? -1;
           const ty = entity.getValue(BoardTile, "y") ?? -1;
-          for (const other of this.queries.units.entities) {
-            if (other === unit) continue;
-            const o = other.object3D;
-            if (!o) continue;
-            const [ox, oy] = worldToGrid(o.position.x, o.position.z);
-            if (ox === tx && oy === ty) return;
+          const blocked = entity.getValue(BoardTile, "terrain") === "blocked";
+          const occupied = this.isOccupied(tx, ty, unit);
+          if (!blocked && !occupied) {
+            this.issueOrder(unit, tx, ty);
+            setOrderMarker(tx, ty, ORDER_COLOR);
+            return;
           }
-          unit.setValue(Unit, "orderX", entity.getValue(BoardTile, "x") ?? -1);
-          unit.setValue(Unit, "orderY", entity.getValue(BoardTile, "y") ?? -1);
-          unit.setValue(Unit, "hasOrder", true);
-          moveMarker(boardState.orderMarker, entity);
+          const dest = this.nearestOpenAdjacent(tx, ty, unit);
+          if (dest) this.issueOrder(unit, dest[0], dest[1]);
+          setOrderMarker(tx, ty, BLOCKED_COLOR);
           return;
         }
         boardState.selectedTile = entity;
         moveMarker(boardState.selectionMarker, entity);
       }),
     );
+  }
+
+  private issueOrder(unit: Entity, x: number, y: number): void {
+    unit.setValue(Unit, "orderX", x);
+    unit.setValue(Unit, "orderY", y);
+    unit.setValue(Unit, "hasOrder", true);
+  }
+
+  private isOccupied(tx: number, ty: number, exclude: Entity): boolean {
+    for (const other of this.queries.units.entities) {
+      if (other === exclude) continue;
+      const o = other.object3D;
+      if (!o) continue;
+      const [ox, oy] = worldToGrid(o.position.x, o.position.z);
+      if (ox === tx && oy === ty) return true;
+    }
+    return false;
+  }
+
+  // Nearest walkable tile adjacent to (tx,ty), preferring the side facing
+  // the moving unit. Searches ring radius 1 then 2 (radius 2 covers clicks
+  // on the center of a 3x3 building footprint).
+  private nearestOpenAdjacent(
+    tx: number,
+    ty: number,
+    unit: Entity,
+  ): [number, number] | null {
+    const from = unit.object3D;
+    if (!from) return null;
+    let best: [number, number] | null = null;
+    let bestDistance = Infinity;
+    for (let radius = 1; radius <= 2 && !best; radius += 1) {
+      for (let dy = -radius; dy <= radius; dy += 1) {
+        for (let dx = -radius; dx <= radius; dx += 1) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+          const x = tx + dx;
+          const y = ty + dy;
+          if (x < 0 || y < 0 || x >= GRID_SIZE || y >= GRID_SIZE) continue;
+          const tile = boardState.tileByKey.get(`${x},${y}`);
+          if (!tile) continue;
+          if (tile.getValue(BoardTile, "terrain") === "blocked") continue;
+          if (this.isOccupied(x, y, unit)) continue;
+          const [wx, wz] = gridToWorld(x, y);
+          const ddx = wx - from.position.x;
+          const ddz = wz - from.position.z;
+          const distance = ddx * ddx + ddz * ddz;
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            best = [x, y];
+          }
+        }
+      }
+    }
+    return best;
   }
 }

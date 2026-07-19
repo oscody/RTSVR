@@ -8,7 +8,7 @@ import {
   createSystem,
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
-import { BoardTile, Unit, boardState, gridKey } from "./state.js";
+import { BoardTile, Enemy, Unit, boardState, gridKey } from "./state.js";
 
 // Placement is tile-aligned: footprint in tiles, centered between the listed
 // grid columns/rows, one empty tile between neighboring structures.
@@ -24,6 +24,8 @@ interface StructureSpec {
   yawDeg?: number;
   /** commandable friendly unit: attaches Unit {kind} + RayInteractable */
   unit?: string;
+  /** enemy: attaches Enemy {kind} + RayInteractable (approach/attack target) */
+  enemy?: string;
   /** stamps the tiles under the footprint: "crystal" (minable) | "blocked" */
   terrain?: string;
 }
@@ -78,16 +80,16 @@ const STRUCTURES: StructureSpec[] = [
   // Aliens — ringing the outskirts, facing inward. Their tiles are stamped
   // blocked while they stand still; Phase 7 (waves) moves them and will
   // switch alien occupancy to the live check.
-  { asset: "alien", name: "Alien1", widthTiles: 1, gridX: [1, 1], gridY: [1, 1], yawDeg: 180, terrain: "blocked" },
-  { asset: "alien", name: "Alien2", widthTiles: 1, gridX: [6, 6], gridY: [0, 0], yawDeg: 180, terrain: "blocked" },
-  { asset: "alien", name: "Alien3", widthTiles: 1, gridX: [12, 12], gridY: [1, 1], yawDeg: 180, terrain: "blocked" },
-  { asset: "alien", name: "Alien4", widthTiles: 1, gridX: [18, 18], gridY: [0, 0], yawDeg: 180, terrain: "blocked" },
-  { asset: "alien", name: "Alien5", widthTiles: 1, gridX: [22, 22], gridY: [1, 1], yawDeg: 180, terrain: "blocked" },
-  { asset: "alien", name: "Alien6", widthTiles: 1, gridX: [23, 23], gridY: [8, 8], yawDeg: 270, terrain: "blocked" },
-  { asset: "alien", name: "Alien7", widthTiles: 1, gridX: [22, 22], gridY: [15, 15], yawDeg: 270, terrain: "blocked" },
-  { asset: "alien", name: "Alien8", widthTiles: 1, gridX: [21, 21], gridY: [22, 22], terrain: "blocked" },
-  { asset: "alien", name: "Alien9", widthTiles: 1, gridX: [12, 12], gridY: [22, 22], terrain: "blocked" },
-  { asset: "alien", name: "Alien10", widthTiles: 1, gridX: [3, 3], gridY: [22, 22], terrain: "blocked" },
+  { asset: "alien", name: "Alien1", widthTiles: 1, gridX: [1, 1], gridY: [1, 1], yawDeg: 180, terrain: "blocked", enemy: "alien" },
+  { asset: "alien", name: "Alien2", widthTiles: 1, gridX: [6, 6], gridY: [0, 0], yawDeg: 180, terrain: "blocked", enemy: "alien" },
+  { asset: "alien", name: "Alien3", widthTiles: 1, gridX: [12, 12], gridY: [1, 1], yawDeg: 180, terrain: "blocked", enemy: "alien" },
+  { asset: "alien", name: "Alien4", widthTiles: 1, gridX: [18, 18], gridY: [0, 0], yawDeg: 180, terrain: "blocked", enemy: "alien" },
+  { asset: "alien", name: "Alien5", widthTiles: 1, gridX: [22, 22], gridY: [1, 1], yawDeg: 180, terrain: "blocked", enemy: "alien" },
+  { asset: "alien", name: "Alien6", widthTiles: 1, gridX: [23, 23], gridY: [8, 8], yawDeg: 270, terrain: "blocked", enemy: "alien" },
+  { asset: "alien", name: "Alien7", widthTiles: 1, gridX: [22, 22], gridY: [15, 15], yawDeg: 270, terrain: "blocked", enemy: "alien" },
+  { asset: "alien", name: "Alien8", widthTiles: 1, gridX: [21, 21], gridY: [22, 22], terrain: "blocked", enemy: "alien" },
+  { asset: "alien", name: "Alien9", widthTiles: 1, gridX: [12, 12], gridY: [22, 22], terrain: "blocked", enemy: "alien" },
+  { asset: "alien", name: "Alien10", widthTiles: 1, gridX: [3, 3], gridY: [22, 22], terrain: "blocked", enemy: "alien" },
 
   // Craft — the fleet lined up in front of the command center.
   { asset: "rover", name: "Rover", widthTiles: 1, gridX: [10, 10], gridY: [13, 13], yawDeg: 180, unit: "rover" },
@@ -162,6 +164,11 @@ export class StructuresSystem extends createSystem({}) {
       if (spec.unit) {
         entity
           .addComponent(Unit, { kind: spec.unit })
+          .addComponent(RayInteractable);
+      }
+      if (spec.enemy) {
+        entity
+          .addComponent(Enemy, { kind: spec.enemy })
           .addComponent(RayInteractable);
       }
       if (spec.terrain) {

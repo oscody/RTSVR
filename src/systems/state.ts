@@ -22,6 +22,11 @@ export const Unit = createComponent("Unit", {
   hasOrder: { type: Types.Boolean, default: false },
 });
 
+// An enemy — clickable as an approach/attack target, never commandable.
+export const Enemy = createComponent("Enemy", {
+  kind: { type: Types.String, default: "alien" },
+});
+
 // ECS-visible selection singleton (brushspace pattern) — one entity carries
 // this; -1 / "none" means nothing selected.
 export const SelectionState = createComponent("SelectionState", {
