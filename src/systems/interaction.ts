@@ -1,5 +1,5 @@
 import { Entity, Hovered, Pressed, createSystem } from "@iwsdk/core";
-import { gridToWorld } from "./board.js";
+import { gridToWorld, worldToGrid } from "./board.js";
 import { BoardTile, SelectionState, Unit, boardState } from "./state.js";
 
 function markerToLocal(markerEntity: Entity | null, x: number, z: number): void {
@@ -46,6 +46,7 @@ export class InteractionSystem extends createSystem({
   hoveredTiles: { required: [BoardTile, Hovered] },
   pressedTiles: { required: [BoardTile, Pressed] },
   pressedUnits: { required: [Unit, Pressed] },
+  units: { required: [Unit] },
 }) {
   init(): void {
     this.cleanupFuncs.push(
@@ -80,6 +81,19 @@ export class InteractionSystem extends createSystem({
       this.queries.pressedTiles.subscribe("qualify", (entity) => {
         const unit = boardState.selectedUnit;
         if (unit) {
+          // Orders into blocked terrain (rocks, buildings, aliens) are refused.
+          if (entity.getValue(BoardTile, "terrain") === "blocked") return;
+          // Orders onto a tile currently occupied by another unit are refused
+          // (units move, so occupancy is checked live, not stamped).
+          const tx = entity.getValue(BoardTile, "x") ?? -1;
+          const ty = entity.getValue(BoardTile, "y") ?? -1;
+          for (const other of this.queries.units.entities) {
+            if (other === unit) continue;
+            const o = other.object3D;
+            if (!o) continue;
+            const [ox, oy] = worldToGrid(o.position.x, o.position.z);
+            if (ox === tx && oy === ty) return;
+          }
           unit.setValue(Unit, "orderX", entity.getValue(BoardTile, "x") ?? -1);
           unit.setValue(Unit, "orderY", entity.getValue(BoardTile, "y") ?? -1);
           unit.setValue(Unit, "hasOrder", true);

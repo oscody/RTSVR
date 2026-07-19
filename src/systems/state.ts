@@ -3,7 +3,11 @@ import { Entity, Types, createComponent } from "@iwsdk/core";
 export const BoardTile = createComponent("BoardTile", {
   x: { type: Types.Int16, default: 0 },
   y: { type: Types.Int16, default: 0 },
+  // "open" | "crystal" (minable) | "blocked" (rocks, buildings — not walkable)
+  terrain: { type: Types.String, default: "open" },
 });
+
+export const gridKey = (x: number, y: number): string => `${x},${y}`;
 
 export const BoardMarker = createComponent("BoardMarker", {
   kind: { type: Types.String, default: "hover" },
@@ -28,6 +32,7 @@ export const SelectionState = createComponent("SelectionState", {
 
 export const boardState = {
   boardRoot: null as Entity | null,
+  tileByKey: new Map<string, Entity>(),
   hoverMarker: null as Entity | null,
   selectionMarker: null as Entity | null,
   orderMarker: null as Entity | null,

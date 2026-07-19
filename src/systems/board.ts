@@ -12,7 +12,7 @@ import {
   createSystem,
 } from "@iwsdk/core";
 import { Object3D, RingGeometry } from "@iwsdk/core";
-import { BoardMarker, BoardTile, SelectionState, boardState } from "./state.js";
+import { BoardMarker, BoardTile, SelectionState, boardState, gridKey } from "./state.js";
 
 export const GRID_SIZE = 24;
 export const TILE_SIZE = 0.18;
@@ -21,6 +21,14 @@ export const BOARD_Y = 0.78;
 export function gridToWorld(x: number, y: number): [number, number] {
   const offset = (GRID_SIZE * TILE_SIZE) / 2 - TILE_SIZE / 2;
   return [x * TILE_SIZE - offset, y * TILE_SIZE - offset];
+}
+
+export function worldToGrid(localX: number, localZ: number): [number, number] {
+  const offset = (GRID_SIZE * TILE_SIZE) / 2 - TILE_SIZE / 2;
+  return [
+    Math.round((localX + offset) / TILE_SIZE),
+    Math.round((localZ + offset) / TILE_SIZE),
+  ];
 }
 
 function makeMarker(color: number): Mesh {
@@ -92,10 +100,11 @@ export class BoardSystem extends createSystem({}) {
         const proxy = new Mesh(proxyGeometry, proxyMaterial);
         proxy.position.y = 0.03;
         tile.add(proxy);
-        this.world
+        const tileEntity = this.world
           .createTransformEntity(tile, { parent: root })
           .addComponent(BoardTile, { x, y })
           .addComponent(RayInteractable);
+        boardState.tileByKey.set(gridKey(x, y), tileEntity);
       }
     }
 
