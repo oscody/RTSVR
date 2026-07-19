@@ -21,7 +21,6 @@
     "@iwsdk/cli": "0.4.2",
     "@iwsdk/reference": "0.4.2",
     "@iwsdk/vite-plugin-dev": "0.4.2",
-    "@iwsdk/vite-plugin-metaspatial": "^0.4.2",
     "@iwsdk/vite-plugin-uikitml": "0.4.2",
     "@meta-quest/hzdb": "^1.0.0",
     "@types/three": "*",

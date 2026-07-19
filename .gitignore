@@ -62,6 +62,7 @@ coverage/
 .codex/config.toml
 
 # Meta Spatial Editor exports
+metaspatial/
 public/gltf/generated/
 public/glxf/
 public/ui/
