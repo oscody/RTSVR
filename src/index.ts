@@ -6,6 +6,7 @@ import {
 } from "@iwsdk/core";
 import { BoardSystem } from "./systems/board.js";
 import { ConstructionSystem } from "./systems/construction.js";
+import { CraftProductionSystem } from "./systems/craftProduction.js";
 import { InteractionSystem } from "./systems/interaction.js";
 import { MiningSystem } from "./systems/mining.js";
 import { MovementSystem } from "./systems/movement.js";
@@ -83,5 +84,6 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(InteractionSystem)
     .registerSystem(MovementSystem)
     .registerSystem(MiningSystem)
-    .registerSystem(ConstructionSystem);
+    .registerSystem(ConstructionSystem)
+    .registerSystem(CraftProductionSystem);
 });

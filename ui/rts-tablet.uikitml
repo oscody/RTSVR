@@ -184,8 +184,8 @@
     flex-direction: row;
     justify-content: space-between;
     width: 548px;
-    height: 113px;
-    margin-top: 8px;
+    height: 98px;
+    margin-top: 6px;
   }
 
   .build-card {
@@ -194,7 +194,7 @@
     justify-content: center;
     width: 174px;
     min-width: 174px;
-    height: 108px;
+    height: 94px;
     padding: 6px;
     background-color: #f7fafc;
     border-width: 1px;
@@ -215,7 +215,7 @@
 
   .card-image {
     width: 72px;
-    height: 52px;
+    height: 42px;
     border-radius: 3px;
   }
 
@@ -243,6 +243,144 @@
     font-size: 15px;
     font-weight: 700;
     text-align: center;
+  }
+
+  .craft-source {
+    width: 548px;
+    height: 22px;
+    color: #365466;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .craft-row {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 548px;
+    height: 98px;
+    margin-top: 6px;
+  }
+
+  .craft-card {
+    flex-direction: row;
+    align-items: center;
+    width: 268px;
+    min-width: 268px;
+    height: 94px;
+    padding: 7px;
+    background-color: #f7fafc;
+    border-width: 1px;
+    border-color: #9aa8b4;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+
+  .craft-card:hover {
+    background-color: #e8f4f8;
+  }
+
+  .craft-image {
+    width: 78px;
+    height: 70px;
+    border-radius: 3px;
+  }
+
+  .craft-copy {
+    flex-direction: column;
+    justify-content: center;
+    width: 168px;
+    height: 70px;
+    margin-left: 8px;
+  }
+
+  .craft-name {
+    width: 168px;
+    height: 23px;
+    color: #172a36;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .craft-cost {
+    width: 168px;
+    height: 20px;
+    color: #0e7490;
+    font-size: 13px;
+  }
+
+  .craft-action-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 548px;
+    height: 46px;
+    margin-top: 6px;
+  }
+
+  .craft-page {
+    width: 88px;
+    height: 22px;
+    color: #607482;
+    font-size: 13px;
+    text-align: center;
+  }
+
+  .craft-pagination {
+    flex-direction: row;
+    align-items: center;
+    width: 168px;
+    height: 40px;
+  }
+
+  .page-button {
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    padding: 0px;
+    background-color: #c8d4dc;
+    border-width: 1px;
+    border-color: #8497a5;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+
+  .page-icon {
+    width: 18px;
+    height: 18px;
+    color: #1d3442;
+  }
+
+  .craft-action {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    width: 320px;
+    min-width: 320px;
+    height: 40px;
+    padding: 0px;
+    padding-left: 10px;
+    padding-right: 10px;
+    background-color: #176b55;
+    border-width: 1px;
+    border-color: #105446;
+    border-radius: 5px;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .craft-action:hover {
+    background-color: #105446;
+  }
+
+  .craft-action-icon {
+    width: 17px;
+    height: 17px;
+    color: #ffffff;
+    margin-right: 7px;
   }
 
   .future {
@@ -292,7 +430,7 @@
   <div class="tabs">
     <button id="tab-overview" class="tab"><ChartBarIcon class="tab-icon"></ChartBarIcon><span>Overview</span></button>
     <button id="tab-build" class="tab"><HammerIcon class="tab-icon"></HammerIcon><span>Build</span></button>
-    <button id="tab-production" class="tab"><FactoryIcon class="tab-icon"></FactoryIcon><span>Production</span></button>
+    <button id="tab-crafts" class="tab"><RocketIcon class="tab-icon"></RocketIcon><span>Crafts</span></button>
     <button id="tab-units" class="tab"><UsersIcon class="tab-icon"></UsersIcon><span>Units</span></button>
   </div>
   <div id="overview-view" class="view">
@@ -322,7 +460,25 @@
       <button id="build-shield" class="build-card locked-card"><span class="locked-label">Shield - Locked</span></button>
       <button id="build-lab" class="build-card locked-card"><span class="locked-label">Research Lab - Locked</span></button>
     </div>
-    <span class="builder">Page 1 / 1</span>
+    <div class="craft-action-row">
+      <span class="craft-page">Page 1 / 1</span>
+      <button id="build-produce" class="craft-action"><HammerIcon class="craft-action-icon"></HammerIcon><span id="build-action-label">Choose a building</span></button>
+    </div>
+  </div>
+  <div id="crafts-view" class="view" style="display: none;">
+    <span id="craft-source-label" class="craft-source">Production: Command Center</span>
+    <div class="craft-row">
+      <button id="craft-card-0" class="craft-card"><img id="craft-image-0" class="craft-image" src="/images/craft_cargoA.png"></img><div class="craft-copy"><span id="craft-name-0" class="craft-name">Cargo Craft</span><span id="craft-cost-0" class="craft-cost">50 crystals</span></div></button>
+      <button id="craft-card-1" class="craft-card"><img id="craft-image-1" class="craft-image" src="/images/craft_miner.png"></img><div class="craft-copy"><span id="craft-name-1" class="craft-name">Mining Craft</span><span id="craft-cost-1" class="craft-cost">60 crystals</span></div></button>
+    </div>
+    <div class="craft-row">
+      <button id="craft-card-2" class="craft-card"><img id="craft-image-2" class="craft-image" src="/images/craft_racer.png"></img><div class="craft-copy"><span id="craft-name-2" class="craft-name">Racing Craft</span><span id="craft-cost-2" class="craft-cost">80 crystals</span></div></button>
+      <button id="craft-card-3" class="craft-card"><img id="craft-image-3" class="craft-image" src="/images/rover.png"></img><div class="craft-copy"><span id="craft-name-3" class="craft-name">Rover</span><span id="craft-cost-3" class="craft-cost">40 crystals</span></div></button>
+    </div>
+    <div class="craft-action-row">
+      <div class="craft-pagination"><button id="craft-prev" class="page-button"><ChevronLeftIcon class="page-icon"></ChevronLeftIcon></button><span id="craft-page-label" class="craft-page">Page 1 / 1</span><button id="craft-next" class="page-button"><ChevronRightIcon class="page-icon"></ChevronRightIcon></button></div>
+      <button id="craft-produce" class="craft-action"><RocketIcon class="craft-action-icon"></RocketIcon><span id="craft-action-label">Choose a craft</span></button>
+    </div>
   </div>
   <div id="future-view" class="future"><ClockIcon class="future-icon"></ClockIcon><span class="future-label">This view unlocks in a later phase</span></div>
   <span id="tablet-status" class="status">Select an astronaut to build</span>

@@ -10,6 +10,9 @@ import { GRID_SIZE, gridToWorld, worldToGrid } from "./board.js";
 import { stampBuildingFootprint } from "./buildingFactory.js";
 import { getBuildingSpec, type BuildingSpec } from "./buildingCatalog.js";
 import { createConstructionSite } from "./construction.js";
+import { getCraftSpec } from "./craftCatalog.js";
+import { createCraftProductionSite } from "./craftProduction.js";
+import { validateCraftPurchase } from "./craftRules.js";
 import {
   footprintApproaches,
   footprintCells,
@@ -22,6 +25,7 @@ import {
 } from "./navigation.js";
 import {
   BoardTile,
+  Building,
   ConstructionState,
   Enemy,
   GameState,
@@ -91,6 +95,7 @@ export class InteractionSystem extends createSystem({
   pressedTiles: { required: [BoardTile, Pressed] },
   pressedUnits: { required: [Unit, Pressed] },
   pressedEnemies: { required: [Enemy, Pressed] },
+  pressedBuildings: { required: [Building, Pressed] },
   units: { required: [Unit] },
   enemies: { required: [Enemy] },
 }) {
@@ -110,6 +115,14 @@ export class InteractionSystem extends createSystem({
       // Click a friendly unit: always (re)select — approach applies to
       // enemies and blocked terrain only (user decision 2026-07-19).
       this.queries.pressedUnits.subscribe("qualify", (entity) => {
+        if (this.isCraftPlacementActive()) {
+          this.rejectCraftPlacementTarget(entity);
+          return;
+        }
+        if (this.isBuildPlacementModeActive()) {
+          this.rejectBuildPlacementTarget(entity);
+          return;
+        }
         if (boardState.selectedUnit === entity) {
           boardState.selectedUnit = null;
           hideMarker(boardState.selectionMarker);
@@ -131,6 +144,14 @@ export class InteractionSystem extends createSystem({
       // Click an enemy with a unit selected: approach the open tile on the
       // mover-facing side. The red marker stays on the unavailable target.
       this.queries.pressedEnemies.subscribe("qualify", (entity) => {
+        if (this.isCraftPlacementActive()) {
+          this.rejectCraftPlacementTarget(entity);
+          return;
+        }
+        if (this.isBuildPlacementModeActive()) {
+          this.rejectBuildPlacementTarget(entity);
+          return;
+        }
         const unit = boardState.selectedUnit;
         const enemyObject = entity.object3D;
         if (!unit || !enemyObject) return;
@@ -144,13 +165,49 @@ export class InteractionSystem extends createSystem({
         this.issueOrder(unit, dest[0], dest[1]);
         setOrderMarker(ex, ey, BLOCKED_COLOR);
       }),
+      // Buildings are production sources. Selecting one opens Crafts and
+      // records which building is authorizing the next craft purchase.
+      this.queries.pressedBuildings.subscribe("qualify", (entity) => {
+        if (this.isCraftPlacementActive()) {
+          this.rejectCraftPlacementTarget(entity);
+          return;
+        }
+        if (this.isBuildPlacementModeActive()) {
+          this.rejectBuildPlacementTarget(entity);
+          return;
+        }
+        const tablet = boardState.tablet;
+        if (!tablet) return;
+        boardState.selectedUnit = null;
+        hideMarker(boardState.selectionMarker);
+        hideMarker(boardState.buildMarker);
+        publishSelection(null);
+        tablet.setValue(TabletState, "astronaut", null);
+        tablet.setValue(TabletState, "astronautIndex", -1);
+        tablet.setValue(TabletState, "spawnBuilding", entity);
+        tablet.setValue(TabletState, "spawnBuildingIndex", entity.index);
+        tablet.setValue(TabletState, "buildPlacementActive", false);
+        tablet.setValue(TabletState, "craftPlacementActive", false);
+        tablet.setValue(TabletState, "view", "crafts");
+        const kind = entity.getValue(Building, "kind") ?? "building";
+        this.setTabletStatus(
+          kind === "turret"
+            ? "Turret cannot produce crafts"
+            : "Choose a craft to produce",
+          kind === "turret" ? "error" : "info",
+        );
+      }),
       // Click a tile: open -> move there. Terrain features and occupied tiles
       // are unavailable destinations, so approach from the nearest open tile.
       this.queries.pressedTiles.subscribe("qualify", (entity) => {
+        const tx = entity.getValue(BoardTile, "x") ?? -1;
+        const ty = entity.getValue(BoardTile, "y") ?? -1;
+        if (this.isCraftPlacementActive()) {
+          this.placeCraft(tx, ty);
+          return;
+        }
         const unit = boardState.selectedUnit;
         if (unit) {
-          const tx = entity.getValue(BoardTile, "x") ?? -1;
-          const ty = entity.getValue(BoardTile, "y") ?? -1;
           if (this.isBuildPlacementActive(unit)) {
             this.startConstruction(unit, tx, ty);
             return;
@@ -299,6 +356,8 @@ export class InteractionSystem extends createSystem({
     if (!tablet) return;
     tablet.setValue(TabletState, "astronaut", astronaut);
     tablet.setValue(TabletState, "astronautIndex", astronaut?.index ?? -1);
+    tablet.setValue(TabletState, "buildPlacementActive", false);
+    hideMarker(boardState.buildMarker);
     if (astronaut) {
       tablet.setValue(TabletState, "view", "build");
       this.setTabletStatus("Choose a building type");
@@ -314,7 +373,98 @@ export class InteractionSystem extends createSystem({
         unit.getValue(Unit, "kind") === "astronaut" &&
         tablet.getValue(TabletState, "astronautIndex") === unit.index &&
         tablet.getValue(TabletState, "view") === "build" &&
+        tablet.getValue(TabletState, "buildPlacementActive") &&
         tablet.getValue(TabletState, "selectedBuildingKind") !== "none",
+    );
+  }
+
+  private isBuildPlacementModeActive(): boolean {
+    const tablet = boardState.tablet;
+    return Boolean(
+      tablet &&
+        tablet.getValue(TabletState, "view") === "build" &&
+        tablet.getValue(TabletState, "buildPlacementActive"),
+    );
+  }
+
+  private isCraftPlacementActive(): boolean {
+    const tablet = boardState.tablet;
+    return Boolean(
+      tablet &&
+        tablet.getValue(TabletState, "view") === "crafts" &&
+        tablet.getValue(TabletState, "craftPlacementActive") &&
+        tablet.getValue(TabletState, "selectedCraftKind") !== "none",
+    );
+  }
+
+  private placeCraft(tx: number, ty: number): void {
+    const tablet = boardState.tablet;
+    const gameState = boardState.gameState;
+    const root = boardState.boardRoot;
+    if (!tablet || !gameState || !root) return;
+    const source = tablet.getValue(TabletState, "spawnBuilding") as Entity | null;
+    const spec = getCraftSpec(
+      tablet.getValue(TabletState, "selectedCraftKind") ?? "none",
+    );
+    const validation = validateCraftPurchase({
+      spec,
+      crystals: gameState.getValue(GameState, "crystals") ?? 0,
+      buildingKind: source?.getValue(Building, "kind") ?? null,
+      tileAvailable: this.isCraftTileAvailable(tx, ty),
+    });
+    if (!validation.ok || !spec) {
+      this.setTabletStatus(
+        validation.ok ? "Craft placement is unavailable" : validation.error,
+        "error",
+      );
+      setOrderMarker(tx, ty, BLOCKED_COLOR);
+      return;
+    }
+
+    gameState.setValue(GameState, "crystals", validation.remainingCrystals);
+    gameState.setValue(
+      GameState,
+      "revision",
+      (gameState.getValue(GameState, "revision") ?? 0) + 1,
+    );
+    boardState.tileByKey
+      .get(gridKey(tx, ty))
+      ?.setValue(BoardTile, "terrain", "blocked");
+    createCraftProductionSite(this.world, root, spec, tx, ty);
+    tablet.setValue(TabletState, "craftPlacementActive", false);
+    hideMarker(boardState.buildMarker);
+    setOrderMarker(tx, ty, 0x22c55e);
+    this.setTabletStatus(
+      `${spec.label} production started (${spec.duration}s)`,
+      "success",
+    );
+  }
+
+  private isCraftTileAvailable(tx: number, ty: number): boolean {
+    return (
+      boardState.tileByKey.get(gridKey(tx, ty))?.getValue(
+        BoardTile,
+        "terrain",
+      ) === "open" && !this.isOccupied(tx, ty, null)
+    );
+  }
+
+  private rejectCraftPlacementTarget(entity: Entity): void {
+    const object = entity.object3D;
+    if (!object) return;
+    const [x, y] = worldToGrid(object.position.x, object.position.z);
+    setOrderMarker(x, y, BLOCKED_COLOR);
+    this.setTabletStatus("That tile is blocked. Choose an open tile", "error");
+  }
+
+  private rejectBuildPlacementTarget(entity: Entity): void {
+    const object = entity.object3D;
+    if (!object) return;
+    const [x, y] = worldToGrid(object.position.x, object.position.z);
+    setOrderMarker(x, y, BLOCKED_COLOR);
+    this.setTabletStatus(
+      "That footprint is blocked. Choose an open tile",
+      "error",
     );
   }
 
@@ -363,6 +513,8 @@ export class InteractionSystem extends createSystem({
     astronaut.setValue(ConstructionState, "duration", spec.duration);
     astronaut.setValue(ConstructionState, "cost", spec.cost);
     astronaut.setValue(ConstructionState, "site", site);
+    tablet.setValue(TabletState, "buildPlacementActive", false);
+    hideMarker(boardState.buildMarker);
 
     const remaining = [...path];
     const next = remaining.shift();
@@ -379,6 +531,10 @@ export class InteractionSystem extends createSystem({
   }
 
   private updateHoverMarker(tile: Entity): void {
+    if (this.isCraftPlacementActive()) {
+      this.updateCraftPlacementHover(tile);
+      return;
+    }
     const unit = boardState.selectedUnit;
     if (!unit || !this.isBuildPlacementActive(unit)) {
       hideMarker(boardState.buildMarker);
@@ -409,6 +565,31 @@ export class InteractionSystem extends createSystem({
     const [x1, z1] = gridToWorld(last.x, last.y);
     marker.position.set((x0 + x1) / 2, marker.position.y, (z0 + z1) / 2);
     marker.scale.set(spec.widthTiles, spec.widthTiles, 1);
+    (marker.material as MeshBasicMaterial).color.setHex(
+      validation.ok ? 0x22c55e : BLOCKED_COLOR,
+    );
+    marker.visible = true;
+  }
+
+  private updateCraftPlacementHover(tile: Entity): void {
+    hideMarker(boardState.hoverMarker);
+    const marker = boardState.buildMarker?.object3D as Mesh | undefined;
+    const tablet = boardState.tablet;
+    if (!marker || !tablet) return;
+    const tx = tile.getValue(BoardTile, "x") ?? -1;
+    const ty = tile.getValue(BoardTile, "y") ?? -1;
+    const source = tablet.getValue(TabletState, "spawnBuilding") as Entity | null;
+    const validation = validateCraftPurchase({
+      spec: getCraftSpec(
+        tablet.getValue(TabletState, "selectedCraftKind") ?? "none",
+      ),
+      crystals: boardState.gameState?.getValue(GameState, "crystals") ?? 0,
+      buildingKind: source?.getValue(Building, "kind") ?? null,
+      tileAvailable: this.isCraftTileAvailable(tx, ty),
+    });
+    const [worldX, worldZ] = gridToWorld(tx, ty);
+    marker.position.set(worldX, marker.position.y, worldZ);
+    marker.scale.set(1, 1, 1);
     (marker.material as MeshBasicMaterial).color.setHex(
       validation.ok ? 0x22c55e : BLOCKED_COLOR,
     );

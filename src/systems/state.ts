@@ -75,6 +75,15 @@ export const ConstructionSite = createComponent("ConstructionSite", {
   progress: { type: Types.Float32, default: 0 },
 });
 
+export const CraftProductionSite = createComponent("CraftProductionSite", {
+  kind: { type: Types.String, default: "none" },
+  x: { type: Types.Int16, default: -1 },
+  y: { type: Types.Int16, default: -1 },
+  timer: { type: Types.Float32, default: 0 },
+  duration: { type: Types.Float32, default: 0 },
+  progress: { type: Types.Float32, default: 0 },
+});
+
 export const ConstructionState = createComponent("ConstructionState", {
   stage: { type: Types.String, default: "idle" },
   buildingKind: { type: Types.String, default: "none" },
@@ -93,6 +102,13 @@ export const TabletState = createComponent("TabletState", {
   astronaut: { type: Types.Entity, default: null },
   astronautIndex: { type: Types.Int32, default: -1 },
   selectedBuildingKind: { type: Types.String, default: "none" },
+  buildPlacementActive: { type: Types.Boolean, default: false },
+  spawnBuilding: { type: Types.Entity, default: null },
+  spawnBuildingIndex: { type: Types.Int32, default: -1 },
+  selectedCraftKind: { type: Types.String, default: "none" },
+  selectedCraftCost: { type: Types.Int16, default: 0 },
+  craftPage: { type: Types.Int16, default: 0 },
+  craftPlacementActive: { type: Types.Boolean, default: false },
   status: { type: Types.String, default: "Select an astronaut to build" },
   statusKind: { type: Types.String, default: "info" },
   revision: { type: Types.Int32, default: 0 },
