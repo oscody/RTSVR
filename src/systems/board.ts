@@ -12,7 +12,14 @@ import {
   createSystem,
 } from "@iwsdk/core";
 import { Object3D, RingGeometry } from "@iwsdk/core";
-import { BoardMarker, BoardTile, SelectionState, boardState, gridKey } from "./state.js";
+import {
+  BoardMarker,
+  BoardTile,
+  GameState,
+  SelectionState,
+  boardState,
+  gridKey,
+} from "./state.js";
 
 export const GRID_SIZE = 24;
 export const TILE_SIZE = 0.18;
@@ -144,5 +151,11 @@ export class BoardSystem extends createSystem({}) {
     boardState.selection = this.world
       .createTransformEntity(selectionObject, { parent: root })
       .addComponent(SelectionState);
+
+    const gameStateObject = new Object3D();
+    gameStateObject.name = "GameState";
+    boardState.gameState = this.world
+      .createTransformEntity(gameStateObject, { parent: root })
+      .addComponent(GameState);
   }
 }

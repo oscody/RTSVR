@@ -1,4 +1,4 @@
-import { Entity, Types, createComponent } from "@iwsdk/core";
+import { Entity, Object3D, Types, createComponent } from "@iwsdk/core";
 
 export const BoardTile = createComponent("BoardTile", {
   x: { type: Types.Int16, default: 0 },
@@ -27,6 +27,33 @@ export const Enemy = createComponent("Enemy", {
   kind: { type: Types.String, default: "alien" },
 });
 
+export const ResourceNode = createComponent("ResourceNode", {
+  kind: { type: Types.String, default: "small" },
+  x: { type: Types.Int16, default: -1 },
+  y: { type: Types.Int16, default: -1 },
+  capacity: { type: Types.Int16, default: 50 },
+  remaining: { type: Types.Int16, default: 50 },
+  amountPerTrip: { type: Types.Int16, default: 10 },
+});
+
+export const MinerState = createComponent("MinerState", {
+  stage: { type: Types.String, default: "idle" },
+  timer: { type: Types.Float32, default: 0 },
+  cargo: { type: Types.Int16, default: 0 },
+  target: { type: Types.Entity, default: null },
+  targetX: { type: Types.Int16, default: -1 },
+  targetY: { type: Types.Int16, default: -1 },
+  approachX: { type: Types.Int16, default: -1 },
+  approachY: { type: Types.Int16, default: -1 },
+  depositX: { type: Types.Int16, default: -1 },
+  depositY: { type: Types.Int16, default: -1 },
+});
+
+export const GameState = createComponent("GameState", {
+  crystals: { type: Types.Int32, default: 0 },
+  revision: { type: Types.Int32, default: 0 },
+});
+
 // ECS-visible selection singleton (brushspace pattern) — one entity carries
 // this; -1 / "none" means nothing selected.
 export const SelectionState = createComponent("SelectionState", {
@@ -42,7 +69,11 @@ export const boardState = {
   selectionMarker: null as Entity | null,
   orderMarker: null as Entity | null,
   selection: null as Entity | null, // carries the SelectionState singleton
+  gameState: null as Entity | null,
+  commandCenter: null as Entity | null,
   hoveredTile: null as Entity | null,
   selectedTile: null as Entity | null,
   selectedUnit: null as Entity | null,
+  resourceByKey: new Map<string, Entity>(),
+  cargoVisualByUnit: new Map<number, Object3D>(),
 };

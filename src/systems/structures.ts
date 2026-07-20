@@ -11,7 +11,15 @@ import {
   createSystem,
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
-import { BoardTile, Enemy, Unit, boardState, gridKey } from "./state.js";
+import {
+  BoardTile,
+  Enemy,
+  MinerState,
+  ResourceNode,
+  Unit,
+  boardState,
+  gridKey,
+} from "./state.js";
 
 // Placement is tile-aligned: footprint in tiles, centered between the listed
 // grid columns/rows, one empty tile between neighboring structures.
@@ -31,6 +39,8 @@ interface StructureSpec {
   enemy?: string;
   /** stamps the tiles under the footprint: "crystal" (minable) | "blocked" */
   terrain?: string;
+  /** finite crystal deposit configuration */
+  resource?: { kind: "small" | "large"; capacity: number };
 }
 
 const STRUCTURES: StructureSpec[] = [
@@ -43,20 +53,20 @@ const STRUCTURES: StructureSpec[] = [
   { asset: "aircraft_factory", name: "AircraftFactory", widthTiles: 3, gridX: [15, 15], gridY: [11, 11], terrain: "blocked" },
 
   // Crystal field A — front-left, close to the base cluster (early mining).
-  { asset: "rockCrystalsLargeA", name: "CrystalLargeA", widthTiles: 1, gridX: [5, 5], gridY: [16, 16], terrain: "crystal" },
-  { asset: "rockCrystals", name: "CrystalSmallA", widthTiles: 1, gridX: [6, 6], gridY: [17, 17], terrain: "crystal" },
+  { asset: "rockCrystalsLargeA", name: "CrystalLargeA", widthTiles: 1, gridX: [5, 5], gridY: [16, 16], terrain: "crystal", resource: { kind: "large", capacity: 100 } },
+  { asset: "rockCrystals", name: "CrystalSmallA", widthTiles: 1, gridX: [6, 6], gridY: [17, 17], terrain: "crystal", resource: { kind: "small", capacity: 50 } },
   { asset: "rocksSmallB", name: "RocksSmallB", widthTiles: 1, gridX: [4, 4], gridY: [17, 17], terrain: "blocked" },
   // Crystal field B — back-right expansion.
-  { asset: "rockCrystalsLargeB", name: "CrystalLargeB", widthTiles: 1, gridX: [18, 18], gridY: [6, 6], terrain: "crystal" },
-  { asset: "rockCrystals", name: "CrystalSmallB", widthTiles: 1, gridX: [19, 19], gridY: [7, 7], terrain: "crystal" },
+  { asset: "rockCrystalsLargeB", name: "CrystalLargeB", widthTiles: 1, gridX: [18, 18], gridY: [6, 6], terrain: "crystal", resource: { kind: "large", capacity: 100 } },
+  { asset: "rockCrystals", name: "CrystalSmallB", widthTiles: 1, gridX: [19, 19], gridY: [7, 7], terrain: "crystal", resource: { kind: "small", capacity: 50 } },
   // Crystal field expansions.
-  { asset: "rockCrystalsLargeB", name: "CrystalA3", widthTiles: 1, gridX: [4, 4], gridY: [15, 15], terrain: "crystal" },
-  { asset: "rockCrystals", name: "CrystalA4", widthTiles: 1, gridX: [5, 5], gridY: [18, 18], yawDeg: 90, terrain: "crystal" },
-  { asset: "rockCrystalsLargeA", name: "CrystalB3", widthTiles: 1, gridX: [17, 17], gridY: [5, 5], yawDeg: 180, terrain: "crystal" },
-  { asset: "rockCrystals", name: "CrystalB4", widthTiles: 1, gridX: [20, 20], gridY: [6, 6], yawDeg: 90, terrain: "crystal" },
+  { asset: "rockCrystalsLargeB", name: "CrystalA3", widthTiles: 1, gridX: [4, 4], gridY: [15, 15], terrain: "crystal", resource: { kind: "large", capacity: 100 } },
+  { asset: "rockCrystals", name: "CrystalA4", widthTiles: 1, gridX: [5, 5], gridY: [18, 18], yawDeg: 90, terrain: "crystal", resource: { kind: "small", capacity: 50 } },
+  { asset: "rockCrystalsLargeA", name: "CrystalB3", widthTiles: 1, gridX: [17, 17], gridY: [5, 5], yawDeg: 180, terrain: "crystal", resource: { kind: "large", capacity: 100 } },
+  { asset: "rockCrystals", name: "CrystalB4", widthTiles: 1, gridX: [20, 20], gridY: [6, 6], yawDeg: 90, terrain: "crystal", resource: { kind: "small", capacity: 50 } },
   // Crystal field C — front-right pocket.
-  { asset: "rockCrystalsLargeB", name: "CrystalC1", widthTiles: 1, gridX: [19, 19], gridY: [17, 17], yawDeg: 270, terrain: "crystal" },
-  { asset: "rockCrystals", name: "CrystalC2", widthTiles: 1, gridX: [20, 20], gridY: [16, 16], terrain: "crystal" },
+  { asset: "rockCrystalsLargeB", name: "CrystalC1", widthTiles: 1, gridX: [19, 19], gridY: [17, 17], yawDeg: 270, terrain: "crystal", resource: { kind: "large", capacity: 100 } },
+  { asset: "rockCrystals", name: "CrystalC2", widthTiles: 1, gridX: [20, 20], gridY: [16, 16], terrain: "crystal", resource: { kind: "small", capacity: 50 } },
 
   // Landmark boulder — a rockLargeA scaled onto 2x2 tiles, north of the base.
   { asset: "rockLargeA", name: "BoulderLarge", widthTiles: 2, gridX: [11, 12], gridY: [4, 4], terrain: "blocked" },
@@ -154,6 +164,20 @@ function addInteractionProxy(holder: Group, spec: StructureSpec, model: Object3D
   holder.add(proxy);
 }
 
+function addCargoVisual(holder: Group, model: Object3D): Object3D {
+  const cargo = AssetManager.getGLTF("rockCrystals")?.scene;
+  if (!cargo) throw new Error("rockCrystals not preloaded for miner cargo");
+  const cargoWidth = new Box3().setFromObject(cargo).getSize(new Vector3()).x;
+  cargo.scale.setScalar((TILE_SIZE * 0.3) / cargoWidth);
+  seatModel(cargo);
+  const modelHeight = new Box3().setFromObject(model).getSize(new Vector3()).y;
+  cargo.name = "MinerCargoVisual";
+  cargo.position.y = modelHeight + TILE_SIZE * 0.04;
+  cargo.visible = false;
+  holder.add(cargo);
+  return cargo;
+}
+
 export class StructuresSystem extends createSystem({}) {
   init(): void {
     const root = boardState.boardRoot;
@@ -184,10 +208,17 @@ export class StructuresSystem extends createSystem({}) {
         addInteractionProxy(holder, spec, model);
       }
       const entity = this.world.createTransformEntity(holder, { parent: root });
+      if (spec.name === "CommandCenter") {
+        boardState.commandCenter = entity;
+      }
       if (spec.unit) {
         entity
           .addComponent(Unit, { kind: spec.unit })
           .addComponent(RayInteractable);
+        if (spec.unit === "miner") {
+          entity.addComponent(MinerState);
+          boardState.cargoVisualByUnit.set(entity.index, addCargoVisual(holder, model));
+        }
       }
       if (spec.enemy) {
         entity
@@ -196,6 +227,19 @@ export class StructuresSystem extends createSystem({}) {
       }
       if (spec.terrain) {
         stampTerrain(spec, spec.terrain);
+      }
+      if (spec.resource) {
+        const x = spec.gridX[0];
+        const y = spec.gridY[0];
+        entity.addComponent(ResourceNode, {
+          kind: spec.resource.kind,
+          x,
+          y,
+          capacity: spec.resource.capacity,
+          remaining: spec.resource.capacity,
+          amountPerTrip: 10,
+        });
+        boardState.resourceByKey.set(gridKey(x, y), entity);
       }
     }
   }

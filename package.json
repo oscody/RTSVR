@@ -10,7 +10,7 @@
     "dev:status": "bash scripts/with-supported-node.sh iwsdk dev status",
     "reference:status": "bash scripts/with-supported-node.sh iwsdk reference status",
     "reference:warmup": "bash scripts/with-supported-node.sh iwsdk reference warmup",
-    "test": "bash scripts/with-supported-node.sh node --experimental-strip-types --test tests/navigation.test.ts",
+    "test": "bash scripts/with-supported-node.sh node --experimental-strip-types --test tests/*.test.ts",
     "build": "bash scripts/with-supported-node.sh vite build",
     "preview": "bash scripts/with-supported-node.sh vite preview"
   },

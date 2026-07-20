@@ -11,6 +11,8 @@ import { findApproachTile } from "./navigation.js";
 import {
   BoardTile,
   Enemy,
+  MinerState,
+  ResourceNode,
   SelectionState,
   Unit,
   boardState,
@@ -112,6 +114,7 @@ export class InteractionSystem extends createSystem({
         const unit = boardState.selectedUnit;
         const enemyObject = entity.object3D;
         if (!unit || !enemyObject) return;
+        if (!this.prepareManualOrder(unit)) return;
         const [ex, ey] = worldToGrid(enemyObject.position.x, enemyObject.position.z);
         const dest = this.nearestOpenAdjacent(ex, ey, unit);
         if (!dest) {
@@ -128,6 +131,29 @@ export class InteractionSystem extends createSystem({
         if (unit) {
           const tx = entity.getValue(BoardTile, "x") ?? -1;
           const ty = entity.getValue(BoardTile, "y") ?? -1;
+          const resource = boardState.resourceByKey.get(gridKey(tx, ty));
+          if (
+            resource &&
+            (resource.getValue(ResourceNode, "remaining") ?? 0) > 0 &&
+            unit.getValue(Unit, "kind") === "miner"
+          ) {
+            const resourceDestination = this.nearestOpenAdjacent(tx, ty, unit);
+            const baseDestination = this.nearestCommandCenterApproach(unit);
+            if (resourceDestination && baseDestination) {
+              this.startMining(
+                unit,
+                resource,
+                tx,
+                ty,
+                resourceDestination,
+                baseDestination,
+              );
+            }
+            setOrderMarker(tx, ty, BLOCKED_COLOR);
+            return;
+          }
+
+          if (!this.prepareManualOrder(unit)) return;
           const blocked = entity.getValue(BoardTile, "terrain") !== "open";
           const occupied = this.isOccupied(tx, ty, unit);
           if (!blocked && !occupied) {
@@ -150,6 +176,51 @@ export class InteractionSystem extends createSystem({
     unit.setValue(Unit, "orderX", x);
     unit.setValue(Unit, "orderY", y);
     unit.setValue(Unit, "hasOrder", true);
+  }
+
+  private startMining(
+    miner: Entity,
+    resource: Entity,
+    targetX: number,
+    targetY: number,
+    resourceDestination: [number, number],
+    baseDestination: [number, number],
+  ): void {
+    miner.setValue(MinerState, "target", resource);
+    miner.setValue(MinerState, "targetX", targetX);
+    miner.setValue(MinerState, "targetY", targetY);
+    miner.setValue(MinerState, "approachX", resourceDestination[0]);
+    miner.setValue(MinerState, "approachY", resourceDestination[1]);
+    miner.setValue(MinerState, "depositX", baseDestination[0]);
+    miner.setValue(MinerState, "depositY", baseDestination[1]);
+    miner.setValue(MinerState, "timer", 0);
+
+    if ((miner.getValue(MinerState, "cargo") ?? 0) > 0) {
+      miner.setValue(MinerState, "stage", "toBase");
+      if (!(miner.getValue(Unit, "hasOrder") ?? false)) {
+        this.issueOrder(miner, baseDestination[0], baseDestination[1]);
+      }
+      return;
+    }
+
+    miner.setValue(MinerState, "stage", "toResource");
+    this.issueOrder(miner, resourceDestination[0], resourceDestination[1]);
+  }
+
+  private prepareManualOrder(unit: Entity): boolean {
+    if (!unit.hasComponent(MinerState)) return true;
+    if ((unit.getValue(MinerState, "cargo") ?? 0) > 0) return false;
+    unit.setValue(MinerState, "stage", "idle");
+    unit.setValue(MinerState, "timer", 0);
+    unit.setValue(MinerState, "target", null);
+    return true;
+  }
+
+  private nearestCommandCenterApproach(unit: Entity): [number, number] | null {
+    const commandCenter = boardState.commandCenter?.object3D;
+    if (!commandCenter) return null;
+    const [x, y] = worldToGrid(commandCenter.position.x, commandCenter.position.z);
+    return this.nearestOpenAdjacent(x, y, unit);
   }
 
   private isOccupied(tx: number, ty: number, exclude: Entity): boolean {
