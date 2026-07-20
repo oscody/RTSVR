@@ -4,9 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bash scripts/with-supported-node.sh iwsdk dev up --open --foreground",
+    "dev": "bash scripts/with-supported-node.sh iwsdk dev up --open",
+    "dev:foreground": "bash scripts/with-supported-node.sh iwsdk dev up --open --foreground",
     "dev:runtime": "bash scripts/with-supported-node.sh vite",
     "dev:down": "bash scripts/with-supported-node.sh iwsdk dev down",
+    "dev:logs": "bash scripts/with-supported-node.sh iwsdk dev logs",
     "dev:status": "bash scripts/with-supported-node.sh iwsdk dev status",
     "reference:status": "bash scripts/with-supported-node.sh iwsdk reference status",
     "reference:warmup": "bash scripts/with-supported-node.sh iwsdk reference warmup",
