@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { findApproachTile } from "../src/systems/navigation.ts";
+import { findApproachTile, findGridPath } from "../src/systems/navigation.ts";
 
 test("approaches the facing edge of a blocked 3x3 building", () => {
   const blocked = new Set<string>();
@@ -42,4 +42,36 @@ test("skips another occupied approach tile", () => {
   assert.ok(result);
   assert.notDeepEqual(result, { x: 8, y: 9 });
   assert.equal(Math.max(Math.abs(result.x - 8), Math.abs(result.y - 8)), 1);
+});
+
+test("BFS routes around blocked cells to the nearest work tile", () => {
+  const blocked = new Set(["1,0", "1,1", "1,2"]);
+  const path = findGridPath({
+    start: { x: 0, y: 0 },
+    goals: [{ x: 2, y: 0 }],
+    gridSize: 5,
+    canStandAt: (x, y) => !blocked.has(`${x},${y}`),
+  });
+
+  assert.deepEqual(path, [
+    { x: 0, y: 1 },
+    { x: 0, y: 2 },
+    { x: 0, y: 3 },
+    { x: 1, y: 3 },
+    { x: 2, y: 3 },
+    { x: 2, y: 2 },
+    { x: 2, y: 1 },
+    { x: 2, y: 0 },
+  ]);
+});
+
+test("BFS returns null when every route is sealed", () => {
+  const path = findGridPath({
+    start: { x: 1, y: 1 },
+    goals: [{ x: 3, y: 3 }],
+    gridSize: 5,
+    canStandAt: (x, y) => !["1,0", "2,1", "1,2", "0,1"].includes(`${x},${y}`),
+  });
+
+  assert.equal(path, null);
 });

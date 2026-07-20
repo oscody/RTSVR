@@ -10,6 +10,68 @@ interface ApproachOptions {
   canStandAt: (x: number, y: number) => boolean;
 }
 
+interface PathOptions {
+  start: GridPosition;
+  goals: readonly GridPosition[];
+  gridSize: number;
+  canStandAt: (x: number, y: number) => boolean;
+}
+
+const PATH_DIRECTIONS = [
+  [0, -1],
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+] as const;
+
+// Four-neighbor BFS returns a shortest grid path without the starting cell.
+// The goal list can contain every open work tile around a building footprint.
+export function findGridPath({
+  start,
+  goals,
+  gridSize,
+  canStandAt,
+}: PathOptions): GridPosition[] | null {
+  const key = (x: number, y: number) => `${x},${y}`;
+  const goalKeys = new Set(goals.map(({ x, y }) => key(x, y)));
+  if (goalKeys.has(key(start.x, start.y))) return [];
+
+  const queue: GridPosition[] = [start];
+  const visited = new Set([key(start.x, start.y)]);
+  const previous = new Map<string, GridPosition>();
+
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const current = queue[cursor];
+    for (const [dx, dy] of PATH_DIRECTIONS) {
+      const next = { x: current.x + dx, y: current.y + dy };
+      const nextKey = key(next.x, next.y);
+      if (
+        next.x < 0 ||
+        next.y < 0 ||
+        next.x >= gridSize ||
+        next.y >= gridSize ||
+        visited.has(nextKey) ||
+        !canStandAt(next.x, next.y)
+      ) {
+        continue;
+      }
+      visited.add(nextKey);
+      previous.set(nextKey, current);
+      if (goalKeys.has(nextKey)) {
+        const path: GridPosition[] = [next];
+        let step = current;
+        while (step.x !== start.x || step.y !== start.y) {
+          path.push(step);
+          step = previous.get(key(step.x, step.y))!;
+        }
+        return path.reverse();
+      }
+      queue.push(next);
+    }
+  }
+  return null;
+}
+
 // Find the nearest usable ring around a target, then choose the point on that
 // ring closest to the moving unit. This puts the unit on the facing side of a
 // single occupant and also reaches the outside edge of larger buildings.

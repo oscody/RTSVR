@@ -4,6 +4,7 @@ import type { MiningCycleState, MiningStage } from "./miningRules.js";
 import {
   BoardTile,
   GameState,
+  GameStats,
   MinerState,
   ResourceNode,
   Unit,
@@ -59,12 +60,26 @@ export class MiningSystem extends createSystem({
         if (this.cycle.nodeRemaining === 0) this.exhaustNode(node);
       }
       if (this.cycle.crystals !== previousCrystals) {
+        const deposited = Math.max(0, this.cycle.crystals - previousCrystals);
         gameState.setValue(GameState, "crystals", this.cycle.crystals);
         gameState.setValue(
           GameState,
           "revision",
           (gameState.getValue(GameState, "revision") ?? 0) + 1,
         );
+        const stats = boardState.gameStats;
+        if (stats && deposited > 0) {
+          stats.setValue(
+            GameStats,
+            "crystalsMined",
+            (stats.getValue(GameStats, "crystalsMined") ?? 0) + deposited,
+          );
+          stats.setValue(
+            GameStats,
+            "revision",
+            (stats.getValue(GameStats, "revision") ?? 0) + 1,
+          );
+        }
       }
 
       if (transition === "loadedCargo") {

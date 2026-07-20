@@ -13,6 +13,8 @@ import {
 import { TILE_SIZE, gridToWorld } from "./board.js";
 import {
   BoardTile,
+  Building,
+  ConstructionState,
   Enemy,
   MinerState,
   ResourceNode,
@@ -41,16 +43,18 @@ interface StructureSpec {
   terrain?: string;
   /** finite crystal deposit configuration */
   resource?: { kind: "small" | "large"; capacity: number };
+  /** friendly building category used by construction and production */
+  building?: string;
 }
 
 const STRUCTURES: StructureSpec[] = [
   // 15m-wide model scaled onto 3x3 tiles, board center (tiles 10-12).
-  { asset: "commandCenter", name: "CommandCenter", widthTiles: 3, gridX: [11, 11], gridY: [11, 11], terrain: "blocked" },
+  { asset: "commandCenter", name: "CommandCenter", widthTiles: 3, gridX: [11, 11], gridY: [11, 11], terrain: "blocked", building: "command-center" },
   // 2x3m hangar onto 2x3 tiles, left of center with a one-tile gap.
-  { asset: "hangarLargeA", name: "Hangar", widthTiles: 2, gridX: [7, 8], gridY: [11, 11], terrain: "blocked" },
+  { asset: "hangarLargeA", name: "Hangar", widthTiles: 2, gridX: [7, 8], gridY: [11, 11], terrain: "blocked", building: "hangar" },
   // Aircraft factory onto 3x3 tiles (tiles 14-16), right of center with a
   // one-tile gap. Vertex-hull measurement confirms the base is axis-aligned.
-  { asset: "aircraft_factory", name: "AircraftFactory", widthTiles: 3, gridX: [15, 15], gridY: [11, 11], terrain: "blocked" },
+  { asset: "aircraft_factory", name: "AircraftFactory", widthTiles: 3, gridX: [15, 15], gridY: [11, 11], terrain: "blocked", building: "factory" },
 
   // Crystal field A — front-left, close to the base cluster (early mining).
   { asset: "rockCrystalsLargeA", name: "CrystalLargeA", widthTiles: 1, gridX: [5, 5], gridY: [16, 16], terrain: "crystal", resource: { kind: "large", capacity: 100 } },
@@ -110,7 +114,7 @@ const STRUCTURES: StructureSpec[] = [
   { asset: "craftRacer", name: "CraftRacer", widthTiles: 1, gridX: [13, 13], gridY: [13, 13], yawDeg: 180, unit: "racer" },
 
   // Base defense — turret guarding the southwest approach.
-  { asset: "turretSingle", name: "TurretSingle", widthTiles: 1, gridX: [9, 9], gridY: [14, 14], yawDeg: 180, terrain: "blocked" },
+  { asset: "turretSingle", name: "TurretSingle", widthTiles: 1, gridX: [9, 9], gridY: [14, 14], yawDeg: 180, terrain: "blocked", building: "turret" },
 
   // Meteors — sprinkled impact debris.
   { asset: "meteor", name: "Meteor1", widthTiles: 1, gridX: [2, 2], gridY: [2, 2], terrain: "blocked" },
@@ -204,7 +208,7 @@ export class StructuresSystem extends createSystem({}) {
       const [wx1, wz1] = gridToWorld(x1, y1);
       holder.position.set((wx0 + wx1) / 2, 0.006, (wz0 + wz1) / 2);
       holder.add(model);
-      if (spec.unit || spec.enemy) {
+      if (spec.unit || spec.enemy || spec.building) {
         addInteractionProxy(holder, spec, model);
       }
       const entity = this.world.createTransformEntity(holder, { parent: root });
@@ -219,10 +223,29 @@ export class StructuresSystem extends createSystem({}) {
           entity.addComponent(MinerState);
           boardState.cargoVisualByUnit.set(entity.index, addCargoVisual(holder, model));
         }
+        if (spec.unit === "astronaut") {
+          entity.addComponent(ConstructionState);
+        }
       }
       if (spec.enemy) {
         entity
           .addComponent(Enemy, { kind: spec.enemy })
+          .addComponent(RayInteractable);
+      }
+      if (spec.building) {
+        const startX = Math.round(
+          (spec.gridX[0] + spec.gridX[1]) / 2 - (spec.widthTiles - 1) / 2,
+        );
+        const startY = Math.round(
+          (spec.gridY[0] + spec.gridY[1]) / 2 - (spec.widthTiles - 1) / 2,
+        );
+        entity
+          .addComponent(Building, {
+            kind: spec.building,
+            x: startX + Math.floor((spec.widthTiles - 1) / 2),
+            y: startY + Math.floor((spec.widthTiles - 1) / 2),
+            widthTiles: spec.widthTiles,
+          })
           .addComponent(RayInteractable);
       }
       if (spec.terrain) {

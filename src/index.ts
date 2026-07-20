@@ -5,10 +5,12 @@ import {
   World,
 } from "@iwsdk/core";
 import { BoardSystem } from "./systems/board.js";
+import { ConstructionSystem } from "./systems/construction.js";
 import { InteractionSystem } from "./systems/interaction.js";
 import { MiningSystem } from "./systems/mining.js";
 import { MovementSystem } from "./systems/movement.js";
 import { StructuresSystem } from "./systems/structures.js";
+import { TabletSystem } from "./systems/tablet.js";
 
 const assets: AssetManifest = {
   terrain: {
@@ -61,7 +63,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
   },
   features: {
     locomotion: false,
-    grabbing: false,
+    grabbing: true,
     physics: false,
     sceneUnderstanding: false,
     environmentRaycast: false,
@@ -77,7 +79,9 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
   world
     .registerSystem(BoardSystem)
     .registerSystem(StructuresSystem)
+    .registerSystem(TabletSystem)
     .registerSystem(InteractionSystem)
     .registerSystem(MovementSystem)
-    .registerSystem(MiningSystem);
+    .registerSystem(MiningSystem)
+    .registerSystem(ConstructionSystem);
 });

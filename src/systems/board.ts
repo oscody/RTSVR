@@ -16,6 +16,7 @@ import {
   BoardMarker,
   BoardTile,
   GameState,
+  GameStats,
   SelectionState,
   boardState,
   gridKey,
@@ -145,6 +146,13 @@ export class BoardSystem extends createSystem({}) {
       .createTransformEntity(orderMesh, { parent: root })
       .addComponent(BoardMarker, { kind: "order" });
 
+    const buildMesh = makeMarker(0x22c55e);
+    buildMesh.name = "BoardBuildFootprintMarker";
+    (buildMesh.material as MeshBasicMaterial).opacity = 0.5;
+    boardState.buildMarker = this.world
+      .createTransformEntity(buildMesh, { parent: root })
+      .addComponent(BoardMarker, { kind: "build" });
+
     // ECS-visible selection singleton.
     const selectionObject = new Object3D();
     selectionObject.name = "SelectionState";
@@ -157,5 +165,11 @@ export class BoardSystem extends createSystem({}) {
     boardState.gameState = this.world
       .createTransformEntity(gameStateObject, { parent: root })
       .addComponent(GameState);
+
+    const statsObject = new Object3D();
+    statsObject.name = "GameStats";
+    boardState.gameStats = this.world
+      .createTransformEntity(statsObject, { parent: root })
+      .addComponent(GameStats);
   }
 }

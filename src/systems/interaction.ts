@@ -7,13 +7,28 @@ import {
   createSystem,
 } from "@iwsdk/core";
 import { GRID_SIZE, gridToWorld, worldToGrid } from "./board.js";
-import { findApproachTile } from "./navigation.js";
+import { stampBuildingFootprint } from "./buildingFactory.js";
+import { getBuildingSpec, type BuildingSpec } from "./buildingCatalog.js";
+import { createConstructionSite } from "./construction.js";
+import {
+  footprintApproaches,
+  footprintCells,
+  validateBuildOrder,
+} from "./constructionRules.js";
+import {
+  findApproachTile,
+  findGridPath,
+  type GridPosition,
+} from "./navigation.js";
 import {
   BoardTile,
+  ConstructionState,
   Enemy,
+  GameState,
   MinerState,
   ResourceNode,
   SelectionState,
+  TabletState,
   Unit,
   boardState,
   gridKey,
@@ -83,12 +98,13 @@ export class InteractionSystem extends createSystem({
     this.cleanupFuncs.push(
       this.queries.hoveredTiles.subscribe("qualify", (entity) => {
         boardState.hoveredTile = entity;
-        moveMarker(boardState.hoverMarker, entity);
+        this.updateHoverMarker(entity);
       }),
       this.queries.hoveredTiles.subscribe("disqualify", (entity) => {
         if (boardState.hoveredTile === entity) {
           boardState.hoveredTile = null;
           moveMarker(boardState.hoverMarker, null);
+          hideMarker(boardState.buildMarker);
         }
       }),
       // Click a friendly unit: always (re)select — approach applies to
@@ -98,6 +114,7 @@ export class InteractionSystem extends createSystem({
           boardState.selectedUnit = null;
           hideMarker(boardState.selectionMarker);
           publishSelection(null);
+          this.publishBuilder(null);
           return;
         }
         boardState.selectedUnit = entity;
@@ -107,6 +124,9 @@ export class InteractionSystem extends createSystem({
           markerToLocal(boardState.selectionMarker, holder.position.x, holder.position.z);
         }
         publishSelection(entity);
+        this.publishBuilder(
+          entity.getValue(Unit, "kind") === "astronaut" ? entity : null,
+        );
       }),
       // Click an enemy with a unit selected: approach the open tile on the
       // mover-facing side. The red marker stays on the unavailable target.
@@ -131,6 +151,10 @@ export class InteractionSystem extends createSystem({
         if (unit) {
           const tx = entity.getValue(BoardTile, "x") ?? -1;
           const ty = entity.getValue(BoardTile, "y") ?? -1;
+          if (this.isBuildPlacementActive(unit)) {
+            this.startConstruction(unit, tx, ty);
+            return;
+          }
           const resource = boardState.resourceByKey.get(gridKey(tx, ty));
           if (
             resource &&
@@ -208,6 +232,13 @@ export class InteractionSystem extends createSystem({
   }
 
   private prepareManualOrder(unit: Entity): boolean {
+    if (
+      unit.hasComponent(ConstructionState) &&
+      unit.getValue(ConstructionState, "stage") !== "idle"
+    ) {
+      this.setTabletStatus("Astronaut is already building", "error");
+      return false;
+    }
     if (!unit.hasComponent(MinerState)) return true;
     if ((unit.getValue(MinerState, "cargo") ?? 0) > 0) return false;
     unit.setValue(MinerState, "stage", "idle");
@@ -223,9 +254,9 @@ export class InteractionSystem extends createSystem({
     return this.nearestOpenAdjacent(x, y, unit);
   }
 
-  private isOccupied(tx: number, ty: number, exclude: Entity): boolean {
+  private isOccupied(tx: number, ty: number, exclude: Entity | null): boolean {
     for (const other of this.queries.units.entities) {
-      if (other === exclude) continue;
+      if (exclude && other === exclude) continue;
       const o = other.object3D;
       if (!o) continue;
       const [ox, oy] = worldToGrid(o.position.x, o.position.z);
@@ -261,5 +292,184 @@ export class InteractionSystem extends createSystem({
       },
     });
     return result ? [result.x, result.y] : null;
+  }
+
+  private publishBuilder(astronaut: Entity | null): void {
+    const tablet = boardState.tablet;
+    if (!tablet) return;
+    tablet.setValue(TabletState, "astronaut", astronaut);
+    tablet.setValue(TabletState, "astronautIndex", astronaut?.index ?? -1);
+    if (astronaut) {
+      tablet.setValue(TabletState, "view", "build");
+      this.setTabletStatus("Choose a building type");
+    } else {
+      this.setTabletStatus("Select an astronaut to build");
+    }
+  }
+
+  private isBuildPlacementActive(unit: Entity): boolean {
+    const tablet = boardState.tablet;
+    return Boolean(
+      tablet &&
+        unit.getValue(Unit, "kind") === "astronaut" &&
+        tablet.getValue(TabletState, "astronautIndex") === unit.index &&
+        tablet.getValue(TabletState, "view") === "build" &&
+        tablet.getValue(TabletState, "selectedBuildingKind") !== "none",
+    );
+  }
+
+  private startConstruction(astronaut: Entity, tx: number, ty: number): void {
+    const tablet = boardState.tablet;
+    const gameState = boardState.gameState;
+    const root = boardState.boardRoot;
+    if (!tablet || !gameState || !root) return;
+    const kind = tablet.getValue(TabletState, "selectedBuildingKind") ?? "none";
+    const spec = getBuildingSpec(kind);
+    const cells = spec ? footprintCells(tx, ty, spec.widthTiles) : [];
+    const footprintValid = this.isFootprintAvailable(cells);
+    const path = spec
+      ? this.findConstructionPath(astronaut, spec, tx, ty, cells)
+      : null;
+    const validation = validateBuildOrder({
+      spec,
+      crystals: gameState.getValue(GameState, "crystals") ?? 0,
+      builderIdle:
+        astronaut.getValue(ConstructionState, "stage") === "idle",
+      footprintValid,
+      pathFound: path !== null,
+    });
+    if (!validation.ok || !spec || !path) {
+      this.setTabletStatus(
+        validation.ok ? "Invalid build order" : validation.error,
+        "error",
+      );
+      setOrderMarker(tx, ty, BLOCKED_COLOR);
+      return;
+    }
+
+    gameState.setValue(GameState, "crystals", validation.remainingCrystals);
+    gameState.setValue(
+      GameState,
+      "revision",
+      (gameState.getValue(GameState, "revision") ?? 0) + 1,
+    );
+    stampBuildingFootprint(tx, ty, spec.widthTiles);
+    const site = createConstructionSite(this.world, root, spec, tx, ty);
+    astronaut.setValue(ConstructionState, "stage", "toSite");
+    astronaut.setValue(ConstructionState, "buildingKind", spec.kind);
+    astronaut.setValue(ConstructionState, "targetX", tx);
+    astronaut.setValue(ConstructionState, "targetY", ty);
+    astronaut.setValue(ConstructionState, "timer", 0);
+    astronaut.setValue(ConstructionState, "duration", spec.duration);
+    astronaut.setValue(ConstructionState, "cost", spec.cost);
+    astronaut.setValue(ConstructionState, "site", site);
+
+    const remaining = [...path];
+    const next = remaining.shift();
+    const holder = astronaut.object3D!;
+    const [fromX, fromY] = worldToGrid(holder.position.x, holder.position.z);
+    const approach = path[path.length - 1] ?? { x: fromX, y: fromY };
+    astronaut.setValue(ConstructionState, "approachX", approach.x);
+    astronaut.setValue(ConstructionState, "approachY", approach.y);
+    boardState.pathByUnit.set(astronaut.index, remaining);
+    if (next) this.issueOrder(astronaut, next.x, next.y);
+    else astronaut.setValue(Unit, "hasOrder", false);
+    this.setTabletStatus(`${spec.label} ordered. Astronaut moving to site`);
+    setOrderMarker(tx, ty, ORDER_COLOR);
+  }
+
+  private updateHoverMarker(tile: Entity): void {
+    const unit = boardState.selectedUnit;
+    if (!unit || !this.isBuildPlacementActive(unit)) {
+      hideMarker(boardState.buildMarker);
+      moveMarker(boardState.hoverMarker, tile);
+      return;
+    }
+    hideMarker(boardState.hoverMarker);
+    const tablet = boardState.tablet!;
+    const spec = getBuildingSpec(
+      tablet.getValue(TabletState, "selectedBuildingKind") ?? "none",
+    );
+    const marker = boardState.buildMarker?.object3D as Mesh | undefined;
+    if (!spec || !marker) return;
+    const tx = tile.getValue(BoardTile, "x") ?? -1;
+    const ty = tile.getValue(BoardTile, "y") ?? -1;
+    const cells = footprintCells(tx, ty, spec.widthTiles);
+    const path = this.findConstructionPath(unit, spec, tx, ty, cells);
+    const validation = validateBuildOrder({
+      spec,
+      crystals: boardState.gameState?.getValue(GameState, "crystals") ?? 0,
+      builderIdle: unit.getValue(ConstructionState, "stage") === "idle",
+      footprintValid: this.isFootprintAvailable(cells),
+      pathFound: path !== null,
+    });
+    const first = cells[0];
+    const last = cells[cells.length - 1];
+    const [x0, z0] = gridToWorld(first.x, first.y);
+    const [x1, z1] = gridToWorld(last.x, last.y);
+    marker.position.set((x0 + x1) / 2, marker.position.y, (z0 + z1) / 2);
+    marker.scale.set(spec.widthTiles, spec.widthTiles, 1);
+    (marker.material as MeshBasicMaterial).color.setHex(
+      validation.ok ? 0x22c55e : BLOCKED_COLOR,
+    );
+    marker.visible = true;
+  }
+
+  private isFootprintAvailable(cells: readonly GridPosition[]): boolean {
+    return (
+      cells.length > 0 &&
+      cells.every(({ x, y }) => {
+        const tile = boardState.tileByKey.get(gridKey(x, y));
+        return (
+          tile?.getValue(BoardTile, "terrain") === "open" &&
+          !this.isOccupied(x, y, null)
+        );
+      })
+    );
+  }
+
+  private findConstructionPath(
+    astronaut: Entity,
+    spec: BuildingSpec,
+    tx: number,
+    ty: number,
+    cells: readonly GridPosition[],
+  ): GridPosition[] | null {
+    const holder = astronaut.object3D;
+    if (!holder) return null;
+    const [fromX, fromY] = worldToGrid(holder.position.x, holder.position.z);
+    const footprintKeys = new Set(cells.map(({ x, y }) => gridKey(x, y)));
+    const canStandAt = (x: number, y: number) => {
+      const tile = boardState.tileByKey.get(gridKey(x, y));
+      return (
+        !footprintKeys.has(gridKey(x, y)) &&
+        tile?.getValue(BoardTile, "terrain") === "open" &&
+        !this.isOccupied(x, y, astronaut)
+      );
+    };
+    const goals = footprintApproaches(
+      tx,
+      ty,
+      spec.widthTiles,
+      GRID_SIZE,
+    ).filter(({ x, y }) => canStandAt(x, y));
+    return findGridPath({
+      start: { x: fromX, y: fromY },
+      goals,
+      gridSize: GRID_SIZE,
+      canStandAt,
+    });
+  }
+
+  private setTabletStatus(status: string, statusKind = "info"): void {
+    const tablet = boardState.tablet;
+    if (!tablet) return;
+    tablet.setValue(TabletState, "status", status);
+    tablet.setValue(TabletState, "statusKind", statusKind);
+    tablet.setValue(
+      TabletState,
+      "revision",
+      (tablet.getValue(TabletState, "revision") ?? 0) + 1,
+    );
   }
 }

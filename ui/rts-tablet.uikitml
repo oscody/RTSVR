@@ -1,0 +1,329 @@
+<style>
+  .tablet {
+    flex-direction: column;
+    width: 600px;
+    height: 460px;
+    padding: 16px;
+    background-color: #dfe8ee;
+    border-width: 10px;
+    border-color: #536a7d;
+    border-radius: 8px;
+    color: #15212a;
+  }
+
+  .top-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    width: 548px;
+    height: 34px;
+  }
+
+  .title {
+    width: 250px;
+    height: 30px;
+    color: #15212a;
+    font-size: 24px;
+    font-weight: 700;
+  }
+
+  .balance {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    width: 210px;
+    height: 30px;
+  }
+
+  .balance-icon {
+    width: 19px;
+    height: 19px;
+    color: #0e7490;
+    margin-right: 7px;
+  }
+
+  .balance-label {
+    height: 24px;
+    color: #244152;
+    font-size: 15px;
+  }
+
+  .balance-value {
+    width: 72px;
+    height: 26px;
+    color: #0e7490;
+    font-size: 21px;
+    font-weight: 700;
+    text-align: right;
+  }
+
+  .exit-button {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    width: 82px;
+    min-width: 82px;
+    height: 30px;
+    padding: 0px;
+    background-color: #b42318;
+    border-width: 1px;
+    border-color: #7a271a;
+    border-radius: 5px;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .exit-button:hover {
+    background-color: #912018;
+  }
+
+  .exit-icon {
+    width: 15px;
+    height: 15px;
+    color: #ffffff;
+    margin-right: 5px;
+  }
+
+  .tabs {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 548px;
+    height: 42px;
+    margin-top: 8px;
+  }
+
+  .tab {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    width: 130px;
+    min-width: 130px;
+    height: 38px;
+    padding: 0px;
+    background-color: #c8d4dc;
+    border-width: 1px;
+    border-color: #8497a5;
+    border-radius: 5px;
+    color: #1d3442;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .tab:hover {
+    background-color: #b4c7d2;
+  }
+
+  .tab-icon {
+    width: 17px;
+    height: 17px;
+    color: #1d3442;
+    margin-right: 6px;
+  }
+
+  .view {
+    flex-direction: column;
+    width: 548px;
+    height: 300px;
+    margin-top: 8px;
+  }
+
+  .section-title {
+    width: 548px;
+    height: 27px;
+    color: #15212a;
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .stats-row {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 548px;
+    height: 94px;
+    margin-top: 10px;
+  }
+
+  .stat {
+    flex-direction: column;
+    justify-content: center;
+    width: 128px;
+    height: 88px;
+    padding: 10px;
+    background-color: #f7fafc;
+    border-width: 1px;
+    border-color: #afbec8;
+    border-radius: 5px;
+  }
+
+  .stat-label {
+    width: 108px;
+    height: 18px;
+    color: #607482;
+    font-size: 12px;
+  }
+
+  .stat-value {
+    width: 108px;
+    height: 36px;
+    color: #172a36;
+    font-size: 28px;
+    font-weight: 700;
+  }
+
+  .builder {
+    width: 548px;
+    height: 22px;
+    color: #365466;
+    font-size: 14px;
+  }
+
+  .card-row {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 548px;
+    height: 113px;
+    margin-top: 8px;
+  }
+
+  .build-card {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 174px;
+    min-width: 174px;
+    height: 108px;
+    padding: 6px;
+    background-color: #f7fafc;
+    border-width: 1px;
+    border-color: #9aa8b4;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+
+  .build-card:hover {
+    background-color: #e8f4f8;
+  }
+
+  .locked-card {
+    background-color: #cbd3d8;
+    border-color: #a7b0b6;
+    color: #65737c;
+  }
+
+  .card-image {
+    width: 72px;
+    height: 52px;
+    border-radius: 3px;
+  }
+
+  .card-name {
+    width: 158px;
+    height: 19px;
+    color: #172a36;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .card-cost {
+    width: 158px;
+    height: 17px;
+    color: #0e7490;
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .locked-label {
+    width: 150px;
+    height: 24px;
+    color: #667680;
+    font-size: 15px;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .future {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 548px;
+    height: 300px;
+  }
+
+  .future-icon {
+    width: 42px;
+    height: 42px;
+    color: #607482;
+  }
+
+  .future-label {
+    width: 430px;
+    height: 28px;
+    color: #365466;
+    font-size: 18px;
+    text-align: center;
+    margin-top: 10px;
+  }
+
+  .status {
+    width: 548px;
+    height: 25px;
+    color: #176b55;
+    font-size: 14px;
+    font-weight: 700;
+    text-align: center;
+    margin-top: 5px;
+  }
+</style>
+<Panel class="tablet">
+  <div class="top-row">
+    <span class="title">RTS-VR</span>
+    <div class="balance">
+      <GemIcon class="balance-icon"></GemIcon>
+      <span class="balance-label">Crystals</span>
+      <span id="crystal-balance" class="balance-value">0</span>
+    </div>
+    <button id="exit-vr" class="exit-button"><LogOutIcon class="exit-icon"></LogOutIcon><span>Exit VR</span></button>
+  </div>
+  <div class="tabs">
+    <button id="tab-overview" class="tab"><ChartBarIcon class="tab-icon"></ChartBarIcon><span>Overview</span></button>
+    <button id="tab-build" class="tab"><HammerIcon class="tab-icon"></HammerIcon><span>Build</span></button>
+    <button id="tab-production" class="tab"><FactoryIcon class="tab-icon"></FactoryIcon><span>Production</span></button>
+    <button id="tab-units" class="tab"><UsersIcon class="tab-icon"></UsersIcon><span>Units</span></button>
+  </div>
+  <div id="overview-view" class="view">
+    <span class="section-title">Economy and forces</span>
+    <div class="stats-row">
+      <div class="stat"><span class="stat-label">Available</span><span id="overview-crystals" class="stat-value">0</span></div>
+      <div class="stat"><span class="stat-label">Total mined</span><span id="overview-mined" class="stat-value">0</span></div>
+      <div class="stat"><span class="stat-label">Buildings</span><span id="overview-buildings" class="stat-value">0</span></div>
+      <div class="stat"><span class="stat-label">Crafts</span><span id="overview-crafts" class="stat-value">0</span></div>
+    </div>
+    <div class="stats-row">
+      <div class="stat"><span class="stat-label">Astronauts</span><span id="overview-astronauts" class="stat-value">0</span></div>
+      <div class="stat"><span class="stat-label">Enemies alive</span><span id="overview-enemies" class="stat-value">0</span></div>
+      <div class="stat"><span class="stat-label">Enemies killed</span><span id="overview-kills" class="stat-value">0</span></div>
+      <div class="stat"><span class="stat-label">Total units</span><span id="overview-units" class="stat-value">0</span></div>
+    </div>
+  </div>
+  <div id="build-view" class="view" style="display: none;">
+    <span id="builder-label" class="builder">Select an astronaut</span>
+    <div class="card-row">
+      <button id="build-hangar" class="build-card"><img class="card-image" src="/images/hangar_largeA.png"></img><span class="card-name">Hangar</span><span class="card-cost">40 crystals</span></button>
+      <button id="build-factory" class="build-card"><img class="card-image" src="/images/kenney_style_aircraft_factory_preview.png"></img><span class="card-name">Aircraft Factory</span><span class="card-cost">60 crystals</span></button>
+      <button id="build-turret" class="build-card"><img class="card-image" src="/images/turret_single.png"></img><span class="card-name">Turret</span><span class="card-cost">30 crystals</span></button>
+    </div>
+    <div class="card-row">
+      <button id="build-relay" class="build-card locked-card"><span class="locked-label">Relay - Locked</span></button>
+      <button id="build-shield" class="build-card locked-card"><span class="locked-label">Shield - Locked</span></button>
+      <button id="build-lab" class="build-card locked-card"><span class="locked-label">Research Lab - Locked</span></button>
+    </div>
+    <span class="builder">Page 1 / 1</span>
+  </div>
+  <div id="future-view" class="future"><ClockIcon class="future-icon"></ClockIcon><span class="future-label">This view unlocks in a later phase</span></div>
+  <span id="tablet-status" class="status">Select an astronaut to build</span>
+</Panel>
