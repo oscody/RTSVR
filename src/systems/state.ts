@@ -37,6 +37,17 @@ export const Enemy = createComponent("Enemy", {
   kind: { type: Types.String, default: "alien" },
 });
 
+export const Health = createComponent("Health", {
+  current: { type: Types.Int16, default: 100 },
+  max: { type: Types.Int16, default: 100 },
+});
+
+export const CombatState = createComponent("CombatState", {
+  target: { type: Types.Entity, default: null },
+  stage: { type: Types.String, default: "idle" },
+  timer: { type: Types.Float32, default: 0 },
+});
+
 export const ResourceNode = createComponent("ResourceNode", {
   kind: { type: Types.String, default: "small" },
   x: { type: Types.Int16, default: -1 },

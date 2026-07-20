@@ -12,15 +12,23 @@ import {
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
 import {
+  getBuildingMaxHealth,
+  getEnemyMaxHealth,
+  getUnitMaxHealth,
+} from "./combatRules.js";
+import {
   DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
   LARGE_CRYSTAL_NODE_CAPACITY,
   SMALL_CRYSTAL_NODE_CAPACITY,
 } from "./economyConstants.js";
+import { attachHealthBar } from "./healthBar.js";
 import {
   BoardTile,
   Building,
+  CombatState,
   ConstructionState,
   Enemy,
+  Health,
   MinerState,
   ResourceNode,
   Unit,
@@ -224,11 +232,14 @@ export class StructuresSystem extends createSystem({}) {
         boardState.commandCenter = entity;
       }
       if (spec.unit) {
+        const maxHealth = getUnitMaxHealth(spec.unit);
         entity
           .addComponent(Unit, { kind: spec.unit })
           .addComponent(UnitSelection, {
             category: spec.unitCategory ?? "command-center",
           })
+          .addComponent(Health, { current: maxHealth, max: maxHealth })
+          .addComponent(CombatState)
           .addComponent(RayInteractable);
         if (spec.unit === "miner") {
           entity.addComponent(MinerState);
@@ -237,13 +248,19 @@ export class StructuresSystem extends createSystem({}) {
         if (spec.unit === "astronaut") {
           entity.addComponent(ConstructionState);
         }
+        attachHealthBar(holder);
       }
       if (spec.enemy) {
+        const maxHealth = getEnemyMaxHealth(spec.enemy);
         entity
           .addComponent(Enemy, { kind: spec.enemy })
+          .addComponent(Health, { current: maxHealth, max: maxHealth })
+          .addComponent(CombatState)
           .addComponent(RayInteractable);
+        attachHealthBar(holder);
       }
       if (spec.building) {
+        const maxHealth = getBuildingMaxHealth(spec.building);
         const startX = Math.round(
           (spec.gridX[0] + spec.gridX[1]) / 2 - (spec.widthTiles - 1) / 2,
         );
@@ -257,7 +274,9 @@ export class StructuresSystem extends createSystem({}) {
             y: startY + Math.floor((spec.widthTiles - 1) / 2),
             widthTiles: spec.widthTiles,
           })
+          .addComponent(Health, { current: maxHealth, max: maxHealth })
           .addComponent(RayInteractable);
+        attachHealthBar(holder);
       }
       if (spec.terrain) {
         stampTerrain(spec, spec.terrain);

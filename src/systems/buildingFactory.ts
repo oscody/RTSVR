@@ -13,8 +13,16 @@ import {
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
 import type { BuildingSpec } from "./buildingCatalog.js";
+import { getBuildingMaxHealth } from "./combatRules.js";
 import { footprintCells } from "./constructionRules.js";
-import { BoardTile, Building, boardState, gridKey } from "./state.js";
+import { attachHealthBar } from "./healthBar.js";
+import {
+  BoardTile,
+  Building,
+  Health,
+  boardState,
+  gridKey,
+} from "./state.js";
 
 const interactionProxyMaterial = new MeshBasicMaterial({
   colorWrite: false,
@@ -75,7 +83,8 @@ export function createBuildingEntity(
   proxy.position.y = Math.max(size.y, TILE_SIZE * 0.8) / 2;
   holder.add(proxy);
 
-  return world
+  const maxHealth = getBuildingMaxHealth(spec.kind);
+  const entity = world
     .createTransformEntity(holder, { parent })
     .addComponent(Building, {
       kind: spec.kind,
@@ -83,7 +92,10 @@ export function createBuildingEntity(
       y: anchorY,
       widthTiles: spec.widthTiles,
     })
+    .addComponent(Health, { current: maxHealth, max: maxHealth })
     .addComponent(RayInteractable);
+  attachHealthBar(holder);
+  return entity;
 }
 
 function seatModel(model: Object3D): void {

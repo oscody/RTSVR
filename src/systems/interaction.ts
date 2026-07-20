@@ -33,6 +33,7 @@ import { assignGroupDestinations } from "./selectionRules.js";
 import {
   BoardTile,
   Building,
+  CombatState,
   ConstructionState,
   Enemy,
   GameState,
@@ -146,7 +147,7 @@ export class InteractionSystem extends createSystem({
         const enemyObject = entity.object3D;
         if (units.length === 0 || !enemyObject) return;
         const [ex, ey] = worldToGrid(enemyObject.position.x, enemyObject.position.z);
-        this.issueGroupOrder(units, ex, ey);
+        this.issueGroupOrder(units, ex, ey, entity);
         setOrderMarker(ex, ey, BLOCKED_COLOR);
       }),
       // Buildings are production sources. Selecting one opens Crafts and
@@ -250,11 +251,13 @@ export class InteractionSystem extends createSystem({
     units: readonly Entity[],
     targetX: number,
     targetY: number,
+    combatTarget: Entity | null = null,
   ): number {
     const eligible = units.filter(
       (unit) => unit.object3D && this.prepareManualOrder(unit),
     );
     const moving = new Set(eligible);
+    for (const unit of eligible) this.setCombatTarget(unit, null);
     const assignments = assignGroupDestinations({
       members: eligible.map((unit) => {
         const [x, y] = worldToGrid(
@@ -273,8 +276,16 @@ export class InteractionSystem extends createSystem({
     });
     for (const assignment of assignments) {
       this.issueOrder(assignment.unit, assignment.x, assignment.y);
+      this.setCombatTarget(assignment.unit, combatTarget);
     }
     return assignments.length;
+  }
+
+  private setCombatTarget(unit: Entity, target: Entity | null): void {
+    if (!unit.hasComponent(CombatState)) return;
+    unit.setValue(CombatState, "target", target);
+    unit.setValue(CombatState, "stage", target ? "approaching" : "idle");
+    unit.setValue(CombatState, "timer", 0);
   }
 
   private startMining(
@@ -285,6 +296,7 @@ export class InteractionSystem extends createSystem({
     resourceDestination: [number, number],
     baseDestination: [number, number],
   ): void {
+    this.setCombatTarget(miner, null);
     miner.setValue(MinerState, "target", resource);
     miner.setValue(MinerState, "targetX", targetX);
     miner.setValue(MinerState, "targetY", targetY);
@@ -522,6 +534,7 @@ export class InteractionSystem extends createSystem({
     const gameState = boardState.gameState;
     const root = boardState.boardRoot;
     if (!tablet || !gameState || !root) return;
+    this.setCombatTarget(astronaut, null);
     const kind = tablet.getValue(TabletState, "selectedBuildingKind") ?? "none";
     const spec = getBuildingSpec(kind);
     const cells = spec ? footprintCells(tx, ty, spec.widthTiles) : [];

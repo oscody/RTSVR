@@ -12,8 +12,17 @@ import {
   type World,
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
+import { getUnitMaxHealth } from "./combatRules.js";
 import type { CraftSpec } from "./craftCatalog.js";
-import { MinerState, Unit, UnitSelection, boardState } from "./state.js";
+import { attachHealthBar } from "./healthBar.js";
+import {
+  CombatState,
+  Health,
+  MinerState,
+  Unit,
+  UnitSelection,
+  boardState,
+} from "./state.js";
 
 const interactionProxyMaterial = new MeshBasicMaterial({
   colorWrite: false,
@@ -57,10 +66,13 @@ export function createCraftEntity(
   proxy.position.y = Math.max(size.y, TILE_SIZE * 0.8) / 2;
   holder.add(proxy);
 
+  const maxHealth = getUnitMaxHealth(spec.kind);
   const entity = world
     .createTransformEntity(holder, { parent })
     .addComponent(Unit, { kind: spec.kind })
     .addComponent(UnitSelection, { category })
+    .addComponent(Health, { current: maxHealth, max: maxHealth })
+    .addComponent(CombatState)
     .addComponent(RayInteractable);
   if (spec.kind === "miner") {
     entity.addComponent(MinerState);
@@ -69,6 +81,7 @@ export function createCraftEntity(
       addMinerCargoVisual(holder, model),
     );
   }
+  attachHealthBar(holder);
   return entity;
 }
 

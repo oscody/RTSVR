@@ -52,6 +52,18 @@ export function clearUnitSelections(): void {
   publishSelectionSummary();
 }
 
+export function removeUnitFromSelection(unit: Entity): void {
+  if (!boardState.selectedUnits.delete(unit)) return;
+  unit.setValue(UnitSelection, "selected", false);
+  const ring = boardState.selectionRingByUnit.get(unit.index)?.object3D;
+  if (ring) ring.visible = false;
+  if (boardState.selectedUnit === unit) {
+    const remaining = getSelectedUnits();
+    boardState.selectedUnit = remaining[remaining.length - 1] ?? null;
+  }
+  publishSelectionSummary();
+}
+
 export function updateUnitSelectionRing(unit: Entity): void {
   const ring = boardState.selectionRingByUnit.get(unit.index)?.object3D;
   const object = unit.object3D;
