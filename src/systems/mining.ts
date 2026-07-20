@@ -1,4 +1,8 @@
 import { Entity, createSystem } from "@iwsdk/core";
+import {
+  DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
+  MINING_GATHER_TIME_SECONDS,
+} from "./economyConstants.js";
 import { advanceMiningCycle } from "./miningRules.js";
 import type { MiningCycleState, MiningStage } from "./miningRules.js";
 import {
@@ -20,7 +24,8 @@ export class MiningSystem extends createSystem({
     timer: 0,
     cargo: 0,
     nodeRemaining: 0,
-    amountPerTrip: 10,
+    amountPerTrip: DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
+    gatherDuration: MINING_GATHER_TIME_SECONDS,
     crystals: 0,
   };
 
@@ -40,7 +45,9 @@ export class MiningSystem extends createSystem({
       this.cycle.timer = miner.getValue(MinerState, "timer") ?? 0;
       this.cycle.cargo = miner.getValue(MinerState, "cargo") ?? 0;
       this.cycle.nodeRemaining = node.getValue(ResourceNode, "remaining") ?? 0;
-      this.cycle.amountPerTrip = node.getValue(ResourceNode, "amountPerTrip") ?? 10;
+      this.cycle.amountPerTrip =
+        node.getValue(ResourceNode, "amountPerTrip") ??
+        DEFAULT_RESOURCE_AMOUNT_PER_TRIP;
       this.cycle.crystals = gameState.getValue(GameState, "crystals") ?? 0;
 
       const previousRemaining = this.cycle.nodeRemaining;

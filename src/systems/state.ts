@@ -1,4 +1,9 @@
 import { Entity, Object3D, Types, createComponent } from "@iwsdk/core";
+import {
+  DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
+  DEFAULT_RESOURCE_CAPACITY,
+  STARTING_CRYSTALS,
+} from "./economyConstants.js";
 
 export const BoardTile = createComponent("BoardTile", {
   x: { type: Types.Int16, default: 0 },
@@ -31,9 +36,12 @@ export const ResourceNode = createComponent("ResourceNode", {
   kind: { type: Types.String, default: "small" },
   x: { type: Types.Int16, default: -1 },
   y: { type: Types.Int16, default: -1 },
-  capacity: { type: Types.Int16, default: 50 },
-  remaining: { type: Types.Int16, default: 50 },
-  amountPerTrip: { type: Types.Int16, default: 10 },
+  capacity: { type: Types.Int16, default: DEFAULT_RESOURCE_CAPACITY },
+  remaining: { type: Types.Int16, default: DEFAULT_RESOURCE_CAPACITY },
+  amountPerTrip: {
+    type: Types.Int16,
+    default: DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
+  },
 });
 
 export const MinerState = createComponent("MinerState", {
@@ -50,7 +58,7 @@ export const MinerState = createComponent("MinerState", {
 });
 
 export const GameState = createComponent("GameState", {
-  crystals: { type: Types.Int32, default: 0 },
+  crystals: { type: Types.Int32, default: STARTING_CRYSTALS },
   revision: { type: Types.Int32, default: 0 },
 });
 

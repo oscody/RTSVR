@@ -1,5 +1,3 @@
-export const GATHER_DURATION_SECONDS = 1.1;
-
 export type MiningStage =
   | "idle"
   | "toResource"
@@ -21,6 +19,7 @@ export interface MiningCycleState {
   cargo: number;
   nodeRemaining: number;
   amountPerTrip: number;
+  gatherDuration: number;
   crystals: number;
 }
 
@@ -40,7 +39,7 @@ export function advanceMiningCycle(
 
   if (state.stage === "gathering") {
     state.timer += delta;
-    if (state.timer < GATHER_DURATION_SECONDS) return "none";
+    if (state.timer < state.gatherDuration) return "none";
     state.timer = 0;
     if (state.nodeRemaining <= 0) {
       state.stage = "idle";
