@@ -4,6 +4,7 @@ import {
   DEFAULT_RESOURCE_CAPACITY,
   STARTING_CRYSTALS,
 } from "./economyConstants.js";
+import { INITIAL_WAVE_DELAY_SECONDS } from "./waveRules.js";
 
 export const BoardTile = createComponent("BoardTile", {
   x: { type: Types.Int16, default: 0 },
@@ -47,6 +48,33 @@ export const CombatState = createComponent("CombatState", {
   stage: { type: Types.String, default: "idle" },
   timer: { type: Types.Float32, default: 0 },
 });
+
+export const WaveUnit = createComponent("WaveUnit", {
+  stage: { type: Types.String, default: "waiting" },
+  nextX: { type: Types.Int16, default: -1 },
+  nextY: { type: Types.Int16, default: -1 },
+  hasWaypoint: { type: Types.Boolean, default: false },
+  repathTimer: { type: Types.Float32, default: 0 },
+});
+
+export const WaveSource = createComponent("WaveSource", {
+  waveNumber: { type: Types.Int16, default: 1 },
+  timer: { type: Types.Float32, default: INITIAL_WAVE_DELAY_SECONDS },
+  stage: { type: Types.String, default: "countdown" },
+  revision: { type: Types.Int32, default: 0 },
+});
+
+export const MatchState = createComponent("MatchState", {
+  status: { type: Types.String, default: "playing" },
+  commandCenterAlive: { type: Types.Boolean, default: true },
+  revision: { type: Types.Int32, default: 0 },
+});
+
+export const MatchResultPanel = createComponent("MatchResultPanel", {
+  visible: { type: Types.Boolean, default: false },
+});
+
+export const ScenarioObject = createComponent("ScenarioObject", {});
 
 export const ResourceNode = createComponent("ResourceNode", {
   kind: { type: Types.String, default: "small" },
@@ -160,6 +188,8 @@ export const boardState = {
   selection: null as Entity | null, // carries the SelectionState singleton
   gameState: null as Entity | null,
   gameStats: null as Entity | null,
+  waveSource: null as Entity | null,
+  matchResultPanel: null as Entity | null,
   tablet: null as Entity | null,
   commandCenter: null as Entity | null,
   hoveredTile: null as Entity | null,

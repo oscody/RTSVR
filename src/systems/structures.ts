@@ -9,6 +9,7 @@ import {
   RayInteractable,
   Vector3,
   createSystem,
+  type World,
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
 import {
@@ -31,8 +32,10 @@ import {
   Health,
   MinerState,
   ResourceNode,
+  ScenarioObject,
   Unit,
   UnitSelection,
+  WaveUnit,
   boardState,
   gridKey,
 } from "./state.js";
@@ -198,18 +201,21 @@ function addCargoVisual(holder: Group, model: Object3D): Object3D {
   return cargo;
 }
 
-export class StructuresSystem extends createSystem({}) {
-  init(): void {
-    const root = boardState.boardRoot;
-    if (!root) throw new Error("StructuresSystem requires BoardSystem first");
+export function createInitialScenario(world: World): void {
+  const root = boardState.boardRoot;
+  if (!root) throw new Error("Initial scenario requires BoardSystem first");
 
-    for (const spec of STRUCTURES) {
+  for (const spec of STRUCTURES) {
       const gltf = AssetManager.getGLTF(spec.asset);
       if (!gltf) throw new Error(`${spec.asset} not preloaded`);
       const model = gltf.scene;
 
       // Rotate BEFORE measuring/seating so bounds reflect the final pose.
-      if (spec.yawDeg) model.rotation.y = (spec.yawDeg * Math.PI) / 180;
+      // Moving aliens rotate their holder at runtime. Keep the model itself at
+      // a consistent forward axis so its spawn decoration cannot skew facing.
+      if (spec.yawDeg && !spec.enemy) {
+        model.rotation.y = (spec.yawDeg * Math.PI) / 180;
+      }
 
       const width = new Box3().setFromObject(model).getSize(new Vector3()).x;
       const scale = (spec.widthTiles * TILE_SIZE) / width;
@@ -218,6 +224,9 @@ export class StructuresSystem extends createSystem({}) {
 
       const holder = new Group();
       holder.name = spec.name;
+      if (spec.enemy && spec.yawDeg) {
+        holder.rotation.y = (spec.yawDeg * Math.PI) / 180;
+      }
       const [x0, x1] = spec.gridX;
       const [y0, y1] = spec.gridY;
       const [wx0, wz0] = gridToWorld(x0, y0);
@@ -227,7 +236,9 @@ export class StructuresSystem extends createSystem({}) {
       if (spec.unit || spec.enemy || spec.building) {
         addInteractionProxy(holder, spec, model);
       }
-      const entity = this.world.createTransformEntity(holder, { parent: root });
+      const entity = world
+        .createTransformEntity(holder, { parent: root })
+        .addComponent(ScenarioObject);
       if (spec.name === "CommandCenter") {
         boardState.commandCenter = entity;
       }
@@ -256,6 +267,7 @@ export class StructuresSystem extends createSystem({}) {
           .addComponent(Enemy, { kind: spec.enemy })
           .addComponent(Health, { current: maxHealth, max: maxHealth })
           .addComponent(CombatState)
+          .addComponent(WaveUnit)
           .addComponent(RayInteractable);
         attachHealthBar(holder);
       }
@@ -294,6 +306,11 @@ export class StructuresSystem extends createSystem({}) {
         });
         boardState.resourceByKey.set(gridKey(x, y), entity);
       }
-    }
+  }
+}
+
+export class StructuresSystem extends createSystem({}) {
+  init(): void {
+    createInitialScenario(this.world);
   }
 }

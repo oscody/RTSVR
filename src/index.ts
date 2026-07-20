@@ -10,9 +10,12 @@ import { CombatSystem } from "./systems/combat.js";
 import { CraftProductionSystem } from "./systems/craftProduction.js";
 import { InteractionSystem } from "./systems/interaction.js";
 import { MiningSystem } from "./systems/mining.js";
+import { MatchResultSystem } from "./systems/matchResult.js";
 import { MovementSystem } from "./systems/movement.js";
+import { ScenarioResetSystem } from "./systems/scenarioReset.js";
 import { StructuresSystem } from "./systems/structures.js";
 import { TabletSystem } from "./systems/tablet.js";
+import { WaveSystem } from "./systems/wave.js";
 
 const assets: AssetManifest = {
   terrain: {
@@ -84,8 +87,11 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(TabletSystem)
     .registerSystem(InteractionSystem)
     .registerSystem(MovementSystem)
+    .registerSystem(WaveSystem)
     .registerSystem(CombatSystem)
     .registerSystem(MiningSystem)
     .registerSystem(ConstructionSystem)
-    .registerSystem(CraftProductionSystem);
+    .registerSystem(CraftProductionSystem)
+    .registerSystem(MatchResultSystem)
+    .registerSystem(ScenarioResetSystem);
 });

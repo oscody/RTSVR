@@ -20,6 +20,7 @@ import {
   BoardTile,
   Building,
   Health,
+  ScenarioObject,
   boardState,
   gridKey,
 } from "./state.js";
@@ -86,6 +87,7 @@ export function createBuildingEntity(
   const maxHealth = getBuildingMaxHealth(spec.kind);
   const entity = world
     .createTransformEntity(holder, { parent })
+    .addComponent(ScenarioObject)
     .addComponent(Building, {
       kind: spec.kind,
       x: anchorX,

@@ -34,6 +34,10 @@ export const ENEMY_MAX_HEALTH: Readonly<Record<string, number>> = {
   alien: 80,
 };
 
+export const ENEMY_ATTACK_SPECS: Readonly<Record<string, AttackSpec>> = {
+  alien: { damage: 10, cadence: 1, range: 0.2 },
+};
+
 export function getUnitAttackSpec(kind: string): AttackSpec {
   return UNIT_ATTACK_SPECS[kind] ?? UNIT_ATTACK_SPECS.rover;
 }
@@ -48,6 +52,10 @@ export function getBuildingMaxHealth(kind: string): number {
 
 export function getEnemyMaxHealth(kind: string): number {
   return ENEMY_MAX_HEALTH[kind] ?? 80;
+}
+
+export function getEnemyAttackSpec(kind: string): AttackSpec {
+  return ENEMY_ATTACK_SPECS[kind] ?? ENEMY_ATTACK_SPECS.alien;
 }
 
 export function isWithinAttackRange(

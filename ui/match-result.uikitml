@@ -1,47 +1,78 @@
 <style>
   .result-panel {
-    width: 64;
-    padding: 3;
+    width: 560px;
+    height: 250px;
+    padding: 28px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    background-color: #111c31;
-    border-color: #73e9a1;
-    border-width: 0.22;
-    border-radius: 2.4;
+    justify-content: center;
+    background-color: #182631;
+    border-color: #ef4444;
+    border-width: 4px;
+    border-radius: 8px;
   }
 
   .result-title {
-    color: #8af2ad;
-    font-size: 4.4;
-    font-weight: bold;
+    color: #fca5a5;
+    font-size: 38px;
+    font-weight: 800;
     text-align: center;
   }
 
   .result-body {
-    color: #e5edf8;
-    font-size: 2.1;
+    color: #edf4f7;
+    font-size: 21px;
     text-align: center;
-    margin-top: 1.2;
+    margin-top: 18px;
   }
 
   .result-button {
-    width: 80%;
-    padding: 1.5;
-    margin-top: 1.8;
-    background-color: #f3f7ff;
-    color: #0b1322;
-    border-radius: 1.2;
-    font-size: 2.2;
-    font-weight: bold;
+    width: 190px;
+    height: 48px;
+    padding: 0px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    background-color: #dbe7ed;
+    border-color: #8fa3ad;
+    border-width: 2px;
+    border-radius: 6px;
+    color: #172731;
+    font-size: 18px;
+    font-weight: 700;
     text-align: center;
     cursor: pointer;
   }
+
+  .result-actions {
+    width: 410px;
+    height: 48px;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    margin-top: 24px;
+  }
+
+  .result-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+  }
+
+  .restart-button {
+    background-color: #dcfce7;
+    border-color: #4a9b68;
+    color: #17452a;
+  }
 </style>
 
-<div class="result-panel">
-  <span id="result-title" class="result-title">MISSION COMPLETE</span>
-  <span id="result-body" class="result-body">The enemy emplacement is down.</span>
-  <button id="result-reset-button" class="result-button">Reset Scenario</button>
-</div>
-
+<Panel class="result-panel">
+  <span class="result-title">COMMAND CENTER LOST</span>
+  <span class="result-body">The alien wave destroyed your base.</span>
+  <div class="result-actions">
+    <button id="result-restart" class="result-button restart-button"><RotateCcwIcon class="result-icon"></RotateCcwIcon><span>Restart</span></button>
+    <button id="result-exit-vr" class="result-button"><LogOutIcon class="result-icon"></LogOutIcon><span>Exit VR</span></button>
+  </div>
+</Panel>

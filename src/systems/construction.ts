@@ -20,6 +20,7 @@ import {
 import {
   ConstructionSite,
   ConstructionState,
+  ScenarioObject,
   TabletState,
   Unit,
   boardState,
@@ -71,6 +72,7 @@ export function createConstructionSite(
 
   return world
     .createTransformEntity(holder, { parent })
+    .addComponent(ScenarioObject)
     .addComponent(ConstructionSite, {
       kind: spec.kind,
       x: anchorX,

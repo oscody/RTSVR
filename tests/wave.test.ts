@@ -1,0 +1,115 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  advanceAttackCycle,
+  resolveDamage,
+  type AttackCycleState,
+} from "../src/systems/combatRules.ts";
+import { findGridPath } from "../src/systems/navigation.ts";
+import {
+  INITIAL_WAVE_DELAY_SECONDS,
+  advanceAlienMovement,
+  advanceWaveClock,
+  alienFacingYaw,
+  isAdjacentToFootprint,
+  resolveMatchAfterFriendlyElimination,
+  type LocalPosition,
+  type WaveClockState,
+} from "../src/systems/waveRules.ts";
+
+const angleDifference = (left: number, right: number): number =>
+  Math.atan2(Math.sin(left - right), Math.cos(left - right));
+
+test("alien facing compensates for the model's negative-Z forward axis", () => {
+  assert.ok(Math.abs(angleDifference(alienFacingYaw(0, 1), Math.PI)) < 1e-9);
+  assert.ok(
+    Math.abs(angleDifference(alienFacingYaw(1, 0), -Math.PI / 2)) < 1e-9,
+  );
+  assert.ok(Math.abs(angleDifference(alienFacingYaw(0, -1), 0)) < 1e-9);
+  assert.ok(
+    Math.abs(angleDifference(alienFacingYaw(-1, 0), Math.PI / 2)) < 1e-9,
+  );
+});
+
+test("wave countdown releases staged aliens and stops after defeat", () => {
+  const clock: WaveClockState = {
+    waveNumber: 1,
+    timer: INITIAL_WAVE_DELAY_SECONDS,
+    stage: "countdown",
+  };
+  assert.equal(advanceWaveClock(clock, 1, "playing"), false);
+  assert.equal(clock.timer, INITIAL_WAVE_DELAY_SECONDS - 1);
+  assert.equal(advanceWaveClock(clock, 2, "playing"), true);
+  assert.deepEqual(clock, { waveNumber: 1, timer: 0, stage: "active" });
+  assert.equal(advanceWaveClock(clock, 1, "defeat"), false);
+  assert.deepEqual(clock, { waveNumber: 1, timer: 0, stage: "stopped" });
+});
+
+test("stepped alien movement follows a legal four-neighbor BFS path", () => {
+  const blocked = new Set(["1,0", "1,1", "1,2"]);
+  const path = findGridPath({
+    start: { x: 0, y: 0 },
+    goals: [{ x: 2, y: 0 }],
+    gridSize: 4,
+    canStandAt: (x, y) => !blocked.has(`${x},${y}`),
+  });
+  assert.deepEqual(path, [
+    { x: 0, y: 1 },
+    { x: 0, y: 2 },
+    { x: 0, y: 3 },
+    { x: 1, y: 3 },
+    { x: 2, y: 3 },
+    { x: 2, y: 2 },
+    { x: 2, y: 1 },
+    { x: 2, y: 0 },
+  ]);
+
+  let position: LocalPosition = { x: 0, z: 0 };
+  for (const waypoint of path ?? []) {
+    let arrived = false;
+    while (!arrived) {
+      const step = advanceAlienMovement(
+        position,
+        { x: waypoint.x, z: waypoint.y },
+        1,
+        0.25,
+      );
+      position = { x: step.x, z: step.z };
+      arrived = step.arrived;
+    }
+    assert.equal(blocked.has(`${position.x},${position.z}`), false);
+  }
+  assert.deepEqual(position, { x: 2, z: 0 });
+});
+
+test("contact cadence drains health and defeat waits for all friendlies", () => {
+  assert.equal(
+    isAdjacentToFootprint({ x: 9, y: 11 }, { x: 11, y: 11 }, 3),
+    true,
+  );
+  assert.equal(
+    isAdjacentToFootprint({ x: 8, y: 11 }, { x: 11, y: 11 }, 3),
+    false,
+  );
+
+  const cycle: AttackCycleState = { timer: 0, cadence: 1 };
+  let health = 20;
+  assert.equal(advanceAttackCycle(cycle, 0.6, true), 0);
+  const firstHits = advanceAttackCycle(cycle, 0.4, true);
+  health = resolveDamage(health, 10, firstHits, "building").remaining;
+  assert.equal(health, 10);
+  const secondHits = advanceAttackCycle(cycle, 1, true);
+  const lethal = resolveDamage(health, 10, secondHits, "building");
+  assert.deepEqual(lethal, {
+    remaining: 0,
+    died: true,
+    enemyKilled: false,
+  });
+  assert.equal(resolveMatchAfterFriendlyElimination("playing", 2), "playing");
+  assert.equal(resolveMatchAfterFriendlyElimination("playing", 0), "defeat");
+  assert.equal(
+    resolveMatchAfterFriendlyElimination("victory", 0),
+    "victory",
+  );
+});

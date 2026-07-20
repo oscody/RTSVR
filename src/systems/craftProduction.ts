@@ -18,6 +18,7 @@ import {
 import {
   BoardTile,
   CraftProductionSite,
+  ScenarioObject,
   TabletState,
   boardState,
   gridKey,
@@ -66,6 +67,7 @@ export function createCraftProductionSite(
 
   return world
     .createTransformEntity(holder, { parent })
+    .addComponent(ScenarioObject)
     .addComponent(CraftProductionSite, {
       kind: spec.kind,
       sourceKind,

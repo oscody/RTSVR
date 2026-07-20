@@ -19,6 +19,7 @@ import {
   CombatState,
   Health,
   MinerState,
+  ScenarioObject,
   Unit,
   UnitSelection,
   boardState,
@@ -69,6 +70,7 @@ export function createCraftEntity(
   const maxHealth = getUnitMaxHealth(spec.kind);
   const entity = world
     .createTransformEntity(holder, { parent })
+    .addComponent(ScenarioObject)
     .addComponent(Unit, { kind: spec.kind })
     .addComponent(UnitSelection, { category })
     .addComponent(Health, { current: maxHealth, max: maxHealth })
@@ -83,6 +85,10 @@ export function createCraftEntity(
   }
   attachHealthBar(holder);
   return entity;
+}
+
+export function resetCraftSerial(): void {
+  craftSerial = 0;
 }
 
 function addMinerCargoVisual(holder: Group, model: Object3D): Object3D {

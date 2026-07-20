@@ -17,7 +17,9 @@ import {
   BoardTile,
   GameState,
   GameStats,
+  MatchState,
   SelectionState,
+  WaveSource,
   boardState,
   gridKey,
 } from "./state.js";
@@ -171,5 +173,12 @@ export class BoardSystem extends createSystem({}) {
     boardState.gameStats = this.world
       .createTransformEntity(statsObject, { parent: root })
       .addComponent(GameStats);
+
+    const waveSourceObject = new Object3D();
+    waveSourceObject.name = "WaveSource";
+    boardState.waveSource = this.world
+      .createTransformEntity(waveSourceObject, { parent: root })
+      .addComponent(WaveSource)
+      .addComponent(MatchState);
   }
 }
