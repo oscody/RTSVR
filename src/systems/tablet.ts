@@ -17,6 +17,16 @@ import { CRAFT_CATALOG, getCraftSpec } from "./craftCatalog.js";
 import { validateCraftPurchase } from "./craftRules.js";
 import { validateBuildOrder } from "./constructionRules.js";
 import {
+  clearUnitSelections,
+  getSingleSelectedUnit,
+  toggleUnitSelection,
+} from "./selection.js";
+import {
+  countRosterKinds,
+  paginateRoster,
+  type RosterEntry,
+} from "./selectionRules.js";
+import {
   Building,
   ConstructionState,
   Enemy,
@@ -25,6 +35,7 @@ import {
   SelectionState,
   TabletState,
   Unit,
+  UnitSelection,
   boardState,
 } from "./state.js";
 
@@ -36,10 +47,14 @@ function element(document: UIKitDocument, id: string): UiElement | null {
   return document.getElementById(id) as UiElement | null;
 }
 
+interface LiveRosterEntry extends RosterEntry {
+  entity: Entity;
+}
+
 export class TabletSystem extends createSystem({
   tablets: { required: [TabletState, PanelUI, PanelDocument] },
   buildings: { required: [Building] },
-  units: { required: [Unit] },
+  units: { required: [Unit, UnitSelection] },
   enemies: { required: [Enemy] },
 }) {
   private document: UIKitDocument | null = null;
@@ -82,6 +97,14 @@ export class TabletSystem extends createSystem({
       crafts,
       this.queries.enemies.entities.size,
       stats?.getValue(GameStats, "enemiesKilled") ?? 0,
+      boardState.selection?.getValue(SelectionState, "revision") ?? 0,
+      Array.from(this.queries.units.entities)
+        .sort((a, b) => a.index - b.index)
+        .map(
+          (unit) =>
+            `${unit.index},${unit.getValue(UnitSelection, "category")},${unit.getValue(UnitSelection, "selected")}`,
+        )
+        .join(";"),
     ].join(":");
     if (signature === this.lastSignature) return;
     this.lastSignature = signature;
@@ -150,6 +173,7 @@ export class TabletSystem extends createSystem({
         : "Choose a craft",
     );
     this.applyCraftPage(tablet, craftKind);
+    this.applyUnitPage(tablet);
   }
 
   private createTablet(): void {
@@ -224,9 +248,7 @@ export class TabletSystem extends createSystem({
     on("tab-overview", () => this.setView(tablet, "overview", "Economy overview"));
     on("tab-build", () => this.setView(tablet, "build", "Choose a building"));
     on("tab-crafts", () => this.openCrafts(tablet));
-    on("tab-units", () =>
-      this.setView(tablet, "future", "Unit roster arrives in Phase 6"),
-    );
+    on("tab-units", () => this.openUnits(tablet));
     on("exit-vr", () => {
       this.world.exitXR();
     });
@@ -265,6 +287,17 @@ export class TabletSystem extends createSystem({
     }
     on("craft-prev", () => this.changeCraftPage(tablet, -1));
     on("craft-next", () => this.changeCraftPage(tablet, 1));
+    for (let slot = 0; slot < 4; slot += 1) {
+      on(`unit-card-${slot}`, () => this.toggleRosterSlot(tablet, slot));
+    }
+    on("unit-prev", () => this.changeUnitPage(tablet, -1));
+    on("unit-next", () => this.changeUnitPage(tablet, 1));
+    on("unit-clear", () => {
+      clearUnitSelections();
+      tablet.setValue(TabletState, "astronaut", null);
+      tablet.setValue(TabletState, "astronautIndex", -1);
+      this.touch(tablet, "Unit selection cleared");
+    });
     on("build-produce", () => this.produceSelectedBuilding(tablet));
     on("craft-produce", () => this.produceSelectedCraft(tablet));
   }
@@ -289,6 +322,12 @@ export class TabletSystem extends createSystem({
       }
     }
     this.setView(tablet, "crafts", "Choose a craft to produce");
+  }
+
+  private openUnits(tablet: Entity): void {
+    tablet.setValue(TabletState, "unitFilter", "all");
+    tablet.setValue(TabletState, "unitPage", 0);
+    this.setView(tablet, "units", "All live units");
   }
 
   private setView(tablet: Entity, view: string, status: string): void {
@@ -319,14 +358,14 @@ export class TabletSystem extends createSystem({
     element(this.document!, "crafts-view")?.setProperties({
       display: view === "crafts" ? "flex" : "none",
     });
-    element(this.document!, "future-view")?.setProperties({
-      display: view === "future" ? "flex" : "none",
+    element(this.document!, "units-view")?.setProperties({
+      display: view === "units" ? "flex" : "none",
     });
     const tabs = [
       ["tab-overview", "overview"],
       ["tab-build", "build"],
       ["tab-crafts", "crafts"],
-      ["tab-units", "future"],
+      ["tab-units", "units"],
     ];
     for (const [id, tabView] of tabs) {
       element(this.document!, id)?.setProperties({
@@ -375,6 +414,123 @@ export class TabletSystem extends createSystem({
     });
   }
 
+  private applyUnitPage(tablet: Entity): void {
+    const roster = this.liveRoster();
+    const filter = tablet.getValue(TabletState, "unitFilter") ?? "all";
+    const page = paginateRoster(
+      roster,
+      filter,
+      tablet.getValue(TabletState, "unitPage") ?? 0,
+    );
+    const totals = countRosterKinds(roster);
+    const selectedCount =
+      boardState.selection?.getValue(SelectionState, "selectedCount") ?? 0;
+    this.setText(
+      "unit-filter-label",
+      filter === "all"
+        ? `All units (${page.total})`
+        : `${this.buildingLabel(filter)} (${page.total})`,
+    );
+    this.setText(
+      "unit-selected-label",
+      `${selectedCount} selected`,
+    );
+
+    for (let slot = 0; slot < 4; slot += 1) {
+      const entry = page.entries[slot];
+      const card = element(this.document!, `unit-card-${slot}`);
+      const image = element(this.document!, `unit-image-${slot}`);
+      if (entry) {
+        const selected =
+          entry.entity.getValue(UnitSelection, "selected") ?? false;
+        card?.setProperties({
+          backgroundColor: selected ? "#d9f1f7" : "#f7fafc",
+          borderColor: selected ? "#0e7490" : "#9aa8b4",
+          borderWidth: selected ? 3 : 1,
+          cursor: "pointer",
+        });
+        image?.setProperties({
+          display: "flex",
+          src: this.unitImage(entry.entity, entry.kind),
+        });
+        this.setText(`unit-name-${slot}`, this.unitLabel(entry.kind));
+        this.setText(
+          `unit-meta-${slot}`,
+          `#${entry.index} - ${totals.get(entry.kind) ?? 1} total`,
+        );
+        continue;
+      }
+
+      const locked = slot === 3;
+      card?.setProperties({
+        backgroundColor: locked ? "#cbd3d8" : "#edf2f5",
+        borderColor: locked ? "#a7b0b6" : "#bdc9d0",
+        borderWidth: 1,
+        cursor: "default",
+      });
+      image?.setProperties({ display: "none" });
+      this.setText(`unit-name-${slot}`, locked ? "Locked" : "Empty");
+      this.setText(
+        `unit-meta-${slot}`,
+        locked ? "Future reinforcement" : "No live unit in this slot",
+      );
+    }
+
+    this.setText(
+      "unit-page-label",
+      `Page ${page.page + 1} / ${page.pageCount}`,
+    );
+    element(this.document!, "unit-prev")?.setProperties({
+      opacity: page.page > 0 ? 1 : 0.35,
+    });
+    element(this.document!, "unit-next")?.setProperties({
+      opacity: page.page < page.pageCount - 1 ? 1 : 0.35,
+    });
+  }
+
+  private liveRoster(): LiveRosterEntry[] {
+    return Array.from(this.queries.units.entities, (entity) => ({
+      entity,
+      index: entity.index,
+      kind: entity.getValue(Unit, "kind") ?? "unknown",
+      category:
+        entity.getValue(UnitSelection, "category") ?? "command-center",
+    }));
+  }
+
+  private toggleRosterSlot(tablet: Entity, slot: number): void {
+    const page = paginateRoster(
+      this.liveRoster(),
+      tablet.getValue(TabletState, "unitFilter") ?? "all",
+      tablet.getValue(TabletState, "unitPage") ?? 0,
+    );
+    const entry = page.entries[slot];
+    if (!entry) return;
+    const selected = toggleUnitSelection(this.world, entry.entity);
+    const single = getSingleSelectedUnit();
+    const astronaut =
+      single?.getValue(Unit, "kind") === "astronaut" ? single : null;
+    tablet.setValue(TabletState, "astronaut", astronaut);
+    tablet.setValue(TabletState, "astronautIndex", astronaut?.index ?? -1);
+    this.touch(
+      tablet,
+      `${selected ? "Selected" : "Deselected"} ${this.unitLabel(entry.kind)} #${entry.index}`,
+    );
+  }
+
+  private changeUnitPage(tablet: Entity, direction: number): void {
+    const current = tablet.getValue(TabletState, "unitPage") ?? 0;
+    const page = paginateRoster(
+      this.liveRoster(),
+      tablet.getValue(TabletState, "unitFilter") ?? "all",
+      current,
+    );
+    const next = Math.max(0, Math.min(page.pageCount - 1, current + direction));
+    if (next === current) return;
+    tablet.setValue(TabletState, "unitPage", next);
+    this.touch(tablet, `Unit roster page ${next + 1} of ${page.pageCount}`);
+  }
+
   private produceSelectedCraft(tablet: Entity): void {
     const source = tablet.getValue(TabletState, "spawnBuilding") as Entity | null;
     const game = boardState.gameState;
@@ -401,20 +557,7 @@ export class TabletSystem extends createSystem({
     tablet.setValue(TabletState, "buildPlacementActive", false);
     tablet.setValue(TabletState, "astronaut", null);
     tablet.setValue(TabletState, "astronautIndex", -1);
-    boardState.selectedUnit = null;
-    if (boardState.selectionMarker?.object3D) {
-      boardState.selectionMarker.object3D.visible = false;
-    }
-    const selection = boardState.selection;
-    if (selection) {
-      selection.setValue(SelectionState, "unitIndex", -1);
-      selection.setValue(SelectionState, "unitKind", "none");
-      selection.setValue(
-        SelectionState,
-        "revision",
-        (selection.getValue(SelectionState, "revision") ?? 0) + 1,
-      );
-    }
+    clearUnitSelections();
     this.touch(tablet, `Choose an open tile for ${spec.label}`);
   }
 
@@ -463,6 +606,20 @@ export class TabletSystem extends createSystem({
     if (kind === "hangar") return "Hangar";
     if (kind === "turret") return "Turret";
     return kind;
+  }
+
+  private unitLabel(kind: string): string {
+    if (kind === "astronaut") return "Astronaut";
+    return getCraftSpec(kind)?.label ?? kind;
+  }
+
+  private unitImage(unit: Entity, kind: string): string {
+    if (kind === "astronaut") {
+      return unit.object3D?.name.includes("B")
+        ? "/images/astronautB.png"
+        : "/images/astronautA.png";
+    }
+    return getCraftSpec(kind)?.image ?? "/images/rover.png";
   }
 
   private setText(id: string, text: string): void {

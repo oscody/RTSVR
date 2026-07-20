@@ -13,7 +13,7 @@ import {
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
 import type { CraftSpec } from "./craftCatalog.js";
-import { MinerState, Unit, boardState } from "./state.js";
+import { MinerState, Unit, UnitSelection, boardState } from "./state.js";
 
 const interactionProxyMaterial = new MeshBasicMaterial({
   colorWrite: false,
@@ -27,6 +27,7 @@ export function createCraftEntity(
   spec: CraftSpec,
   x: number,
   y: number,
+  category: string,
 ): Entity {
   const gltf = AssetManager.getGLTF(spec.asset);
   if (!gltf) throw new Error(`${spec.asset} not preloaded`);
@@ -59,6 +60,7 @@ export function createCraftEntity(
   const entity = world
     .createTransformEntity(holder, { parent })
     .addComponent(Unit, { kind: spec.kind })
+    .addComponent(UnitSelection, { category })
     .addComponent(RayInteractable);
   if (spec.kind === "miner") {
     entity.addComponent(MinerState);

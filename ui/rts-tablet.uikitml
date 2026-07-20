@@ -383,28 +383,110 @@
     margin-right: 7px;
   }
 
-  .future {
-    display: none;
+  .units-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 548px;
+    height: 26px;
+  }
+
+  .unit-filter {
+    width: 350px;
+    height: 23px;
+    color: #244152;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .unit-selected {
+    width: 180px;
+    height: 23px;
+    color: #0e7490;
+    font-size: 14px;
+    font-weight: 700;
+    text-align: right;
+  }
+
+  .unit-row {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 548px;
+    height: 98px;
+    margin-top: 5px;
+  }
+
+  .unit-card {
+    flex-direction: row;
+    align-items: center;
+    width: 268px;
+    min-width: 268px;
+    height: 94px;
+    padding: 7px;
+    background-color: #f7fafc;
+    border-width: 1px;
+    border-color: #9aa8b4;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+
+  .unit-card:hover {
+    background-color: #e8f4f8;
+  }
+
+  .unit-image {
+    width: 76px;
+    height: 70px;
+    border-radius: 3px;
+  }
+
+  .unit-copy {
     flex-direction: column;
+    justify-content: center;
+    width: 168px;
+    height: 70px;
+    margin-left: 8px;
+  }
+
+  .unit-name {
+    width: 168px;
+    height: 24px;
+    color: #172a36;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .unit-meta {
+    width: 168px;
+    height: 20px;
+    color: #607482;
+    font-size: 12px;
+  }
+
+  .unit-action-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 548px;
+    height: 42px;
+    margin-top: 5px;
+  }
+
+  .unit-clear {
     align-items: center;
     justify-content: center;
-    width: 548px;
-    height: 300px;
-  }
-
-  .future-icon {
-    width: 42px;
-    height: 42px;
-    color: #607482;
-  }
-
-  .future-label {
-    width: 430px;
-    height: 28px;
-    color: #365466;
-    font-size: 18px;
-    text-align: center;
-    margin-top: 10px;
+    width: 176px;
+    min-width: 176px;
+    height: 34px;
+    padding: 0px;
+    background-color: #c8d4dc;
+    border-width: 1px;
+    border-color: #8497a5;
+    border-radius: 5px;
+    color: #1d3442;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
   }
 
   .status {
@@ -480,6 +562,17 @@
       <button id="craft-produce" class="craft-action"><RocketIcon class="craft-action-icon"></RocketIcon><span id="craft-action-label">Choose a craft</span></button>
     </div>
   </div>
-  <div id="future-view" class="future"><ClockIcon class="future-icon"></ClockIcon><span class="future-label">This view unlocks in a later phase</span></div>
+  <div id="units-view" class="view" style="display: none;">
+    <div class="units-header"><span id="unit-filter-label" class="unit-filter">All units</span><span id="unit-selected-label" class="unit-selected">0 selected</span></div>
+    <div class="unit-row">
+      <button id="unit-card-0" class="unit-card"><img id="unit-image-0" class="unit-image" src="/images/rover.png"></img><div class="unit-copy"><span id="unit-name-0" class="unit-name">Empty</span><span id="unit-meta-0" class="unit-meta">No unit in this slot</span></div></button>
+      <button id="unit-card-1" class="unit-card"><img id="unit-image-1" class="unit-image" src="/images/rover.png"></img><div class="unit-copy"><span id="unit-name-1" class="unit-name">Locked</span><span id="unit-meta-1" class="unit-meta">Future reinforcement</span></div></button>
+    </div>
+    <div class="unit-row">
+      <button id="unit-card-2" class="unit-card"><img id="unit-image-2" class="unit-image" src="/images/rover.png"></img><div class="unit-copy"><span id="unit-name-2" class="unit-name">Empty</span><span id="unit-meta-2" class="unit-meta">No unit in this slot</span></div></button>
+      <button id="unit-card-3" class="unit-card"><img id="unit-image-3" class="unit-image" src="/images/rover.png"></img><div class="unit-copy"><span id="unit-name-3" class="unit-name">Locked</span><span id="unit-meta-3" class="unit-meta">Future reinforcement</span></div></button>
+    </div>
+    <div class="unit-action-row"><div class="craft-pagination"><button id="unit-prev" class="page-button"><ChevronLeftIcon class="page-icon"></ChevronLeftIcon></button><span id="unit-page-label" class="craft-page">Page 1 / 1</span><button id="unit-next" class="page-button"><ChevronRightIcon class="page-icon"></ChevronRightIcon></button></div><button id="unit-clear" class="unit-clear"><span>Clear selection</span></button></div>
+  </div>
   <span id="tablet-status" class="status">Select an astronaut to build</span>
 </Panel>

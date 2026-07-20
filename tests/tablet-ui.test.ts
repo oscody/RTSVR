@@ -25,3 +25,19 @@ test("build and craft catalogs require an explicit produce command", () => {
   assert.match(source, /id="build-produce"/);
   assert.match(source, /id="craft-produce"/);
 });
+
+test("Units view exposes four roster slots and pagination controls", () => {
+  const source = readFileSync(
+    new URL("../ui/rts-tablet.uikitml", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /id="units-view"/);
+  assert.doesNotMatch(source, /id="future-view"/);
+  for (let slot = 0; slot < 4; slot += 1) {
+    assert.match(source, new RegExp(`id="unit-card-${slot}"`));
+    assert.match(source, new RegExp(`id="unit-image-${slot}"`));
+  }
+  assert.match(source, /id="unit-prev"/);
+  assert.match(source, /id="unit-next"/);
+  assert.match(source, /id="unit-clear"/);
+});

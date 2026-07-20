@@ -24,6 +24,7 @@ import {
   MinerState,
   ResourceNode,
   Unit,
+  UnitSelection,
   boardState,
   gridKey,
 } from "./state.js";
@@ -42,6 +43,8 @@ interface StructureSpec {
   yawDeg?: number;
   /** commandable friendly unit: attaches Unit {kind} + RayInteractable */
   unit?: string;
+  /** building category shown by the live unit roster */
+  unitCategory?: string;
   /** enemy: attaches Enemy {kind} + RayInteractable (approach/attack target) */
   enemy?: string;
   /** stamps the tiles under the footprint: "crystal" (minable) | "blocked" */
@@ -96,8 +99,8 @@ const STRUCTURES: StructureSpec[] = [
   { asset: "rockLargeB", name: "RockLargeB3", widthTiles: 1, gridX: [14, 14], gridY: [6, 6], yawDeg: 270, terrain: "blocked" },
 
   // Crew — flanking the command center's front corners.
-  { asset: "astronautA", name: "AstronautA", widthTiles: 1, gridX: [9, 9], gridY: [12, 12], yawDeg: 180, unit: "astronaut" },
-  { asset: "astronautB", name: "AstronautB", widthTiles: 1, gridX: [13, 13], gridY: [12, 12], yawDeg: 180, unit: "astronaut" },
+  { asset: "astronautA", name: "AstronautA", widthTiles: 1, gridX: [9, 9], gridY: [12, 12], yawDeg: 180, unit: "astronaut", unitCategory: "command-center" },
+  { asset: "astronautB", name: "AstronautB", widthTiles: 1, gridX: [13, 13], gridY: [12, 12], yawDeg: 180, unit: "astronaut", unitCategory: "command-center" },
 
   // Aliens use live occupancy instead of stamped terrain so their old tile
   // automatically becomes open when wave movement is added.
@@ -113,10 +116,10 @@ const STRUCTURES: StructureSpec[] = [
   { asset: "alien", name: "Alien10", widthTiles: 1, gridX: [3, 3], gridY: [22, 22], enemy: "alien" },
 
   // Craft — the fleet lined up in front of the command center.
-  { asset: "rover", name: "Rover", widthTiles: 1, gridX: [10, 10], gridY: [13, 13], yawDeg: 180, unit: "rover" },
-  { asset: "craftMiner", name: "CraftMiner", widthTiles: 1, gridX: [11, 11], gridY: [13, 13], yawDeg: 180, unit: "miner" },
-  { asset: "craftCargoA", name: "CraftCargo", widthTiles: 1, gridX: [12, 12], gridY: [13, 13], yawDeg: 180, unit: "cargo" },
-  { asset: "craftRacer", name: "CraftRacer", widthTiles: 1, gridX: [13, 13], gridY: [13, 13], yawDeg: 180, unit: "racer" },
+  { asset: "rover", name: "Rover", widthTiles: 1, gridX: [10, 10], gridY: [13, 13], yawDeg: 180, unit: "rover", unitCategory: "command-center" },
+  { asset: "craftMiner", name: "CraftMiner", widthTiles: 1, gridX: [11, 11], gridY: [13, 13], yawDeg: 180, unit: "miner", unitCategory: "factory" },
+  { asset: "craftCargoA", name: "CraftCargo", widthTiles: 1, gridX: [12, 12], gridY: [13, 13], yawDeg: 180, unit: "cargo", unitCategory: "hangar" },
+  { asset: "craftRacer", name: "CraftRacer", widthTiles: 1, gridX: [13, 13], gridY: [13, 13], yawDeg: 180, unit: "racer", unitCategory: "hangar" },
 
   // Base defense — turret guarding the southwest approach.
   { asset: "turretSingle", name: "TurretSingle", widthTiles: 1, gridX: [9, 9], gridY: [14, 14], yawDeg: 180, terrain: "blocked", building: "turret" },
@@ -223,6 +226,9 @@ export class StructuresSystem extends createSystem({}) {
       if (spec.unit) {
         entity
           .addComponent(Unit, { kind: spec.unit })
+          .addComponent(UnitSelection, {
+            category: spec.unitCategory ?? "command-center",
+          })
           .addComponent(RayInteractable);
         if (spec.unit === "miner") {
           entity.addComponent(MinerState);

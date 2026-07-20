@@ -1,5 +1,6 @@
 import { createSystem } from "@iwsdk/core";
 import { gridToWorld } from "./board.js";
+import { updateUnitSelectionRing } from "./selection.js";
 import { Unit, boardState } from "./state.js";
 
 const UNIT_SPEED = 0.35; // meters per second across the tabletop
@@ -31,6 +32,7 @@ export class MovementSystem extends createSystem({
         if (boardState.selectedUnit === unit) {
           hideOrderMarker();
         }
+        updateUnitSelectionRing(unit);
         return;
       }
 
@@ -42,11 +44,7 @@ export class MovementSystem extends createSystem({
       holder.position.z += (dz / distance) * step;
       holder.rotation.y = Math.atan2(dx, dz);
 
-      // Keep the selection ring under the moving unit.
-      if (boardState.selectedUnit === unit) {
-        const ring = boardState.selectionMarker?.object3D;
-        if (ring) ring.position.set(holder.position.x, ring.position.y, holder.position.z);
-      }
+      updateUnitSelectionRing(unit);
     });
   }
 }

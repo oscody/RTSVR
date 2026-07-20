@@ -27,6 +27,11 @@ export const Unit = createComponent("Unit", {
   hasOrder: { type: Types.Boolean, default: false },
 });
 
+export const UnitSelection = createComponent("UnitSelection", {
+  selected: { type: Types.Boolean, default: false },
+  category: { type: Types.String, default: "command-center" },
+});
+
 // An enemy — clickable as an approach/attack target, never commandable.
 export const Enemy = createComponent("Enemy", {
   kind: { type: Types.String, default: "alien" },
@@ -85,6 +90,7 @@ export const ConstructionSite = createComponent("ConstructionSite", {
 
 export const CraftProductionSite = createComponent("CraftProductionSite", {
   kind: { type: Types.String, default: "none" },
+  sourceKind: { type: Types.String, default: "command-center" },
   x: { type: Types.Int16, default: -1 },
   y: { type: Types.Int16, default: -1 },
   timer: { type: Types.Float32, default: 0 },
@@ -117,6 +123,8 @@ export const TabletState = createComponent("TabletState", {
   selectedCraftCost: { type: Types.Int16, default: 0 },
   craftPage: { type: Types.Int16, default: 0 },
   craftPlacementActive: { type: Types.Boolean, default: false },
+  unitFilter: { type: Types.String, default: "all" },
+  unitPage: { type: Types.Int16, default: 0 },
   status: { type: Types.String, default: "Select an astronaut to build" },
   statusKind: { type: Types.String, default: "info" },
   revision: { type: Types.Int32, default: 0 },
@@ -127,6 +135,7 @@ export const TabletState = createComponent("TabletState", {
 export const SelectionState = createComponent("SelectionState", {
   unitIndex: { type: Types.Int32, default: -1 },
   unitKind: { type: Types.String, default: "none" },
+  selectedCount: { type: Types.Int16, default: 0 },
   revision: { type: Types.Int32, default: 0 },
 });
 
@@ -145,6 +154,8 @@ export const boardState = {
   hoveredTile: null as Entity | null,
   selectedTile: null as Entity | null,
   selectedUnit: null as Entity | null,
+  selectedUnits: new Set<Entity>(),
+  selectionRingByUnit: new Map<number, Entity>(),
   resourceByKey: new Map<string, Entity>(),
   cargoVisualByUnit: new Map<number, Object3D>(),
   pathByUnit: new Map<number, { x: number; y: number }[]>(),

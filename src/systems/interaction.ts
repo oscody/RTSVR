@@ -24,6 +24,13 @@ import {
   type GridPosition,
 } from "./navigation.js";
 import {
+  clearUnitSelections,
+  getSelectedUnits,
+  getSingleSelectedUnit,
+  toggleUnitSelection,
+} from "./selection.js";
+import { assignGroupDestinations } from "./selectionRules.js";
+import {
   BoardTile,
   Building,
   ConstructionState,
@@ -31,7 +38,6 @@ import {
   GameState,
   MinerState,
   ResourceNode,
-  SelectionState,
   TabletState,
   Unit,
   boardState,
@@ -74,22 +80,6 @@ function setOrderMarker(tileX: number, tileY: number, color: number): void {
   marker.visible = true;
 }
 
-function publishSelection(unit: Entity | null): void {
-  const selection = boardState.selection;
-  if (!selection) return;
-  selection.setValue(SelectionState, "unitIndex", unit ? unit.index : -1);
-  selection.setValue(
-    SelectionState,
-    "unitKind",
-    unit ? (unit.getValue(Unit, "kind") ?? "unknown") : "none",
-  );
-  selection.setValue(
-    SelectionState,
-    "revision",
-    (selection.getValue(SelectionState, "revision") ?? 0) + 1,
-  );
-}
-
 export class InteractionSystem extends createSystem({
   hoveredTiles: { required: [BoardTile, Hovered] },
   pressedTiles: { required: [BoardTile, Pressed] },
@@ -112,8 +102,8 @@ export class InteractionSystem extends createSystem({
           hideMarker(boardState.buildMarker);
         }
       }),
-      // Click a friendly unit: always (re)select — approach applies to
-      // enemies and blocked terrain only (user decision 2026-07-19).
+      // Board and roster clicks share the same toggle semantics so a unit can
+      // be added to or removed from a group from either surface.
       this.queries.pressedUnits.subscribe("qualify", (entity) => {
         if (this.isCraftPlacementActive()) {
           this.rejectCraftPlacementTarget(entity);
@@ -123,23 +113,23 @@ export class InteractionSystem extends createSystem({
           this.rejectBuildPlacementTarget(entity);
           return;
         }
-        if (boardState.selectedUnit === entity) {
-          boardState.selectedUnit = null;
-          hideMarker(boardState.selectionMarker);
-          publishSelection(null);
-          this.publishBuilder(null);
-          return;
-        }
-        boardState.selectedUnit = entity;
+        toggleUnitSelection(this.world, entity);
         boardState.selectedTile = null;
-        const holder = entity.object3D;
-        if (holder) {
-          markerToLocal(boardState.selectionMarker, holder.position.x, holder.position.z);
+        hideMarker(boardState.selectionMarker);
+        const single = getSingleSelectedUnit();
+        const astronaut =
+          single?.getValue(Unit, "kind") === "astronaut" ? single : null;
+        if (boardState.tablet?.getValue(TabletState, "view") === "units") {
+          boardState.tablet.setValue(TabletState, "astronaut", astronaut);
+          boardState.tablet.setValue(
+            TabletState,
+            "astronautIndex",
+            astronaut?.index ?? -1,
+          );
+          this.setTabletStatus(`${getSelectedUnits().length} units selected`);
+        } else {
+          this.publishBuilder(astronaut);
         }
-        publishSelection(entity);
-        this.publishBuilder(
-          entity.getValue(Unit, "kind") === "astronaut" ? entity : null,
-        );
       }),
       // Click an enemy with a unit selected: approach the open tile on the
       // mover-facing side. The red marker stays on the unavailable target.
@@ -152,17 +142,11 @@ export class InteractionSystem extends createSystem({
           this.rejectBuildPlacementTarget(entity);
           return;
         }
-        const unit = boardState.selectedUnit;
+        const units = getSelectedUnits();
         const enemyObject = entity.object3D;
-        if (!unit || !enemyObject) return;
-        if (!this.prepareManualOrder(unit)) return;
+        if (units.length === 0 || !enemyObject) return;
         const [ex, ey] = worldToGrid(enemyObject.position.x, enemyObject.position.z);
-        const dest = this.nearestOpenAdjacent(ex, ey, unit);
-        if (!dest) {
-          setOrderMarker(ex, ey, BLOCKED_COLOR);
-          return;
-        }
-        this.issueOrder(unit, dest[0], dest[1]);
+        this.issueGroupOrder(units, ex, ey);
         setOrderMarker(ex, ey, BLOCKED_COLOR);
       }),
       // Buildings are production sources. Selecting one opens Crafts and
@@ -178,10 +162,18 @@ export class InteractionSystem extends createSystem({
         }
         const tablet = boardState.tablet;
         if (!tablet) return;
-        boardState.selectedUnit = null;
+        const kind = entity.getValue(Building, "kind") ?? "building";
+        if (tablet.getValue(TabletState, "view") === "units") {
+          tablet.setValue(TabletState, "spawnBuilding", entity);
+          tablet.setValue(TabletState, "spawnBuildingIndex", entity.index);
+          tablet.setValue(TabletState, "unitFilter", kind);
+          tablet.setValue(TabletState, "unitPage", 0);
+          this.setTabletStatus(`Roster filter: ${this.buildingLabel(kind)}`);
+          return;
+        }
+        clearUnitSelections();
         hideMarker(boardState.selectionMarker);
         hideMarker(boardState.buildMarker);
-        publishSelection(null);
         tablet.setValue(TabletState, "astronaut", null);
         tablet.setValue(TabletState, "astronautIndex", -1);
         tablet.setValue(TabletState, "spawnBuilding", entity);
@@ -189,7 +181,6 @@ export class InteractionSystem extends createSystem({
         tablet.setValue(TabletState, "buildPlacementActive", false);
         tablet.setValue(TabletState, "craftPlacementActive", false);
         tablet.setValue(TabletState, "view", "crafts");
-        const kind = entity.getValue(Building, "kind") ?? "building";
         this.setTabletStatus(
           kind === "turret"
             ? "Turret cannot produce crafts"
@@ -206,8 +197,9 @@ export class InteractionSystem extends createSystem({
           this.placeCraft(tx, ty);
           return;
         }
+        const units = getSelectedUnits();
         const unit = boardState.selectedUnit;
-        if (unit) {
+        if (unit && units.length > 0) {
           if (this.isBuildPlacementActive(unit)) {
             this.startConstruction(unit, tx, ty);
             return;
@@ -216,6 +208,7 @@ export class InteractionSystem extends createSystem({
           if (
             resource &&
             (resource.getValue(ResourceNode, "remaining") ?? 0) > 0 &&
+            units.length === 1 &&
             unit.getValue(Unit, "kind") === "miner"
           ) {
             const resourceDestination = this.nearestOpenAdjacent(tx, ty, unit);
@@ -234,17 +227,11 @@ export class InteractionSystem extends createSystem({
             return;
           }
 
-          if (!this.prepareManualOrder(unit)) return;
           const blocked = entity.getValue(BoardTile, "terrain") !== "open";
-          const occupied = this.isOccupied(tx, ty, unit);
-          if (!blocked && !occupied) {
-            this.issueOrder(unit, tx, ty);
-            setOrderMarker(tx, ty, ORDER_COLOR);
-            return;
-          }
-          const dest = this.nearestOpenAdjacent(tx, ty, unit);
-          if (dest) this.issueOrder(unit, dest[0], dest[1]);
-          setOrderMarker(tx, ty, BLOCKED_COLOR);
+          const selectedSet = new Set(units);
+          const occupied = this.isOccupiedExcept(tx, ty, selectedSet);
+          this.issueGroupOrder(units, tx, ty);
+          setOrderMarker(tx, ty, blocked || occupied ? BLOCKED_COLOR : ORDER_COLOR);
           return;
         }
         boardState.selectedTile = entity;
@@ -257,6 +244,37 @@ export class InteractionSystem extends createSystem({
     unit.setValue(Unit, "orderX", x);
     unit.setValue(Unit, "orderY", y);
     unit.setValue(Unit, "hasOrder", true);
+  }
+
+  private issueGroupOrder(
+    units: readonly Entity[],
+    targetX: number,
+    targetY: number,
+  ): number {
+    const eligible = units.filter(
+      (unit) => unit.object3D && this.prepareManualOrder(unit),
+    );
+    const moving = new Set(eligible);
+    const assignments = assignGroupDestinations({
+      members: eligible.map((unit) => {
+        const [x, y] = worldToGrid(
+          unit.object3D!.position.x,
+          unit.object3D!.position.z,
+        );
+        return { unit, x, y };
+      }),
+      target: { x: targetX, y: targetY },
+      gridSize: GRID_SIZE,
+      canStandAt: (x, y) =>
+        boardState.tileByKey
+          .get(gridKey(x, y))
+          ?.getValue(BoardTile, "terrain") === "open" &&
+        !this.isOccupiedExcept(x, y, moving),
+    });
+    for (const assignment of assignments) {
+      this.issueOrder(assignment.unit, assignment.x, assignment.y);
+    }
+    return assignments.length;
   }
 
   private startMining(
@@ -324,6 +342,30 @@ export class InteractionSystem extends createSystem({
       if (!object) continue;
       const [ex, ey] = worldToGrid(object.position.x, object.position.z);
       if (ex === tx && ey === ty) return true;
+    }
+    return false;
+  }
+
+  private isOccupiedExcept(
+    tx: number,
+    ty: number,
+    excluded: ReadonlySet<Entity>,
+  ): boolean {
+    for (const unit of this.queries.units.entities) {
+      if (excluded.has(unit) || !unit.object3D) continue;
+      const [x, y] = worldToGrid(
+        unit.object3D.position.x,
+        unit.object3D.position.z,
+      );
+      if (x === tx && y === ty) return true;
+    }
+    for (const enemy of this.queries.enemies.entities) {
+      if (!enemy.object3D) continue;
+      const [x, y] = worldToGrid(
+        enemy.object3D.position.x,
+        enemy.object3D.position.z,
+      );
+      if (x === tx && y === ty) return true;
     }
     return false;
   }
@@ -430,7 +472,14 @@ export class InteractionSystem extends createSystem({
     boardState.tileByKey
       .get(gridKey(tx, ty))
       ?.setValue(BoardTile, "terrain", "blocked");
-    createCraftProductionSite(this.world, root, spec, tx, ty);
+    createCraftProductionSite(
+      this.world,
+      root,
+      spec,
+      tx,
+      ty,
+      source?.getValue(Building, "kind") ?? "command-center",
+    );
     tablet.setValue(TabletState, "craftPlacementActive", false);
     hideMarker(boardState.buildMarker);
     setOrderMarker(tx, ty, 0x22c55e);
@@ -652,5 +701,13 @@ export class InteractionSystem extends createSystem({
       "revision",
       (tablet.getValue(TabletState, "revision") ?? 0) + 1,
     );
+  }
+
+  private buildingLabel(kind: string): string {
+    if (kind === "command-center") return "Command Center";
+    if (kind === "factory") return "Aircraft Factory";
+    if (kind === "hangar") return "Hangar";
+    if (kind === "turret") return "Turret";
+    return kind;
   }
 }

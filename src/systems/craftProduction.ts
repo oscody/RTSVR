@@ -29,6 +29,7 @@ export function createCraftProductionSite(
   spec: CraftSpec,
   x: number,
   y: number,
+  sourceKind: string,
 ): Entity {
   const size = TILE_SIZE * 0.9;
   const holder = new Group();
@@ -67,6 +68,7 @@ export function createCraftProductionSite(
     .createTransformEntity(holder, { parent })
     .addComponent(CraftProductionSite, {
       kind: spec.kind,
+      sourceKind,
       x,
       y,
       timer: 0,
@@ -119,7 +121,14 @@ export class CraftProductionSystem extends createSystem({
     boardState.tileByKey
       .get(gridKey(x, y))
       ?.setValue(BoardTile, "terrain", "open");
-    createCraftEntity(this.world, root, spec, x, y);
+    createCraftEntity(
+      this.world,
+      root,
+      spec,
+      x,
+      y,
+      site.getValue(CraftProductionSite, "sourceKind") ?? "command-center",
+    );
     site.dispose();
     this.setTabletStatus(`${spec.label} production complete`, "success");
   }
