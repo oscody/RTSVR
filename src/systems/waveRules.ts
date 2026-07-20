@@ -90,3 +90,12 @@ export function resolveMatchAfterFriendlyElimination(
   if (current !== "playing") return current;
   return remainingFriendlyTargets === 0 ? "defeat" : current;
 }
+
+export function resolveMatchAfterWaveCleared(
+  current: MatchStatus,
+  waveStage: WaveStage,
+  remainingEnemies: number,
+): MatchStatus {
+  if (current !== "playing" || waveStage !== "active") return current;
+  return remainingEnemies === 0 ? "victory" : current;
+}

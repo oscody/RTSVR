@@ -1,10 +1,13 @@
 import { Entity, RayInteractable, createSystem } from "@iwsdk/core";
 import {
+  TURRET_ATTACK_SPEC,
+  UNIT_AUTO_ACQUIRE_RANGE,
   advanceAttackCycle,
   getEnemyAttackSpec,
   getUnitAttackSpec,
   isWithinAttackRange,
   resolveDamageInto,
+  shouldAutoAcquireUnitTarget,
   type AttackSpec,
   type AttackCycleState,
   type DamageResult,
@@ -17,6 +20,7 @@ import { removeUnitFromSelection } from "./selection.js";
 import {
   Building,
   BoardTile,
+  CombatCapability,
   CombatState,
   ConstructionSite,
   ConstructionState,
@@ -26,6 +30,8 @@ import {
   MatchState,
   TabletState,
   Unit,
+  UnitSelection,
+  WaveSource,
   WaveUnit,
   boardState,
   gridKey,
@@ -34,12 +40,18 @@ import {
   alienFacingYaw,
   isAdjacentToFootprint,
   resolveMatchAfterFriendlyElimination,
+  resolveMatchAfterWaveCleared,
   type MatchStatus,
+  type WaveStage,
 } from "./waveRules.js";
 
 export class CombatSystem extends createSystem({
-  attackers: { required: [Unit, CombatState, Health] },
+  attackers: {
+    required: [Unit, UnitSelection, CombatCapability, CombatState, Health],
+  },
+  turrets: { required: [Building, CombatCapability, CombatState, Health] },
   enemyAttackers: { required: [Enemy, WaveUnit, CombatState, Health] },
+  enemyTargets: { required: [Enemy, Health] },
   friendlyUnits: { required: [Unit, Health] },
   friendlyBuildings: { required: [Building, Health] },
 }) {
@@ -52,7 +64,44 @@ export class CombatSystem extends createSystem({
 
   update(delta: number): void {
     for (const attacker of this.queries.attackers.entities) {
-      const target = attacker.getValue(CombatState, "target") as Entity | null;
+      const spec = getUnitAttackSpec(attacker.getValue(Unit, "kind") ?? "rover");
+      if (!spec) {
+        this.clearAttack(attacker);
+        continue;
+      }
+
+      let target = attacker.getValue(CombatState, "target") as Entity | null;
+      let targetMode = attacker.getValue(CombatState, "targetMode") ?? "none";
+      const selected = attacker.getValue(UnitSelection, "selected") ?? false;
+      if (
+        targetMode === "automatic" &&
+        (selected || !this.isEnemyInRange(attacker, target, spec.range))
+      ) {
+        this.clearAttack(attacker);
+        target = null;
+        targetMode = "none";
+      }
+
+      const constructionActive =
+        attacker.hasComponent(ConstructionState) &&
+        attacker.getValue(ConstructionState, "stage") !== "idle";
+      if (
+        !target &&
+        shouldAutoAcquireUnitTarget(selected, constructionActive)
+      ) {
+        target = this.findNearestEnemyInRange(
+          attacker,
+          UNIT_AUTO_ACQUIRE_RANGE,
+        );
+        if (target) {
+          targetMode = "automatic";
+          attacker.setValue(CombatState, "target", target);
+          attacker.setValue(CombatState, "targetMode", targetMode);
+          attacker.setValue(CombatState, "timer", 0);
+          attacker.setValue(Unit, "hasOrder", false);
+        }
+      }
+
       if (!target) continue;
       if (!attacker.object3D || !target.object3D || !target.hasComponent(Health)) {
         this.clearAttack(attacker);
@@ -64,18 +113,49 @@ export class CombatSystem extends createSystem({
         continue;
       }
 
-      const spec = getUnitAttackSpec(attacker.getValue(Unit, "kind") ?? "rover");
       const dx = target.object3D.position.x - attacker.object3D.position.x;
       const dz = target.object3D.position.z - attacker.object3D.position.z;
       const distance = Math.sqrt(dx * dx + dz * dz);
       const inRange = isWithinAttackRange(distance, spec.range);
-      if ((attacker.getValue(Unit, "hasOrder") ?? false) || !inRange) {
+      if (!inRange) {
+        if (targetMode === "automatic") {
+          this.clearAttack(attacker);
+          continue;
+        }
         attacker.setValue(CombatState, "stage", "approaching");
         attacker.setValue(CombatState, "timer", 0);
+        this.pursueTarget(attacker, target);
         continue;
       }
 
+      attacker.setValue(Unit, "hasOrder", false);
       this.applyAttack(attacker, target, spec, current, delta, dx, dz);
+    }
+
+    for (const turret of this.queries.turrets.entities) {
+      if (turret.getValue(Building, "kind") !== "turret") continue;
+      let target = turret.getValue(CombatState, "target") as Entity | null;
+      if (!this.isEnemyInRange(turret, target, TURRET_ATTACK_SPEC.range)) {
+        target = this.findNearestEnemyInRange(turret, TURRET_ATTACK_SPEC.range);
+        turret.setValue(CombatState, "target", target);
+        turret.setValue(CombatState, "timer", 0);
+      }
+      if (!target?.object3D || !turret.object3D) {
+        this.clearAttack(turret);
+        continue;
+      }
+      const current = target.getValue(Health, "current") ?? 0;
+      const dx = target.object3D.position.x - turret.object3D.position.x;
+      const dz = target.object3D.position.z - turret.object3D.position.z;
+      this.applyAttack(
+        turret,
+        target,
+        TURRET_ATTACK_SPEC,
+        current,
+        delta,
+        dx,
+        dz,
+      );
     }
 
     for (const attacker of this.queries.enemyAttackers.entities) {
@@ -103,6 +183,8 @@ export class CombatSystem extends createSystem({
       const spec = getEnemyAttackSpec(attacker.getValue(Enemy, "kind") ?? "alien");
       this.applyAttack(attacker, target, spec, current, delta, dx, dz);
     }
+
+    this.completeVictoryIfWaveCleared();
   }
 
   private applyAttack(
@@ -141,6 +223,11 @@ export class CombatSystem extends createSystem({
     for (const attacker of this.queries.attackers.entities) {
       if (attacker.getValue(CombatState, "target") === target) {
         this.clearAttack(attacker);
+      }
+    }
+    for (const turret of this.queries.turrets.entities) {
+      if (turret.getValue(CombatState, "target") === target) {
+        this.clearAttack(turret);
       }
     }
     for (const attacker of this.queries.enemyAttackers.entities) {
@@ -255,6 +342,93 @@ export class CombatSystem extends createSystem({
     );
   }
 
+  private completeVictoryIfWaveCleared(): void {
+    let remaining = 0;
+    for (const enemy of this.queries.enemyTargets.entities) {
+      if ((enemy.getValue(Health, "current") ?? 0) > 0) remaining += 1;
+    }
+    const source = boardState.waveSource;
+    if (!source) return;
+    const current = (source.getValue(MatchState, "status") ??
+      "playing") as MatchStatus;
+    const waveStage = (source.getValue(WaveSource, "stage") ??
+      "countdown") as WaveStage;
+    const next = resolveMatchAfterWaveCleared(current, waveStage, remaining);
+    if (next === current) return;
+    source.setValue(MatchState, "status", next);
+    source.setValue(
+      MatchState,
+      "revision",
+      (source.getValue(MatchState, "revision") ?? 0) + 1,
+    );
+    const tablet = boardState.tablet;
+    if (!tablet) return;
+    tablet.setValue(TabletState, "status", "Wave 1 cleared - victory");
+    tablet.setValue(TabletState, "statusKind", "success");
+    tablet.setValue(
+      TabletState,
+      "revision",
+      (tablet.getValue(TabletState, "revision") ?? 0) + 1,
+    );
+  }
+
+  private pursueTarget(attacker: Entity, target: Entity): void {
+    const targetObject = target.object3D;
+    if (!targetObject) return;
+    const [x, y] = worldToGrid(
+      targetObject.position.x,
+      targetObject.position.z,
+    );
+    attacker.setValue(Unit, "orderX", x);
+    attacker.setValue(Unit, "orderY", y);
+    attacker.setValue(Unit, "hasOrder", true);
+  }
+
+  private isEnemyInRange(
+    attacker: Entity,
+    target: Entity | null,
+    range: number,
+  ): target is Entity {
+    if (
+      !attacker.object3D ||
+      !target?.object3D ||
+      !target.hasComponent(Enemy) ||
+      !target.hasComponent(Health) ||
+      (target.getValue(Health, "current") ?? 0) <= 0
+    ) {
+      return false;
+    }
+    return isWithinAttackRange(
+      attacker.object3D.position.distanceTo(target.object3D.position),
+      range,
+    );
+  }
+
+  private findNearestEnemyInRange(
+    attacker: Entity,
+    range: number,
+  ): Entity | null {
+    if (!attacker.object3D) return null;
+    let nearest: Entity | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const enemy of this.queries.enemyTargets.entities) {
+      if (!enemy.object3D || (enemy.getValue(Health, "current") ?? 0) <= 0) {
+        continue;
+      }
+      const distance = attacker.object3D.position.distanceTo(
+        enemy.object3D.position,
+      );
+      if (
+        isWithinAttackRange(distance, range) &&
+        distance < nearestDistance
+      ) {
+        nearest = enemy;
+        nearestDistance = distance;
+      }
+    }
+    return nearest;
+  }
+
   private enemyHasContact(attacker: Entity, target: Entity): boolean {
     const attackerObject = attacker.object3D;
     const targetObject = target.object3D;
@@ -306,6 +480,7 @@ export class CombatSystem extends createSystem({
 
   private clearAttack(attacker: Entity): void {
     attacker.setValue(CombatState, "target", null);
+    attacker.setValue(CombatState, "targetMode", "none");
     attacker.setValue(CombatState, "stage", "idle");
     attacker.setValue(CombatState, "timer", 0);
   }

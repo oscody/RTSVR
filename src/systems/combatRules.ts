@@ -10,10 +10,16 @@ export interface AttackSpec {
 export const UNIT_ATTACK_SPECS: Readonly<Record<string, AttackSpec>> = {
   astronaut: { damage: 8, cadence: 1.1, range: 0.29 },
   rover: { damage: 15, cadence: 0.9, range: 0.29 },
-  miner: { damage: 10, cadence: 1, range: 0.29 },
-  cargo: { damage: 8, cadence: 1.2, range: 0.29 },
   racer: { damage: 12, cadence: 0.7, range: 0.29 },
 };
+
+export const TURRET_ATTACK_SPEC: Readonly<AttackSpec> = {
+  damage: 18,
+  cadence: 0.75,
+  range: 0.45,
+};
+
+export const UNIT_AUTO_ACQUIRE_RANGE = 0.24;
 
 export const UNIT_MAX_HEALTH: Readonly<Record<string, number>> = {
   astronaut: 75,
@@ -38,8 +44,19 @@ export const ENEMY_ATTACK_SPECS: Readonly<Record<string, AttackSpec>> = {
   alien: { damage: 10, cadence: 1, range: 0.2 },
 };
 
-export function getUnitAttackSpec(kind: string): AttackSpec {
-  return UNIT_ATTACK_SPECS[kind] ?? UNIT_ATTACK_SPECS.rover;
+export function canUnitAttack(kind: string): boolean {
+  return UNIT_ATTACK_SPECS[kind] !== undefined;
+}
+
+export function getUnitAttackSpec(kind: string): AttackSpec | undefined {
+  return UNIT_ATTACK_SPECS[kind];
+}
+
+export function shouldAutoAcquireUnitTarget(
+  selected: boolean,
+  constructionActive: boolean,
+): boolean {
+  return !selected && !constructionActive;
 }
 
 export function getUnitMaxHealth(kind: string): number {

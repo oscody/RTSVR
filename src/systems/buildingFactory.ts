@@ -19,6 +19,8 @@ import { attachHealthBar } from "./healthBar.js";
 import {
   BoardTile,
   Building,
+  CombatCapability,
+  CombatState,
   Health,
   ScenarioObject,
   boardState,
@@ -96,6 +98,11 @@ export function createBuildingEntity(
     })
     .addComponent(Health, { current: maxHealth, max: maxHealth })
     .addComponent(RayInteractable);
+  if (spec.kind === "turret") {
+    entity
+      .addComponent(CombatState)
+      .addComponent(CombatCapability, { mode: "automatic" });
+  }
   attachHealthBar(holder);
   return entity;
 }

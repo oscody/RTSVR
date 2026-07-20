@@ -33,6 +33,7 @@ import { assignGroupDestinations } from "./selectionRules.js";
 import {
   BoardTile,
   Building,
+  CombatCapability,
   CombatState,
   ConstructionState,
   Enemy,
@@ -146,8 +147,24 @@ export class InteractionSystem extends createSystem({
         const units = getSelectedUnits();
         const enemyObject = entity.object3D;
         if (units.length === 0 || !enemyObject) return;
+        const attackers = units.filter((unit) =>
+          unit.hasComponent(CombatCapability),
+        );
+        for (const unit of units) {
+          if (!unit.hasComponent(CombatCapability)) {
+            this.setCombatTarget(unit, null);
+          }
+        }
+        if (attackers.length === 0) {
+          this.setTabletStatus("Selected units cannot attack", "error");
+          return;
+        }
         const [ex, ey] = worldToGrid(enemyObject.position.x, enemyObject.position.z);
-        this.issueGroupOrder(units, ex, ey, entity);
+        const assigned = this.issueGroupOrder(attackers, ex, ey, entity);
+        this.setTabletStatus(
+          `${assigned} combat unit${assigned === 1 ? "" : "s"} attacking`,
+          assigned > 0 ? "info" : "error",
+        );
         setOrderMarker(ex, ey, BLOCKED_COLOR);
       }),
       // Buildings are production sources. Selecting one opens Crafts and
@@ -284,6 +301,7 @@ export class InteractionSystem extends createSystem({
   private setCombatTarget(unit: Entity, target: Entity | null): void {
     if (!unit.hasComponent(CombatState)) return;
     unit.setValue(CombatState, "target", target);
+    unit.setValue(CombatState, "targetMode", target ? "manual" : "none");
     unit.setValue(CombatState, "stage", target ? "approaching" : "idle");
     unit.setValue(CombatState, "timer", 0);
   }

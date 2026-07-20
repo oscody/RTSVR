@@ -68,9 +68,9 @@
   }
 </style>
 
-<Panel class="result-panel">
-  <span class="result-title">COMMAND CENTER LOST</span>
-  <span class="result-body">The alien wave destroyed your base.</span>
+<Panel id="result-panel" class="result-panel">
+  <span id="result-title" class="result-title">COMMAND CENTER LOST</span>
+  <span id="result-body" class="result-body">All friendly forces were destroyed.</span>
   <div class="result-actions">
     <button id="result-restart" class="result-button restart-button"><RotateCcwIcon class="result-icon"></RotateCcwIcon><span>Restart</span></button>
     <button id="result-exit-vr" class="result-button"><LogOutIcon class="result-icon"></LogOutIcon><span>Exit VR</span></button>

@@ -22,13 +22,15 @@ test("scenario reset restores initial economy, statistics, wave, and match value
   assert.equal(isScenarioRestartRequested("restarting"), true);
 });
 
-test("defeat panel exposes restart and exit actions", () => {
+test("shared result panel exposes victory, restart, and exit behavior", () => {
   const ui = readFileSync(
     new URL("../ui/match-result.uikitml", import.meta.url),
     "utf8",
   );
   assert.match(ui, /id="result-restart"/);
   assert.match(ui, /id="result-exit-vr"/);
+  assert.match(ui, /id="result-title"/);
+  assert.match(ui, /id="result-body"/);
 
   const system = readFileSync(
     new URL("../src/systems/matchResult.ts", import.meta.url),
@@ -36,6 +38,41 @@ test("defeat panel exposes restart and exit actions", () => {
   );
   assert.match(system, /getElementById\("result-restart"\)/);
   assert.match(system, /setValue\(MatchState, "status", "restarting"\)/);
+  assert.match(system, /status === "victory"/);
+  assert.match(system, /LEVEL 1 COMPLETE/);
+});
+
+test("Phase 9 combat capability is attached on every creation path", () => {
+  const state = readFileSync(
+    new URL("../src/systems/state.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(state, /createComponent\("CombatCapability"/);
+
+  for (const relativePath of [
+    "../src/systems/structures.ts",
+    "../src/systems/craftFactory.ts",
+    "../src/systems/buildingFactory.ts",
+  ]) {
+    const source = readFileSync(new URL(relativePath, import.meta.url), "utf8");
+    assert.match(source, /addComponent\(CombatCapability/, relativePath);
+  }
+
+  const initial = readFileSync(
+    new URL("../src/systems/structures.ts", import.meta.url),
+    "utf8",
+  );
+  const producedCrafts = readFileSync(
+    new URL("../src/systems/craftFactory.ts", import.meta.url),
+    "utf8",
+  );
+  const producedBuildings = readFileSync(
+    new URL("../src/systems/buildingFactory.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(initial, /CombatCapability, \{ mode: "hybrid" \}/);
+  assert.match(producedCrafts, /CombatCapability, \{ mode: "hybrid" \}/);
+  assert.match(producedBuildings, /CombatCapability, \{ mode: "automatic" \}/);
 });
 
 test("all initial and player-created gameplay entities are scenario-owned", () => {

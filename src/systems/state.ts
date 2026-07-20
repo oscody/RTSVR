@@ -45,8 +45,13 @@ export const Health = createComponent("Health", {
 
 export const CombatState = createComponent("CombatState", {
   target: { type: Types.Entity, default: null },
+  targetMode: { type: Types.String, default: "none" },
   stage: { type: Types.String, default: "idle" },
   timer: { type: Types.Float32, default: 0 },
+});
+
+export const CombatCapability = createComponent("CombatCapability", {
+  mode: { type: Types.String, default: "manual" },
 });
 
 export const WaveUnit = createComponent("WaveUnit", {

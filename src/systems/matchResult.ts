@@ -2,6 +2,7 @@ import {
   PanelDocument,
   PanelUI,
   RayInteractable,
+  UIKit,
   UIKitDocument,
   createSystem,
   type Entity,
@@ -12,24 +13,29 @@ import {
   boardState,
 } from "./state.js";
 
+type UiElement = UIKit.Text & {
+  setProperties(properties: Record<string, unknown>): void;
+};
+
 export class MatchResultSystem extends createSystem({
   panels: { required: [MatchResultPanel, PanelUI, PanelDocument] },
 }) {
   private panel: Entity | null = null;
-  private lastVisible = false;
+  private document: UIKitDocument | null = null;
+  private lastStatus = "";
 
   init(): void {
     this.createPanel();
     this.cleanupFuncs.push(
       this.queries.panels.subscribe("qualify", (entity) => {
         this.panel = entity;
-        const document = PanelDocument.data.document[
+        this.document = PanelDocument.data.document[
           entity.index
         ] as UIKitDocument;
-        document.getElementById("result-exit-vr")?.addEventListener("click", () => {
+        this.document.getElementById("result-exit-vr")?.addEventListener("click", () => {
           this.world.exitXR();
         });
-        document.getElementById("result-restart")?.addEventListener("click", () => {
+        this.document.getElementById("result-restart")?.addEventListener("click", () => {
           const source = boardState.waveSource;
           if (!source) return;
           source.setValue(MatchState, "status", "restarting");
@@ -45,12 +51,34 @@ export class MatchResultSystem extends createSystem({
 
   update(): void {
     const panel = this.panel ?? boardState.matchResultPanel;
-    const visible =
-      boardState.waveSource?.getValue(MatchState, "status") === "defeat";
-    if (!panel?.object3D || visible === this.lastVisible) return;
-    this.lastVisible = visible;
+    const status =
+      boardState.waveSource?.getValue(MatchState, "status") ?? "playing";
+    const visible = status === "defeat" || status === "victory";
+    if (!panel?.object3D || status === this.lastStatus) return;
+    this.lastStatus = status;
+    if (visible) this.presentResult(status);
     panel.object3D.visible = visible;
     panel.setValue(MatchResultPanel, "visible", visible);
+  }
+
+  private presentResult(status: string): void {
+    const victory = status === "victory";
+    this.element("result-panel")?.setProperties({
+      borderColor: victory ? "#22c55e" : "#ef4444",
+    });
+    this.element("result-title")?.setProperties({
+      text: victory ? "LEVEL 1 COMPLETE" : "COMMAND CENTER LOST",
+      color: victory ? "#86efac" : "#fca5a5",
+    });
+    this.element("result-body")?.setProperties({
+      text: victory
+        ? "Wave 1 cleared. All aliens were defeated."
+        : "All friendly forces were destroyed.",
+    });
+  }
+
+  private element(id: string): UiElement | null {
+    return this.document?.getElementById(id) as UiElement | null;
   }
 
   private createPanel(): void {

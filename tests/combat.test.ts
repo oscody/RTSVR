@@ -4,11 +4,58 @@ import test from "node:test";
 import {
   ATTACK_EPSILON,
   ATTACK_TIMER_EPSILON,
+  TURRET_ATTACK_SPEC,
+  UNIT_ATTACK_SPECS,
+  UNIT_AUTO_ACQUIRE_RANGE,
   advanceAttackCycle,
+  canUnitAttack,
+  getUnitAttackSpec,
   isWithinAttackRange,
   resolveDamage,
+  shouldAutoAcquireUnitTarget,
   type AttackCycleState,
 } from "../src/systems/combatRules.ts";
+
+test("only astronauts, rovers, and racers can attack", () => {
+  assert.equal(canUnitAttack("astronaut"), true);
+  assert.equal(canUnitAttack("rover"), true);
+  assert.equal(canUnitAttack("racer"), true);
+  assert.equal(canUnitAttack("miner"), false);
+  assert.equal(canUnitAttack("cargo"), false);
+  assert.equal(getUnitAttackSpec("miner"), undefined);
+  assert.equal(getUnitAttackSpec("cargo"), undefined);
+});
+
+test("friendly automatic acquisition is shorter than turret range", () => {
+  assert.ok(UNIT_AUTO_ACQUIRE_RANGE < TURRET_ATTACK_SPEC.range);
+  for (const spec of Object.values(UNIT_ATTACK_SPECS)) {
+    assert.ok(UNIT_AUTO_ACQUIRE_RANGE <= spec.range);
+  }
+});
+
+test("only unselected units that are not constructing auto-acquire", () => {
+  assert.equal(shouldAutoAcquireUnitTarget(false, false), true);
+  assert.equal(shouldAutoAcquireUnitTarget(true, false), false);
+  assert.equal(shouldAutoAcquireUnitTarget(false, true), false);
+});
+
+test("turret cadence can destroy a full-health alien", () => {
+  const state: AttackCycleState = {
+    timer: 0,
+    cadence: TURRET_ATTACK_SPEC.cadence,
+  };
+  let health = 80;
+  for (let shot = 0; shot < 5; shot += 1) {
+    const hits = advanceAttackCycle(state, TURRET_ATTACK_SPEC.cadence, true);
+    health = resolveDamage(
+      health,
+      TURRET_ATTACK_SPEC.damage,
+      hits,
+      "enemy",
+    ).remaining;
+  }
+  assert.equal(health, 0);
+});
 
 test("attack range includes the Float32 boundary epsilon", () => {
   assert.equal(isWithinAttackRange(0.29, 0.29), true);

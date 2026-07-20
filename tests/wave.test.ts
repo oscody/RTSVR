@@ -14,6 +14,7 @@ import {
   alienFacingYaw,
   isAdjacentToFootprint,
   resolveMatchAfterFriendlyElimination,
+  resolveMatchAfterWaveCleared,
   type LocalPosition,
   type WaveClockState,
 } from "../src/systems/waveRules.ts";
@@ -112,4 +113,11 @@ test("contact cadence drains health and defeat waits for all friendlies", () => 
     resolveMatchAfterFriendlyElimination("victory", 0),
     "victory",
   );
+});
+
+test("Wave 1 victory waits for activation and zero living enemies", () => {
+  assert.equal(resolveMatchAfterWaveCleared("playing", "countdown", 0), "playing");
+  assert.equal(resolveMatchAfterWaveCleared("playing", "active", 1), "playing");
+  assert.equal(resolveMatchAfterWaveCleared("playing", "active", 0), "victory");
+  assert.equal(resolveMatchAfterWaveCleared("defeat", "active", 0), "defeat");
 });

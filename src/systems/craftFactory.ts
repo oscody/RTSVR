@@ -12,11 +12,12 @@ import {
   type World,
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
-import { getUnitMaxHealth } from "./combatRules.js";
+import { canUnitAttack, getUnitMaxHealth } from "./combatRules.js";
 import type { CraftSpec } from "./craftCatalog.js";
 import { attachHealthBar } from "./healthBar.js";
 import {
   CombatState,
+  CombatCapability,
   Health,
   MinerState,
   ScenarioObject,
@@ -76,6 +77,9 @@ export function createCraftEntity(
     .addComponent(Health, { current: maxHealth, max: maxHealth })
     .addComponent(CombatState)
     .addComponent(RayInteractable);
+  if (canUnitAttack(spec.kind)) {
+    entity.addComponent(CombatCapability, { mode: "hybrid" });
+  }
   if (spec.kind === "miner") {
     entity.addComponent(MinerState);
     boardState.cargoVisualByUnit.set(

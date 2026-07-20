@@ -13,6 +13,7 @@ import {
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
 import {
+  canUnitAttack,
   getBuildingMaxHealth,
   getEnemyMaxHealth,
   getUnitMaxHealth,
@@ -26,6 +27,7 @@ import { attachHealthBar } from "./healthBar.js";
 import {
   BoardTile,
   Building,
+  CombatCapability,
   CombatState,
   ConstructionState,
   Enemy,
@@ -252,6 +254,9 @@ export function createInitialScenario(world: World): void {
           .addComponent(Health, { current: maxHealth, max: maxHealth })
           .addComponent(CombatState)
           .addComponent(RayInteractable);
+        if (canUnitAttack(spec.unit)) {
+          entity.addComponent(CombatCapability, { mode: "hybrid" });
+        }
         if (spec.unit === "miner") {
           entity.addComponent(MinerState);
           boardState.cargoVisualByUnit.set(entity.index, addCargoVisual(holder, model));
@@ -288,6 +293,11 @@ export function createInitialScenario(world: World): void {
           })
           .addComponent(Health, { current: maxHealth, max: maxHealth })
           .addComponent(RayInteractable);
+        if (spec.building === "turret") {
+          entity
+            .addComponent(CombatState)
+            .addComponent(CombatCapability, { mode: "automatic" });
+        }
         attachHealthBar(holder);
       }
       if (spec.terrain) {
