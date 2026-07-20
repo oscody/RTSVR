@@ -1,12 +1,22 @@
 import { Entity, createSystem } from "@iwsdk/core";
+import { GRID_SIZE, worldToGrid } from "./board.js";
 import {
   DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
   MINING_GATHER_TIME_SECONDS,
 } from "./economyConstants.js";
-import { advanceMiningCycle } from "./miningRules.js";
-import type { MiningCycleState, MiningStage } from "./miningRules.js";
+import {
+  advanceMiningCycle,
+  selectNearestMiningTarget,
+} from "./miningRules.js";
+import type {
+  MiningCycleState,
+  MiningGridPosition,
+  MiningStage,
+} from "./miningRules.js";
+import { findApproachTile } from "./navigation.js";
 import {
   BoardTile,
+  Enemy,
   GameState,
   GameStats,
   MinerState,
@@ -18,6 +28,9 @@ import {
 
 export class MiningSystem extends createSystem({
   miners: { required: [Unit, MinerState] },
+  resources: { required: [ResourceNode] },
+  units: { required: [Unit] },
+  enemies: { required: [Enemy] },
 }) {
   private readonly cycle: MiningCycleState = {
     stage: "idle",
@@ -96,11 +109,108 @@ export class MiningSystem extends createSystem({
         this.setCargoVisible(miner, false);
         if (this.cycle.stage === "toResource") {
           this.issueStoredOrder(miner, "approachX", "approachY");
+        } else {
+          this.retargetMiner(miner);
         }
       } else if (transition === "resourceEmpty") {
         this.setCargoVisible(miner, false);
+        this.retargetMiner(miner);
       }
     }
+  }
+
+  private retargetMiner(miner: Entity): void {
+    const object = miner.object3D;
+    if (!object) {
+      this.stopMining(miner);
+      return;
+    }
+    const [fromX, fromY] = worldToGrid(object.position.x, object.position.z);
+    const candidates = Array.from(this.queries.resources.entities, (resource) => ({
+      target: resource,
+      x: resource.getValue(ResourceNode, "x") ?? -1,
+      y: resource.getValue(ResourceNode, "y") ?? -1,
+      remaining: resource.getValue(ResourceNode, "remaining") ?? 0,
+    }));
+    const selection = selectNearestMiningTarget(
+      { x: fromX, y: fromY },
+      candidates,
+      ({ x, y }) => this.findResourceApproach(miner, x, y),
+    );
+    if (!selection) {
+      this.stopMining(miner);
+      return;
+    }
+
+    miner.setValue(MinerState, "target", selection.target);
+    miner.setValue(MinerState, "targetX", selection.x);
+    miner.setValue(MinerState, "targetY", selection.y);
+    miner.setValue(MinerState, "approachX", selection.approach.x);
+    miner.setValue(MinerState, "approachY", selection.approach.y);
+    miner.setValue(MinerState, "stage", "toResource");
+    miner.setValue(MinerState, "timer", 0);
+    this.issueOrder(miner, selection.approach.x, selection.approach.y);
+  }
+
+  private findResourceApproach(
+    miner: Entity,
+    targetX: number,
+    targetY: number,
+  ): MiningGridPosition | null {
+    const object = miner.object3D;
+    if (!object) return null;
+    const [fromX, fromY] = worldToGrid(object.position.x, object.position.z);
+    return findApproachTile({
+      target: { x: targetX, y: targetY },
+      from: { x: fromX, y: fromY },
+      gridSize: GRID_SIZE,
+      canStandAt: (x, y) => {
+        const tile = boardState.tileByKey.get(gridKey(x, y));
+        return (
+          tile?.getValue(BoardTile, "terrain") === "open" &&
+          !this.isOccupied(x, y, miner)
+        );
+      },
+    });
+  }
+
+  private isOccupied(x: number, y: number, exclude: Entity): boolean {
+    for (const unit of this.queries.units.entities) {
+      if (unit === exclude || !unit.object3D) continue;
+      const [unitX, unitY] = worldToGrid(
+        unit.object3D.position.x,
+        unit.object3D.position.z,
+      );
+      if (unitX === x && unitY === y) return true;
+    }
+    for (const enemy of this.queries.enemies.entities) {
+      if (!enemy.object3D) continue;
+      const [enemyX, enemyY] = worldToGrid(
+        enemy.object3D.position.x,
+        enemy.object3D.position.z,
+      );
+      if (enemyX === x && enemyY === y) return true;
+    }
+    return false;
+  }
+
+  private stopMining(miner: Entity): void {
+    miner.setValue(MinerState, "stage", "idle");
+    miner.setValue(MinerState, "timer", 0);
+    miner.setValue(MinerState, "target", null);
+    miner.setValue(MinerState, "targetX", -1);
+    miner.setValue(MinerState, "targetY", -1);
+    miner.setValue(MinerState, "approachX", -1);
+    miner.setValue(MinerState, "approachY", -1);
+    miner.setValue(MinerState, "depositX", -1);
+    miner.setValue(MinerState, "depositY", -1);
+    miner.setValue(Unit, "hasOrder", false);
+  }
+
+  private issueOrder(miner: Entity, x: number, y: number): void {
+    miner.setValue(Unit, "orderX", x);
+    miner.setValue(Unit, "orderY", y);
+    miner.setValue(Unit, "hasOrder", true);
   }
 
   private issueStoredOrder(
@@ -108,9 +218,11 @@ export class MiningSystem extends createSystem({
     xField: "approachX" | "depositX",
     yField: "approachY" | "depositY",
   ): void {
-    miner.setValue(Unit, "orderX", miner.getValue(MinerState, xField) ?? -1);
-    miner.setValue(Unit, "orderY", miner.getValue(MinerState, yField) ?? -1);
-    miner.setValue(Unit, "hasOrder", true);
+    this.issueOrder(
+      miner,
+      miner.getValue(MinerState, xField) ?? -1,
+      miner.getValue(MinerState, yField) ?? -1,
+    );
   }
 
   private setCargoVisible(miner: Entity, visible: boolean): void {

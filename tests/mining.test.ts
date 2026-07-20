@@ -9,7 +9,10 @@ import {
   SMALL_CRYSTAL_NODE_CAPACITY,
   STARTING_CRYSTALS,
 } from "../src/systems/economyConstants.ts";
-import { advanceMiningCycle } from "../src/systems/miningRules.ts";
+import {
+  advanceMiningCycle,
+  selectNearestMiningTarget,
+} from "../src/systems/miningRules.ts";
 import type { MiningCycleState } from "../src/systems/miningRules.ts";
 
 function completeCycle(state: MiningCycleState): void {
@@ -91,4 +94,43 @@ test("the final trip cannot extract more than the node has", () => {
   assert.equal(state.crystals, 26);
   assert.equal(state.nodeRemaining, 0);
   assert.equal(state.stage, "idle");
+});
+
+test("automatic mining chooses the nearest non-empty node with an approach", () => {
+  const candidates = [
+    { target: "empty", x: 2, y: 2, remaining: 0 },
+    { target: "blocked", x: 3, y: 3, remaining: 50 },
+    { target: "far", x: 10, y: 10, remaining: 100 },
+    { target: "nearest", x: 6, y: 4, remaining: 50 },
+  ];
+  const approaches = new Map([
+    ["far", { x: 9, y: 10 }],
+    ["nearest", { x: 5, y: 4 }],
+  ]);
+
+  const selection = selectNearestMiningTarget(
+    { x: 4, y: 4 },
+    candidates,
+    ({ target }) => approaches.get(target) ?? null,
+  );
+
+  assert.deepEqual(selection, {
+    target: "nearest",
+    x: 6,
+    y: 4,
+    approach: { x: 5, y: 4 },
+  });
+});
+
+test("automatic mining stops when no usable resource remains", () => {
+  const selection = selectNearestMiningTarget(
+    { x: 4, y: 4 },
+    [
+      { target: "empty", x: 2, y: 2, remaining: 0 },
+      { target: "blocked", x: 3, y: 3, remaining: 50 },
+    ],
+    () => null,
+  );
+
+  assert.equal(selection, null);
 });

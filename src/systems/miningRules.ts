@@ -23,6 +23,57 @@ export interface MiningCycleState {
   crystals: number;
 }
 
+export interface MiningGridPosition {
+  x: number;
+  y: number;
+}
+
+export interface MiningTargetCandidate<T> extends MiningGridPosition {
+  target: T;
+  remaining: number;
+}
+
+export interface MiningTargetSelection<T> extends MiningGridPosition {
+  target: T;
+  approach: MiningGridPosition;
+}
+
+export function selectNearestMiningTarget<T>(
+  from: MiningGridPosition,
+  candidates: readonly MiningTargetCandidate<T>[],
+  findApproach: (
+    candidate: MiningTargetCandidate<T>,
+  ) => MiningGridPosition | null,
+): MiningTargetSelection<T> | null {
+  let best: MiningTargetSelection<T> | null = null;
+  let bestDistance = Infinity;
+
+  for (const candidate of candidates) {
+    if (candidate.remaining <= 0) continue;
+    const approach = findApproach(candidate);
+    if (!approach) continue;
+    const distance =
+      (approach.x - from.x) ** 2 + (approach.y - from.y) ** 2;
+    if (
+      distance < bestDistance ||
+      (distance === bestDistance &&
+        (!best ||
+          candidate.y < best.y ||
+          (candidate.y === best.y && candidate.x < best.x)))
+    ) {
+      bestDistance = distance;
+      best = {
+        target: candidate.target,
+        x: candidate.x,
+        y: candidate.y,
+        approach,
+      };
+    }
+  }
+
+  return best;
+}
+
 // Mutates a caller-owned state object so the runtime system can reuse one
 // scratch allocation across frames. Stockpile crystals change only here in the
 // explicit deposit branch.
