@@ -34,6 +34,9 @@ export class MovementSystem extends createSystem({
         return;
       }
 
+      // Travel is intentionally direct and collision-free. Occupancy is only
+      // enforced for the final order tile, so units can cross scenery and
+      // other pieces until pathfinding is introduced.
       const step = Math.min(distance, UNIT_SPEED * delta);
       holder.position.x += (dx / distance) * step;
       holder.position.z += (dz / distance) * step;

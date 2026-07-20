@@ -1,7 +1,10 @@
 import {
   AssetManager,
   Box3,
+  BoxGeometry,
   Group,
+  Mesh,
+  MeshBasicMaterial,
   Object3D,
   RayInteractable,
   Vector3,
@@ -77,19 +80,18 @@ const STRUCTURES: StructureSpec[] = [
   { asset: "astronautA", name: "AstronautA", widthTiles: 1, gridX: [9, 9], gridY: [12, 12], yawDeg: 180, unit: "astronaut" },
   { asset: "astronautB", name: "AstronautB", widthTiles: 1, gridX: [13, 13], gridY: [12, 12], yawDeg: 180, unit: "astronaut" },
 
-  // Aliens — ringing the outskirts, facing inward. Their tiles are stamped
-  // blocked while they stand still; Phase 7 (waves) moves them and will
-  // switch alien occupancy to the live check.
-  { asset: "alien", name: "Alien1", widthTiles: 1, gridX: [1, 1], gridY: [1, 1], yawDeg: 180, terrain: "blocked", enemy: "alien" },
-  { asset: "alien", name: "Alien2", widthTiles: 1, gridX: [6, 6], gridY: [0, 0], yawDeg: 180, terrain: "blocked", enemy: "alien" },
-  { asset: "alien", name: "Alien3", widthTiles: 1, gridX: [12, 12], gridY: [1, 1], yawDeg: 180, terrain: "blocked", enemy: "alien" },
-  { asset: "alien", name: "Alien4", widthTiles: 1, gridX: [18, 18], gridY: [0, 0], yawDeg: 180, terrain: "blocked", enemy: "alien" },
-  { asset: "alien", name: "Alien5", widthTiles: 1, gridX: [22, 22], gridY: [1, 1], yawDeg: 180, terrain: "blocked", enemy: "alien" },
-  { asset: "alien", name: "Alien6", widthTiles: 1, gridX: [23, 23], gridY: [8, 8], yawDeg: 270, terrain: "blocked", enemy: "alien" },
-  { asset: "alien", name: "Alien7", widthTiles: 1, gridX: [22, 22], gridY: [15, 15], yawDeg: 270, terrain: "blocked", enemy: "alien" },
-  { asset: "alien", name: "Alien8", widthTiles: 1, gridX: [21, 21], gridY: [22, 22], terrain: "blocked", enemy: "alien" },
-  { asset: "alien", name: "Alien9", widthTiles: 1, gridX: [12, 12], gridY: [22, 22], terrain: "blocked", enemy: "alien" },
-  { asset: "alien", name: "Alien10", widthTiles: 1, gridX: [3, 3], gridY: [22, 22], terrain: "blocked", enemy: "alien" },
+  // Aliens use live occupancy instead of stamped terrain so their old tile
+  // automatically becomes open when wave movement is added.
+  { asset: "alien", name: "Alien1", widthTiles: 1, gridX: [1, 1], gridY: [1, 1], yawDeg: 180, enemy: "alien" },
+  { asset: "alien", name: "Alien2", widthTiles: 1, gridX: [6, 6], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
+  { asset: "alien", name: "Alien3", widthTiles: 1, gridX: [12, 12], gridY: [1, 1], yawDeg: 180, enemy: "alien" },
+  { asset: "alien", name: "Alien4", widthTiles: 1, gridX: [18, 18], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
+  { asset: "alien", name: "Alien5", widthTiles: 1, gridX: [22, 22], gridY: [1, 1], yawDeg: 180, enemy: "alien" },
+  { asset: "alien", name: "Alien6", widthTiles: 1, gridX: [23, 23], gridY: [8, 8], yawDeg: 270, enemy: "alien" },
+  { asset: "alien", name: "Alien7", widthTiles: 1, gridX: [22, 22], gridY: [15, 15], yawDeg: 270, enemy: "alien" },
+  { asset: "alien", name: "Alien8", widthTiles: 1, gridX: [21, 21], gridY: [22, 22], enemy: "alien" },
+  { asset: "alien", name: "Alien9", widthTiles: 1, gridX: [12, 12], gridY: [22, 22], enemy: "alien" },
+  { asset: "alien", name: "Alien10", widthTiles: 1, gridX: [3, 3], gridY: [22, 22], enemy: "alien" },
 
   // Craft — the fleet lined up in front of the command center.
   { asset: "rover", name: "Rover", widthTiles: 1, gridX: [10, 10], gridY: [13, 13], yawDeg: 180, unit: "rover" },
@@ -134,6 +136,24 @@ function seatModel(model: Object3D): void {
   model.position.y -= box.min.y;
 }
 
+const interactionProxyMaterial = new MeshBasicMaterial({
+  colorWrite: false,
+  depthWrite: false,
+});
+
+function addInteractionProxy(holder: Group, spec: StructureSpec, model: Object3D): void {
+  const size = new Box3().setFromObject(model).getSize(new Vector3());
+  const footprint = spec.widthTiles * TILE_SIZE * 0.82;
+  const height = Math.max(size.y, TILE_SIZE * 0.8);
+  const proxy = new Mesh(
+    new BoxGeometry(footprint, height, footprint),
+    interactionProxyMaterial,
+  );
+  proxy.name = `${spec.name}InteractionProxy`;
+  proxy.position.y = height / 2;
+  holder.add(proxy);
+}
+
 export class StructuresSystem extends createSystem({}) {
   init(): void {
     const root = boardState.boardRoot;
@@ -160,6 +180,9 @@ export class StructuresSystem extends createSystem({}) {
       const [wx1, wz1] = gridToWorld(x1, y1);
       holder.position.set((wx0 + wx1) / 2, 0.006, (wz0 + wz1) / 2);
       holder.add(model);
+      if (spec.unit || spec.enemy) {
+        addInteractionProxy(holder, spec, model);
+      }
       const entity = this.world.createTransformEntity(holder, { parent: root });
       if (spec.unit) {
         entity
