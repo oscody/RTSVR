@@ -36,6 +36,7 @@ import {
   TabletState,
   Unit,
   UnitSelection,
+  WaveSource,
   boardState,
 } from "./state.js";
 
@@ -77,6 +78,19 @@ export class TabletSystem extends createSystem({
     const tablet = this.tabletEntity;
     const document = this.document;
     if (!tablet || !document) return;
+
+    // Runs every frame, outside the memoized signature below, since the
+    // countdown timer changes continuously while wave stage is "countdown".
+    const waveSource = boardState.waveSource;
+    const waveStage = waveSource?.getValue(WaveSource, "stage") ?? "countdown";
+    const countingDown = waveStage === "countdown";
+    element(document, "wave-banner")?.setProperties({
+      display: countingDown ? "flex" : "none",
+    });
+    if (countingDown) {
+      const waveTimer = waveSource?.getValue(WaveSource, "timer") ?? 0;
+      this.setText("wave-countdown", `${Math.max(0, Math.ceil(waveTimer))}`);
+    }
 
     const game = boardState.gameState;
     const stats = boardState.gameStats;

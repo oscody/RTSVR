@@ -57,6 +57,32 @@
     text-align: right;
   }
 
+  .wave-banner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    width: 548px;
+    height: 28px;
+    margin-top: 6px;
+    background-color: #fef3c7;
+    border-width: 1px;
+    border-color: #d97706;
+    border-radius: 6px;
+  }
+
+  .wave-banner-label {
+    color: #92400e;
+    font-size: 14px;
+    font-weight: 700;
+    margin-right: 6px;
+  }
+
+  .wave-banner-value {
+    color: #92400e;
+    font-size: 16px;
+    font-weight: 800;
+  }
+
   .exit-button {
     flex-direction: row;
     align-items: center;
@@ -508,6 +534,10 @@
       <span id="crystal-balance" class="balance-value">0</span>
     </div>
     <button id="exit-vr" class="exit-button"><LogOutIcon class="exit-icon"></LogOutIcon><span>Exit VR</span></button>
+  </div>
+  <div id="wave-banner" class="wave-banner">
+    <span class="wave-banner-label">Next wave in</span>
+    <span id="wave-countdown" class="wave-banner-value">3</span>
   </div>
   <div class="tabs">
     <button id="tab-overview" class="tab"><ChartBarIcon class="tab-icon"></ChartBarIcon><span>Overview</span></button>
