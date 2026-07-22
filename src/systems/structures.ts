@@ -71,11 +71,6 @@ interface StructureSpec {
 const STRUCTURES: StructureSpec[] = [
   // 15m-wide model scaled onto 3x3 tiles, board center (tiles 10-12).
   { asset: "commandCenter", name: "CommandCenter", widthTiles: 3, gridX: [11, 11], gridY: [11, 11], terrain: "blocked", building: "command-center" },
-  // 2x3m hangar onto 2x3 tiles, left of center with a one-tile gap.
-  { asset: "hangarLargeA", name: "Hangar", widthTiles: 2, gridX: [7, 8], gridY: [11, 11], terrain: "blocked", building: "hangar" },
-  // Aircraft factory onto 3x3 tiles (tiles 14-16), right of center with a
-  // one-tile gap. Vertex-hull measurement confirms the base is axis-aligned.
-  { asset: "aircraft_factory", name: "AircraftFactory", widthTiles: 3, gridX: [15, 15], gridY: [11, 11], terrain: "blocked", building: "factory" },
 
   // Crystal field A — front-left, close to the base cluster (early mining).
   { asset: "rockCrystalsLargeA", name: "CrystalLargeA", widthTiles: 1, gridX: [5, 5], gridY: [16, 16], terrain: "crystal", resource: { kind: "large", capacity: LARGE_CRYSTAL_NODE_CAPACITY } },
@@ -118,6 +113,9 @@ const STRUCTURES: StructureSpec[] = [
   // Aliens use live occupancy instead of stamped terrain so their old tile
   // automatically becomes open when wave movement is added.
   { asset: "alien", name: "Alien1", widthTiles: 1, gridX: [1, 1], gridY: [1, 1], yawDeg: 180, enemy: "alien" },
+  { asset: "alien", name: "Alien2", widthTiles: 1, gridX: [6, 6], gridY: [22, 22], yawDeg: 180, enemy: "alien" },
+  { asset: "alien", name: "Alien3", widthTiles: 1, gridX: [12, 12], gridY: [1, 1], yawDeg: 180, enemy: "alien" },
+  { asset: "alien", name: "Alien1", widthTiles: 1, gridX: [1, 1], gridY: [1, 1], yawDeg: 180, enemy: "alien" },
   { asset: "alien", name: "Alien2", widthTiles: 1, gridX: [6, 6], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
   { asset: "alien", name: "Alien3", widthTiles: 1, gridX: [12, 12], gridY: [1, 1], yawDeg: 180, enemy: "alien" },
   { asset: "alien", name: "Alien4", widthTiles: 1, gridX: [18, 18], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
@@ -127,15 +125,11 @@ const STRUCTURES: StructureSpec[] = [
   { asset: "alien", name: "Alien8", widthTiles: 1, gridX: [21, 21], gridY: [22, 22], enemy: "alien" },
   { asset: "alien", name: "Alien9", widthTiles: 1, gridX: [12, 12], gridY: [22, 22], enemy: "alien" },
   { asset: "alien", name: "Alien10", widthTiles: 1, gridX: [3, 3], gridY: [22, 22], enemy: "alien" },
+    { asset: "craftMiner", name: "CraftMiner", widthTiles: 1, gridX: [11, 11], gridY: [13, 13], yawDeg: 180, unit: "miner", unitCategory: "factory" },
+  // Base defense — two turrets flanking opposite corners of the command center.
+  { asset: "turretSingle", name: "TurretSingle", widthTiles: 1, gridX: [13, 13], gridY: [9, 9], yawDeg: 180, terrain: "blocked", building: "turret" },
+  { asset: "turretSingle", name: "TurretSingle2", widthTiles: 1, gridX: [9, 9], gridY: [13, 13], yawDeg: 180, terrain: "blocked", building: "turret" },
 
-  // Craft — the fleet lined up in front of the command center.
-  { asset: "rover", name: "Rover", widthTiles: 1, gridX: [10, 10], gridY: [13, 13], yawDeg: 180, unit: "rover", unitCategory: "command-center" },
-  { asset: "craftMiner", name: "CraftMiner", widthTiles: 1, gridX: [11, 11], gridY: [13, 13], yawDeg: 180, unit: "miner", unitCategory: "factory" },
-  { asset: "craftCargoA", name: "CraftCargo", widthTiles: 1, gridX: [12, 12], gridY: [13, 13], yawDeg: 180, unit: "cargo", unitCategory: "hangar" },
-  { asset: "craftRacer", name: "CraftRacer", widthTiles: 1, gridX: [13, 13], gridY: [13, 13], yawDeg: 180, unit: "racer", unitCategory: "hangar" },
-
-  // Base defense — turret guarding the southwest approach.
-  { asset: "turretSingle", name: "TurretSingle", widthTiles: 1, gridX: [9, 9], gridY: [14, 14], yawDeg: 180, terrain: "blocked", building: "turret" },
 
   // Meteors — sprinkled impact debris.
   { asset: "meteor", name: "Meteor1", widthTiles: 1, gridX: [2, 2], gridY: [2, 2], terrain: "blocked" },
