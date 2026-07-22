@@ -16,7 +16,7 @@ export const UNIT_ATTACK_SPECS: Readonly<Record<string, AttackSpec>> = {
 export const TURRET_ATTACK_SPEC: Readonly<AttackSpec> = {
   damage: 18,
   cadence: 0.75,
-  range: 0.45,
+  range: 0.72,
 };
 
 export const UNIT_AUTO_ACQUIRE_RANGE = 0.24;

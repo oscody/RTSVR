@@ -6,6 +6,7 @@ import {
   type World,
 } from "@iwsdk/core";
 import { TILE_SIZE } from "./board.js";
+import { TURRET_ATTACK_SPEC } from "./combatRules.js";
 import { toggleSelectionMembership } from "./selectionRules.js";
 import {
   BoardMarker,
@@ -14,6 +15,9 @@ import {
   UnitSelection,
   boardState,
 } from "./state.js";
+
+const TURRET_RANGE_RING_COLOR = 0xff2222;
+const TURRET_RANGE_RING_THICKNESS = 0.02;
 
 export function getSelectedUnits(): Entity[] {
   return Array.from(boardState.selectedUnits).filter(
@@ -69,6 +73,57 @@ export function updateUnitSelectionRing(unit: Entity): void {
   const object = unit.object3D;
   if (!ring || !object) return;
   ring.position.set(object.position.x, ring.position.y, object.position.z);
+}
+
+// Turrets aren't Units (no UnitSelection component), so this is a parallel
+// single-selection toggle: clicking a turret shows a red ring at its
+// attack range, clicking it again hides it, clicking a different turret
+// swaps which one is shown.
+export function toggleTurretRangeRing(world: World, turret: Entity): boolean {
+  if (boardState.selectedTurret === turret) {
+    hideTurretRangeRing(turret);
+    boardState.selectedTurret = null;
+    return false;
+  }
+  if (boardState.selectedTurret) {
+    hideTurretRangeRing(boardState.selectedTurret);
+  }
+  boardState.selectedTurret = turret;
+  showTurretRangeRing(world, turret);
+  return true;
+}
+
+function hideTurretRangeRing(turret: Entity): void {
+  const ring = boardState.rangeRingByTurret.get(turret.index)?.object3D;
+  if (ring) ring.visible = false;
+}
+
+function showTurretRangeRing(world: World, turret: Entity): void {
+  let ringEntity = boardState.rangeRingByTurret.get(turret.index);
+  if (!ringEntity) {
+    const root = boardState.boardRoot;
+    if (!root) return;
+    const range = TURRET_ATTACK_SPEC.range;
+    const ring = new Mesh(
+      new RingGeometry(range - TURRET_RANGE_RING_THICKNESS, range, 48),
+      new MeshBasicMaterial({
+        color: TURRET_RANGE_RING_COLOR,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false,
+      }),
+    );
+    ring.name = `TurretRangeRing_${turret.index}`;
+    ring.rotateX(-Math.PI / 2);
+    ring.position.y = 0.026;
+    const object = turret.object3D;
+    if (object) ring.position.set(object.position.x, ring.position.y, object.position.z);
+    ringEntity = world
+      .createTransformEntity(ring, { parent: root })
+      .addComponent(BoardMarker, { kind: "turret-range" });
+    boardState.rangeRingByTurret.set(turret.index, ringEntity);
+  }
+  if (ringEntity.object3D) ringEntity.object3D.visible = true;
 }
 
 function setRingVisible(world: World, unit: Entity, visible: boolean): void {

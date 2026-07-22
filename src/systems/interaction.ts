@@ -27,6 +27,7 @@ import {
   clearUnitSelections,
   getSelectedUnits,
   getSingleSelectedUnit,
+  toggleTurretRangeRing,
   toggleUnitSelection,
 } from "./selection.js";
 import { assignGroupDestinations } from "./selectionRules.js";
@@ -181,6 +182,9 @@ export class InteractionSystem extends createSystem({
         const tablet = boardState.tablet;
         if (!tablet) return;
         const kind = entity.getValue(Building, "kind") ?? "building";
+        if (kind === "turret") {
+          toggleTurretRangeRing(this.world, entity);
+        }
         if (tablet.getValue(TabletState, "view") === "units") {
           tablet.setValue(TabletState, "spawnBuilding", entity);
           tablet.setValue(TabletState, "spawnBuildingIndex", entity.index);
