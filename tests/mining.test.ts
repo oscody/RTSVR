@@ -96,6 +96,23 @@ test("the final trip cannot extract more than the node has", () => {
   assert.equal(state.stage, "idle");
 });
 
+test("miner cannot deposit after the command center is unavailable", () => {
+  const state: MiningCycleState = {
+    stage: "deposit",
+    timer: 0,
+    cargo: 10,
+    nodeRemaining: 40,
+    amountPerTrip: DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
+    gatherDuration: MINING_GATHER_TIME_SECONDS,
+    crystals: 20,
+  };
+
+  assert.equal(advanceMiningCycle(state, 0, true, false), "baseUnavailable");
+  assert.equal(state.crystals, 20);
+  assert.equal(state.cargo, 0);
+  assert.equal(state.stage, "idle");
+});
+
 test("automatic mining chooses the nearest non-empty node with an approach", () => {
   const candidates = [
     { target: "empty", x: 2, y: 2, remaining: 0 },

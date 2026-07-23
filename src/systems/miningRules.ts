@@ -11,7 +11,8 @@ export type MiningTransition =
   | "loadedCargo"
   | "resourceEmpty"
   | "reachedBase"
-  | "deposited";
+  | "deposited"
+  | "baseUnavailable";
 
 export interface MiningCycleState {
   stage: MiningStage;
@@ -81,7 +82,15 @@ export function advanceMiningCycle(
   state: MiningCycleState,
   delta: number,
   arrived: boolean,
+  baseAvailable = true,
 ): MiningTransition {
+  if (!baseAvailable && state.stage !== "idle") {
+    state.stage = "idle";
+    state.timer = 0;
+    state.cargo = 0;
+    return "baseUnavailable";
+  }
+
   if (state.stage === "toResource" && arrived) {
     state.stage = "gathering";
     state.timer = 0;

@@ -19,6 +19,7 @@ import {
   Enemy,
   GameState,
   GameStats,
+  MatchState,
   MinerState,
   ResourceNode,
   Unit,
@@ -50,7 +51,12 @@ export class MiningSystem extends createSystem({
       const node = miner.getValue(MinerState, "target") as Entity | null;
       const gameState = boardState.gameState;
       if (!node || !gameState) {
-        miner.setValue(MinerState, "stage", "idle");
+        this.stopMining(miner, true);
+        continue;
+      }
+      const baseAvailable = this.hasCommandCenterDeposit();
+      if (!baseAvailable) {
+        this.stopMining(miner, true);
         continue;
       }
 
@@ -69,6 +75,7 @@ export class MiningSystem extends createSystem({
         this.cycle,
         delta,
         !(miner.getValue(Unit, "hasOrder") ?? false),
+        baseAvailable,
       );
 
       miner.setValue(MinerState, "stage", this.cycle.stage);
@@ -115,8 +122,18 @@ export class MiningSystem extends createSystem({
       } else if (transition === "resourceEmpty") {
         this.setCargoVisible(miner, false);
         this.retargetMiner(miner);
+      } else if (transition === "baseUnavailable") {
+        this.setCargoVisible(miner, false);
       }
     }
+  }
+
+  private hasCommandCenterDeposit(): boolean {
+    const commandCenter = boardState.commandCenter;
+    if (!commandCenter?.object3D) return false;
+    return (
+      boardState.waveSource?.getValue(MatchState, "commandCenterAlive") ?? true
+    );
   }
 
   private retargetMiner(miner: Entity): void {
@@ -194,9 +211,13 @@ export class MiningSystem extends createSystem({
     return false;
   }
 
-  private stopMining(miner: Entity): void {
+  private stopMining(miner: Entity, clearCargo = false): void {
     miner.setValue(MinerState, "stage", "idle");
     miner.setValue(MinerState, "timer", 0);
+    if (clearCargo) {
+      miner.setValue(MinerState, "cargo", 0);
+      this.setCargoVisible(miner, false);
+    }
     miner.setValue(MinerState, "target", null);
     miner.setValue(MinerState, "targetX", -1);
     miner.setValue(MinerState, "targetY", -1);
