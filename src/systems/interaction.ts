@@ -167,6 +167,7 @@ export class InteractionSystem extends createSystem({
           assigned > 0 ? "info" : "error",
         );
         setOrderMarker(ex, ey, BLOCKED_COLOR);
+        if (assigned > 0) this.clearCommandSelection();
       }),
       // Buildings are production sources. Selecting one opens Crafts and
       // records which building is authorizing the next craft purchase.
@@ -244,6 +245,7 @@ export class InteractionSystem extends createSystem({
                 resourceDestination,
                 baseDestination,
               );
+              this.clearCommandSelection();
             }
             setOrderMarker(tx, ty, BLOCKED_COLOR);
             return;
@@ -252,8 +254,9 @@ export class InteractionSystem extends createSystem({
           const blocked = entity.getValue(BoardTile, "terrain") !== "open";
           const selectedSet = new Set(units);
           const occupied = this.isOccupiedExcept(tx, ty, selectedSet);
-          this.issueGroupOrder(units, tx, ty);
+          const assigned = this.issueGroupOrder(units, tx, ty);
           setOrderMarker(tx, ty, blocked || occupied ? BLOCKED_COLOR : ORDER_COLOR);
+          if (assigned > 0) this.clearCommandSelection();
           return;
         }
         boardState.selectedTile = entity;
@@ -612,6 +615,19 @@ export class InteractionSystem extends createSystem({
     else astronaut.setValue(Unit, "hasOrder", false);
     this.setTabletStatus(`${spec.label} ordered. Astronaut moving to site`);
     setOrderMarker(tx, ty, ORDER_COLOR);
+    this.clearCommandSelection();
+  }
+
+  private clearCommandSelection(): void {
+    clearUnitSelections();
+    boardState.selectedTile = null;
+    hideMarker(boardState.selectionMarker);
+    hideMarker(boardState.buildMarker);
+    const tablet = boardState.tablet;
+    if (!tablet) return;
+    tablet.setValue(TabletState, "astronaut", null);
+    tablet.setValue(TabletState, "astronautIndex", -1);
+    tablet.setValue(TabletState, "buildPlacementActive", false);
   }
 
   private updateHoverMarker(tile: Entity): void {
