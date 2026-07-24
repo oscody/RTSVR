@@ -15,6 +15,7 @@ import { TILE_SIZE, gridToWorld } from "./board.js";
 import { canUnitAttack, getUnitMaxHealth } from "./combatRules.js";
 import type { CraftSpec } from "./craftCatalog.js";
 import { attachHealthBar } from "./healthBar.js";
+import { attachMinerAnimation } from "./minerAnimation.js";
 import {
   CombatState,
   CombatCapability,
@@ -86,6 +87,9 @@ export function createCraftEntity(
       entity.index,
       addMinerCargoVisual(holder, model),
     );
+    if (spec.asset === "craftMinerAnimated") {
+      attachMinerAnimation(entity, model, gltf.animations);
+    }
   }
   attachHealthBar(holder);
   return entity;

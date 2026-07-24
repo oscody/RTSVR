@@ -25,6 +25,7 @@ import {
 } from "./economyConstants.js";
 import { attachAlienAnimation } from "./alienAnimation.js";
 import { attachHealthBar } from "./healthBar.js";
+import { attachMinerAnimation } from "./minerAnimation.js";
 import { attachTurretAnimation } from "./turretAnimation.js";
 import { attachUnitAnimation } from "./unitAnimation.js";
 import {
@@ -128,7 +129,7 @@ const STRUCTURES: StructureSpec[] = [
   { asset: "alienWalkingSlam", name: "Alien8", widthTiles: 1, gridX: [21, 21], gridY: [22, 22], enemy: "alien" },
   { asset: "alien", name: "Alien9", widthTiles: 1, gridX: [12, 12], gridY: [22, 22], enemy: "alien" },
   { asset: "alien", name: "Alien10", widthTiles: 1, gridX: [3, 3], gridY: [22, 22], enemy: "alien" },
-  { asset: "craftMiner", name: "CraftMiner", widthTiles: 1, gridX: [11, 11], gridY: [13, 13], yawDeg: 180, unit: "miner", unitCategory: "factory" },
+  { asset: "craftMinerAnimated", name: "CraftMiner", widthTiles: 1, gridX: [11, 11], gridY: [13, 13], yawDeg: 180, unit: "miner", unitCategory: "factory" },
   // Base defense — two turrets flanking opposite corners of the command center.
   { asset: "turretSingle", name: "TurretSingle", widthTiles: 1, gridX: [13, 13], gridY: [9, 9], yawDeg: 180, terrain: "blocked", building: "turret" },
   { asset: "turretSingle", name: "TurretSingle2", widthTiles: 1, gridX: [9, 9], gridY: [13, 13], yawDeg: 180, terrain: "blocked", building: "turret" },
@@ -257,6 +258,9 @@ export function createInitialScenario(world: World): void {
         if (spec.unit === "miner") {
           entity.addComponent(MinerState);
           boardState.cargoVisualByUnit.set(entity.index, addCargoVisual(holder, model));
+          if (spec.asset === "craftMinerAnimated") {
+            attachMinerAnimation(entity, model, gltf.animations);
+          }
         }
         if (spec.unit === "astronaut") {
           entity.addComponent(ConstructionState);

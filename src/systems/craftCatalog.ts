@@ -23,8 +23,8 @@ export const CRAFT_CATALOG: readonly CraftSpec[] = [
   {
     kind: "miner",
     label: "Mining Craft",
-    asset: "craftMiner",
-    glb: "/gltf/craft/craft_miner.glb",
+    asset: "craftMinerAnimated",
+    glb: "/gltf/craft/craft_cargoA_A.glb",
     image: "/images/craft_miner.png",
     cost: 60,
     duration: 6,

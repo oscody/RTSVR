@@ -1,12 +1,17 @@
 import {
+  AssetManager,
+  Box3,
   BoxGeometry,
   Entity,
   Group,
   Mesh,
   MeshBasicMaterial,
+  Object3D,
+  Vector3,
   createSystem,
   type World,
 } from "@iwsdk/core";
+import type { AnimationClip } from "three";
 import { TILE_SIZE, gridToWorld } from "./board.js";
 import { getCraftSpec, type CraftSpec } from "./craftCatalog.js";
 import { createCraftEntity } from "./craftFactory.js";
@@ -15,6 +20,11 @@ import {
   craftProductionProgress,
   type CraftProductionCycleState,
 } from "./craftRules.js";
+import {
+  attachCraftProductionAnimation,
+  detachCraftProductionAnimation,
+  updateCraftProductionAnimation,
+} from "./craftProductionAnimation.js";
 import {
   BoardTile,
   CraftProductionSite,
@@ -65,7 +75,21 @@ export function createCraftProductionSite(
   progressFill.scale.x = 0.001;
   holder.add(progressFill);
 
-  return world
+  let animatedModel: Object3D | null = null;
+  let animatedClips: AnimationClip[] = [];
+  if (spec.asset === "craftMinerAnimated") {
+    const gltf = AssetManager.getGLTF(spec.asset);
+    if (!gltf) throw new Error(`${spec.asset} not preloaded`);
+    animatedModel = gltf.scene;
+    animatedModel.rotation.y = Math.PI;
+    const width = new Box3().setFromObject(animatedModel).getSize(new Vector3()).x;
+    animatedModel.scale.setScalar((TILE_SIZE * 0.9) / width);
+    seatModel(animatedModel);
+    holder.add(animatedModel);
+    animatedClips = gltf.animations;
+  }
+
+  const entity = world
     .createTransformEntity(holder, { parent })
     .addComponent(ScenarioObject)
     .addComponent(CraftProductionSite, {
@@ -77,6 +101,15 @@ export function createCraftProductionSite(
       duration: spec.duration,
       progress: 0,
     });
+  if (animatedModel) {
+    attachCraftProductionAnimation(
+      entity,
+      animatedModel,
+      animatedClips,
+      spec.duration,
+    );
+  }
+  return entity;
 }
 
 export class CraftProductionSystem extends createSystem({
@@ -95,6 +128,7 @@ export class CraftProductionSystem extends createSystem({
       const transition = advanceCraftProduction(this.cycle, delta);
       site.setValue(CraftProductionSite, "timer", this.cycle.timer);
       this.updateProgress(site);
+      updateCraftProductionAnimation(site, delta);
       if (transition === "completed") this.completeCraft(site);
     }
   }
@@ -120,18 +154,21 @@ export class CraftProductionSystem extends createSystem({
     if (!spec || !root) return;
     const x = site.getValue(CraftProductionSite, "x") ?? -1;
     const y = site.getValue(CraftProductionSite, "y") ?? -1;
+    const sourceKind =
+      site.getValue(CraftProductionSite, "sourceKind") ?? "command-center";
     boardState.tileByKey
       .get(gridKey(x, y))
       ?.setValue(BoardTile, "terrain", "open");
+    detachCraftProductionAnimation(site);
+    site.dispose();
     createCraftEntity(
       this.world,
       root,
       spec,
       x,
       y,
-      site.getValue(CraftProductionSite, "sourceKind") ?? "command-center",
+      sourceKind,
     );
-    site.dispose();
     this.setTabletStatus(`${spec.label} production complete`, "success");
   }
 
@@ -146,4 +183,11 @@ export class CraftProductionSystem extends createSystem({
       (tablet.getValue(TabletState, "revision") ?? 0) + 1,
     );
   }
+}
+
+function seatModel(model: Object3D): void {
+  const box = new Box3().setFromObject(model);
+  model.position.x -= (box.min.x + box.max.x) / 2;
+  model.position.z -= (box.min.z + box.max.z) / 2;
+  model.position.y -= box.min.y;
 }

@@ -13,6 +13,7 @@ import { InteractionSystem } from "./systems/interaction.js";
 import { MiningSystem } from "./systems/mining.js";
 import { MatchResultSystem } from "./systems/matchResult.js";
 import { MovementSystem } from "./systems/movement.js";
+import { MinerAnimationSystem } from "./systems/minerAnimation.js";
 import { ScenarioResetSystem } from "./systems/scenarioReset.js";
 import { StructuresSystem } from "./systems/structures.js";
 import { TabletSystem } from "./systems/tablet.js";
@@ -55,6 +56,7 @@ const assets: AssetManifest = {
   alien: { url: "/gltf/alien.glb", type: AssetType.GLTF, priority: "critical" },
   alienWalkingSlam: { url: "/gltf/alien_walking_slam_no_fx.glb", type: AssetType.GLTF, priority: "critical" },
   craftCargoA: { url: "/gltf/craft/craft_cargoA.glb", type: AssetType.GLTF, priority: "critical" },
+  craftMinerAnimated: { url: "/gltf/craft/craft_cargoA_A.glb", type: AssetType.GLTF, priority: "critical" },
   craftMiner: { url: "/gltf/craft/craft_miner.glb", type: AssetType.GLTF, priority: "critical" },
   craftRacer: { url: "/gltf/craft/craft_racer.glb", type: AssetType.GLTF, priority: "critical" },
   rover: { url: "/gltf/craft/rover.glb", type: AssetType.GLTF, priority: "critical" },
@@ -98,6 +100,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(TurretAnimationSystem)
     .registerSystem(UnitAnimationSystem)
     .registerSystem(MiningSystem)
+    .registerSystem(MinerAnimationSystem)
     .registerSystem(ConstructionSystem)
     .registerSystem(CraftProductionSystem)
     .registerSystem(MatchResultSystem)
