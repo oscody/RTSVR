@@ -3,6 +3,7 @@ import { clearAlienAnimations } from "./alienAnimation.js";
 import { resetCraftSerial } from "./craftFactory.js";
 import { STARTING_CRYSTALS } from "./economyConstants.js";
 import { clearUnitSelections } from "./selection.js";
+import { clearTurretAnimations } from "./turretAnimation.js";
 import {
   createScenarioResetDefaults,
   isScenarioRestartRequested,
@@ -46,6 +47,7 @@ export class ScenarioResetSystem extends createSystem({
   private resetScenario(source: Entity): void {
     clearUnitSelections();
     clearAlienAnimations();
+    clearTurretAnimations();
     for (const ring of boardState.selectionRingByUnit.values()) ring.dispose();
     boardState.selectionRingByUnit.clear();
 

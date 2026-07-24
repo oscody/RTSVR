@@ -18,6 +18,7 @@ import { footprintCells } from "./constructionRules.js";
 import { detachAlienAnimation } from "./alienAnimation.js";
 import { updateHealthBar } from "./healthBar.js";
 import { removeUnitFromSelection } from "./selection.js";
+import { detachTurretAnimation } from "./turretAnimation.js";
 import {
   Building,
   BoardTile,
@@ -272,6 +273,9 @@ export class CombatSystem extends createSystem({
     }
     if (target.hasComponent(Enemy)) {
       detachAlienAnimation(target);
+    }
+    if (target.hasComponent(Building) && target.getValue(Building, "kind") === "turret") {
+      detachTurretAnimation(target);
     }
     target.dispose();
   }

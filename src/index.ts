@@ -16,6 +16,7 @@ import { MovementSystem } from "./systems/movement.js";
 import { ScenarioResetSystem } from "./systems/scenarioReset.js";
 import { StructuresSystem } from "./systems/structures.js";
 import { TabletSystem } from "./systems/tablet.js";
+import { TurretAnimationSystem } from "./systems/turretAnimation.js";
 import { WaveSystem } from "./systems/wave.js";
 
 const assets: AssetManifest = {
@@ -92,6 +93,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(WaveSystem)
     .registerSystem(CombatSystem)
     .registerSystem(AlienAnimationSystem)
+    .registerSystem(TurretAnimationSystem)
     .registerSystem(MiningSystem)
     .registerSystem(ConstructionSystem)
     .registerSystem(CraftProductionSystem)

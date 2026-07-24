@@ -16,6 +16,7 @@ import type { BuildingSpec } from "./buildingCatalog.js";
 import { getBuildingMaxHealth } from "./combatRules.js";
 import { footprintCells } from "./constructionRules.js";
 import { attachHealthBar } from "./healthBar.js";
+import { attachTurretAnimation } from "./turretAnimation.js";
 import {
   BoardTile,
   Building,
@@ -102,6 +103,7 @@ export function createBuildingEntity(
     entity
       .addComponent(CombatState)
       .addComponent(CombatCapability, { mode: "automatic" });
+    attachTurretAnimation(entity, model, gltf.animations);
   }
   attachHealthBar(holder);
   return entity;

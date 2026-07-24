@@ -25,6 +25,7 @@ import {
 } from "./economyConstants.js";
 import { attachAlienAnimation } from "./alienAnimation.js";
 import { attachHealthBar } from "./healthBar.js";
+import { attachTurretAnimation } from "./turretAnimation.js";
 import {
   BoardTile,
   Building,
@@ -295,6 +296,7 @@ export function createInitialScenario(world: World): void {
           entity
             .addComponent(CombatState)
             .addComponent(CombatCapability, { mode: "automatic" });
+          attachTurretAnimation(entity, model, gltf.animations);
         }
         attachHealthBar(holder);
       }
