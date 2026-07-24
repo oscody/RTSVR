@@ -19,6 +19,7 @@ import { detachAlienAnimation } from "./alienAnimation.js";
 import { updateHealthBar } from "./healthBar.js";
 import { removeUnitFromSelection } from "./selection.js";
 import { detachTurretAnimation } from "./turretAnimation.js";
+import { detachUnitAnimation } from "./unitAnimation.js";
 import {
   Building,
   BoardTile,
@@ -240,6 +241,7 @@ export class CombatSystem extends createSystem({
       }
     }
     if (target.hasComponent(Unit)) {
+      detachUnitAnimation(target);
       this.cancelConstruction(target);
       removeUnitFromSelection(target);
       boardState.cargoVisualByUnit.delete(target.index);

@@ -17,6 +17,7 @@ import { ScenarioResetSystem } from "./systems/scenarioReset.js";
 import { StructuresSystem } from "./systems/structures.js";
 import { TabletSystem } from "./systems/tablet.js";
 import { TurretAnimationSystem } from "./systems/turretAnimation.js";
+import { UnitAnimationSystem } from "./systems/unitAnimation.js";
 import { WaveSystem } from "./systems/wave.js";
 
 const assets: AssetManifest = {
@@ -49,6 +50,7 @@ const assets: AssetManifest = {
   rocksSmallA: { url: "/gltf/terrain/rocks_smallA.glb", type: AssetType.GLTF, priority: "critical" },
   rocksSmallB: { url: "/gltf/terrain/rocks_smallB.glb", type: AssetType.GLTF, priority: "critical" },
   astronautA: { url: "/gltf/astronautA.glb", type: AssetType.GLTF, priority: "critical" },
+  astronautAAnimated: { url: "/gltf/astronautA_A.glb", type: AssetType.GLTF, priority: "critical" },
   astronautB: { url: "/gltf/astronautB.glb", type: AssetType.GLTF, priority: "critical" },
   alien: { url: "/gltf/alien.glb", type: AssetType.GLTF, priority: "critical" },
   alienWalkingSlam: { url: "/gltf/alien_walking_slam_no_fx.glb", type: AssetType.GLTF, priority: "critical" },
@@ -94,6 +96,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(CombatSystem)
     .registerSystem(AlienAnimationSystem)
     .registerSystem(TurretAnimationSystem)
+    .registerSystem(UnitAnimationSystem)
     .registerSystem(MiningSystem)
     .registerSystem(ConstructionSystem)
     .registerSystem(CraftProductionSystem)

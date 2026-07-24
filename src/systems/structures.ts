@@ -26,6 +26,7 @@ import {
 import { attachAlienAnimation } from "./alienAnimation.js";
 import { attachHealthBar } from "./healthBar.js";
 import { attachTurretAnimation } from "./turretAnimation.js";
+import { attachUnitAnimation } from "./unitAnimation.js";
 import {
   BoardTile,
   Building,
@@ -109,7 +110,7 @@ const STRUCTURES: StructureSpec[] = [
   { asset: "rockLargeB", name: "RockLargeB3", widthTiles: 1, gridX: [14, 14], gridY: [6, 6], yawDeg: 270, terrain: "blocked" },
 
   // Crew — flanking the command center's front corners.
-  { asset: "astronautA", name: "AstronautA", widthTiles: 1, gridX: [9, 9], gridY: [12, 12], yawDeg: 180, unit: "astronaut", unitCategory: "command-center" },
+  { asset: "astronautAAnimated", name: "AstronautA", widthTiles: 1, gridX: [9, 9], gridY: [12, 12], yawDeg: 180, unit: "astronaut", unitCategory: "command-center" },
   { asset: "astronautB", name: "AstronautB", widthTiles: 1, gridX: [13, 13], gridY: [12, 12], yawDeg: 180, unit: "astronaut", unitCategory: "command-center" },
 
   // Aliens use live occupancy instead of stamped terrain so their old tile
@@ -259,6 +260,9 @@ export function createInitialScenario(world: World): void {
         }
         if (spec.unit === "astronaut") {
           entity.addComponent(ConstructionState);
+        }
+        if (spec.asset === "astronautAAnimated") {
+          attachUnitAnimation(entity, model, gltf.animations);
         }
         attachHealthBar(holder);
       }
