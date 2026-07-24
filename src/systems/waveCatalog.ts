@@ -125,6 +125,57 @@ export const WAVE_CATALOG: readonly WaveSpec[] = [
       releaseIntervalMultiplier: 0.75,
     },
   },
+  {
+    waveNumber: 4,
+    maxActiveAliens: 3,
+    releaseIntervalSeconds: 8,
+    threatBudget: {
+      budget: 46,
+      enemies: ["strongAlienMech", "alienDrake", "alien"],
+      edges: ["north", "east", "south", "west"],
+      minSpacingTiles: 2,
+    },
+    difficulty: {
+      healthMultiplier: 1.7,
+      speedMultiplier: 1.26,
+      maxActiveAliensMultiplier: 2,
+      releaseIntervalMultiplier: 0.68,
+    },
+  },
+  {
+    waveNumber: 5,
+    maxActiveAliens: 3,
+    releaseIntervalSeconds: 8,
+    threatBudget: {
+      budget: 60,
+      enemies: ["strongAlienMech", "alienDrake", "alien"],
+      edges: ["north", "east", "south", "west"],
+      minSpacingTiles: 2,
+    },
+    difficulty: {
+      healthMultiplier: 2,
+      speedMultiplier: 1.34,
+      maxActiveAliensMultiplier: 2.34,
+      releaseIntervalMultiplier: 0.6,
+    },
+  },
+  {
+    waveNumber: 6,
+    maxActiveAliens: 3,
+    releaseIntervalSeconds: 8,
+    threatBudget: {
+      budget: 76,
+      enemies: ["strongAlienMech", "alienDrake", "alien"],
+      edges: ["north", "east", "south", "west"],
+      minSpacingTiles: 2,
+    },
+    difficulty: {
+      healthMultiplier: 2.35,
+      speedMultiplier: 1.42,
+      maxActiveAliensMultiplier: 2.67,
+      releaseIntervalMultiplier: 0.52,
+    },
+  },
 ];
 
 export function getWaveSpec(waveNumber: number): WaveSpec | undefined {

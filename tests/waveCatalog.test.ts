@@ -15,10 +15,16 @@ test("wave catalog exposes the next wave for progression", () => {
   assert.equal(hasWaveSpec(1), true);
   assert.equal(hasWaveSpec(2), true);
   assert.equal(hasWaveSpec(3), true);
-  assert.equal(hasWaveSpec(4), false);
+  assert.equal(hasWaveSpec(4), true);
+  assert.equal(hasWaveSpec(5), true);
+  assert.equal(hasWaveSpec(6), true);
+  assert.equal(hasWaveSpec(7), false);
   assert.equal(getNextWaveSpec(1)?.waveNumber, 2);
   assert.equal(getNextWaveSpec(2)?.waveNumber, 3);
-  assert.equal(getNextWaveSpec(3), undefined);
+  assert.equal(getNextWaveSpec(3)?.waveNumber, 4);
+  assert.equal(getNextWaveSpec(4)?.waveNumber, 5);
+  assert.equal(getNextWaveSpec(5)?.waveNumber, 6);
+  assert.equal(getNextWaveSpec(6), undefined);
 });
 
 test("Wave 1 resolves deterministic legal edge spawns", () => {
@@ -73,7 +79,7 @@ test("Wave 2 is composed from a higher threat budget and difficulty multipliers"
   assert.ok(wave2Spawns.every(({ speedMultiplier }) => speedMultiplier === 1.1));
 });
 
-test("Wave 3 is a stronger final budget wave", () => {
+test("Wave 3 is a stronger budget wave", () => {
   const wave2 = getWaveSpec(2);
   const wave3 = getWaveSpec(3);
   assert.ok(wave2);
@@ -96,6 +102,42 @@ test("Wave 3 is a stronger final budget wave", () => {
   });
   assert.ok(wave3Spawns.every(({ healthMultiplier }) => healthMultiplier === 1.45));
   assert.ok(wave3Spawns.every(({ speedMultiplier }) => speedMultiplier === 1.18));
+});
+
+test("Waves 4 through 6 keep increasing budget and difficulty", () => {
+  const wave3 = getWaveSpec(3);
+  const wave4 = getWaveSpec(4);
+  const wave5 = getWaveSpec(5);
+  const wave6 = getWaveSpec(6);
+  assert.ok(wave3);
+  assert.ok(wave4);
+  assert.ok(wave5);
+  assert.ok(wave6);
+
+  const wave3Threat = threatTotal(resolveWaveSpawnGroups(wave3));
+  const wave4Threat = threatTotal(resolveWaveSpawnGroups(wave4));
+  const wave5Threat = threatTotal(resolveWaveSpawnGroups(wave5));
+  const wave6Groups = resolveWaveSpawnGroups(wave6);
+  const wave6Threat = threatTotal(wave6Groups);
+  const wave6Spawns = resolveWaveSpawns(wave6, { canSpawnAt: () => true });
+
+  assert.deepEqual(
+    [wave4.threatBudget?.budget, wave5.threatBudget?.budget, wave6.threatBudget?.budget],
+    [46, 60, 76],
+  );
+  assert.ok(wave4Threat > wave3Threat);
+  assert.ok(wave5Threat > wave4Threat);
+  assert.ok(wave6Threat > wave5Threat);
+  assert.equal(wave6Threat, wave6.threatBudget?.budget);
+  assert.ok(wave6Groups.some(({ enemy }) => enemy === "strongAlienMech"));
+  assert.ok(wave6Groups.some(({ enemy }) => enemy === "alienDrake"));
+  assert.ok(wave6Groups.some(({ enemy }) => enemy === "alien"));
+  assert.deepEqual(resolveWavePacing(wave6), {
+    maxActiveAliens: 8,
+    releaseIntervalSeconds: 4.16,
+  });
+  assert.ok(wave6Spawns.every(({ healthMultiplier }) => healthMultiplier === 2.35));
+  assert.ok(wave6Spawns.every(({ speedMultiplier }) => speedMultiplier === 1.42));
 });
 
 test("wave spawn resolver skips blocked cells and keeps spacing", () => {
