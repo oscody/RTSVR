@@ -38,10 +38,14 @@ export const BUILDING_MAX_HEALTH: Readonly<Record<string, number>> = {
 
 export const ENEMY_MAX_HEALTH: Readonly<Record<string, number>> = {
   alien: 80,
+  alienDrake: 60,
+  strongAlienMech: 160,
 };
 
 export const ENEMY_ATTACK_SPECS: Readonly<Record<string, AttackSpec>> = {
   alien: { damage: 10, cadence: 1, range: 0.2 },
+  alienDrake: { damage: 14, cadence: 0.9, range: 0.2 },
+  strongAlienMech: { damage: 18, cadence: 1.1, range: 0.2 },
 };
 
 export function canUnitAttack(kind: string): boolean {

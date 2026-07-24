@@ -9,6 +9,8 @@ import {
   UNIT_AUTO_ACQUIRE_RANGE,
   advanceAttackCycle,
   canUnitAttack,
+  getEnemyAttackSpec,
+  getEnemyMaxHealth,
   getUnitAttackSpec,
   isWithinAttackRange,
   resolveDamage,
@@ -24,6 +26,17 @@ test("only astronauts, rovers, and racers can attack", () => {
   assert.equal(canUnitAttack("cargo"), false);
   assert.equal(getUnitAttackSpec("miner"), undefined);
   assert.equal(getUnitAttackSpec("cargo"), undefined);
+});
+
+test("alien variants define distinct health and attack power", () => {
+  assert.equal(getEnemyMaxHealth("alien"), 80);
+  assert.equal(getEnemyMaxHealth("alienDrake"), 60);
+  assert.equal(getEnemyMaxHealth("strongAlienMech"), 160);
+
+  assert.ok(getEnemyMaxHealth("alienDrake") < getEnemyMaxHealth("alien"));
+  assert.ok(getEnemyMaxHealth("strongAlienMech") > getEnemyMaxHealth("alien"));
+  assert.ok(getEnemyAttackSpec("alienDrake").damage > getEnemyAttackSpec("alien").damage);
+  assert.ok(getEnemyAttackSpec("strongAlienMech").damage > getEnemyAttackSpec("alien").damage);
 });
 
 test("friendly automatic acquisition is shorter than turret range", () => {
