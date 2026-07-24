@@ -39,9 +39,13 @@ test("wave countdown releases staged aliens and stops after defeat", () => {
     timer: INITIAL_WAVE_DELAY_SECONDS,
     stage: "countdown",
   };
-  assert.equal(advanceWaveClock(clock, 1, "playing"), false);
-  assert.equal(clock.timer, INITIAL_WAVE_DELAY_SECONDS - 1);
-  assert.equal(advanceWaveClock(clock, 2, "playing"), true);
+  const firstTick = INITIAL_WAVE_DELAY_SECONDS / 2;
+  assert.equal(advanceWaveClock(clock, firstTick, "playing"), false);
+  assert.equal(clock.timer, INITIAL_WAVE_DELAY_SECONDS - firstTick);
+  assert.equal(
+    advanceWaveClock(clock, INITIAL_WAVE_DELAY_SECONDS, "playing"),
+    true,
+  );
   assert.deepEqual(clock, { waveNumber: 1, timer: 0, stage: "active" });
   assert.equal(advanceWaveClock(clock, 1, "defeat"), false);
   assert.deepEqual(clock, { waveNumber: 1, timer: 0, stage: "stopped" });

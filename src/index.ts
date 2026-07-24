@@ -7,6 +7,7 @@ import {
 import { BoardSystem } from "./systems/board.js";
 import { ConstructionSystem } from "./systems/construction.js";
 import { CombatSystem } from "./systems/combat.js";
+import { AlienAnimationSystem } from "./systems/alienAnimation.js";
 import { CraftProductionSystem } from "./systems/craftProduction.js";
 import { InteractionSystem } from "./systems/interaction.js";
 import { MiningSystem } from "./systems/mining.js";
@@ -49,6 +50,7 @@ const assets: AssetManifest = {
   astronautA: { url: "/gltf/astronautA.glb", type: AssetType.GLTF, priority: "critical" },
   astronautB: { url: "/gltf/astronautB.glb", type: AssetType.GLTF, priority: "critical" },
   alien: { url: "/gltf/alien.glb", type: AssetType.GLTF, priority: "critical" },
+  alienWalkingSlam: { url: "/gltf/alien_walking_slam_no_fx.glb", type: AssetType.GLTF, priority: "critical" },
   craftCargoA: { url: "/gltf/craft/craft_cargoA.glb", type: AssetType.GLTF, priority: "critical" },
   craftMiner: { url: "/gltf/craft/craft_miner.glb", type: AssetType.GLTF, priority: "critical" },
   craftRacer: { url: "/gltf/craft/craft_racer.glb", type: AssetType.GLTF, priority: "critical" },
@@ -89,6 +91,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(MovementSystem)
     .registerSystem(WaveSystem)
     .registerSystem(CombatSystem)
+    .registerSystem(AlienAnimationSystem)
     .registerSystem(MiningSystem)
     .registerSystem(ConstructionSystem)
     .registerSystem(CraftProductionSystem)

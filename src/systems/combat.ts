@@ -15,6 +15,7 @@ import {
 } from "./combatRules.js";
 import { worldToGrid } from "./board.js";
 import { footprintCells } from "./constructionRules.js";
+import { detachAlienAnimation } from "./alienAnimation.js";
 import { updateHealthBar } from "./healthBar.js";
 import { removeUnitFromSelection } from "./selection.js";
 import {
@@ -268,6 +269,9 @@ export class CombatSystem extends createSystem({
     // here would corrupt every clone using the same asset.
     if (target.hasComponent(RayInteractable)) {
       target.removeComponent(RayInteractable);
+    }
+    if (target.hasComponent(Enemy)) {
+      detachAlienAnimation(target);
     }
     target.dispose();
   }
