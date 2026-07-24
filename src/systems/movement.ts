@@ -1,7 +1,10 @@
 import { createSystem } from "@iwsdk/core";
 import { gridToWorld } from "./board.js";
 import { UNIT_ARRIVAL_EPSILON, UNIT_MOVE_SPEED } from "./constants.ts";
-import { updateUnitSelectionRing } from "./selection.js";
+import {
+  updateUnitAttackRangeRing,
+  updateUnitSelectionRing,
+} from "./selection.js";
 import { Unit, boardState } from "./state.js";
 
 export class MovementSystem extends createSystem({
@@ -29,6 +32,7 @@ export class MovementSystem extends createSystem({
           hideOrderMarker();
         }
         updateUnitSelectionRing(unit);
+        updateUnitAttackRangeRing(unit);
         return;
       }
 
@@ -41,6 +45,7 @@ export class MovementSystem extends createSystem({
       holder.rotation.y = Math.atan2(dx, dz);
 
       updateUnitSelectionRing(unit);
+      updateUnitAttackRangeRing(unit);
     });
   }
 }

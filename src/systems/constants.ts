@@ -20,8 +20,11 @@ export const ORDER_MARKER_OPACITY = 0.9;
 export const ORDER_MARKER_Y_OFFSET = 0.024;
 export const BUILD_MARKER_OPACITY = 0.5;
 
-export const TURRET_RANGE_RING_COLOR = 0xff2222;
-export const TURRET_RANGE_RING_THICKNESS = 0.02;
+export const ATTACK_RANGE_RING_COLOR = 0xff2222;
+export const ATTACK_RANGE_RING_THICKNESS = 0.02;
+export const ATTACK_RANGE_RING_OPACITY = 0.7;
+export const ATTACK_RANGE_RING_SEGMENTS = 48;
+export const ATTACK_RANGE_RING_Y_OFFSET = 0.026;
 
 export const BOARD_BACKGROUND_COLOR = 0xb8d8f1;
 export const BOARD_SUN_COLOR = 0xffffff;

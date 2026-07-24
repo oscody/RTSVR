@@ -6,11 +6,14 @@ import {
   type World,
 } from "@iwsdk/core";
 import { TILE_SIZE } from "./board.js";
-import { TURRET_ATTACK_SPEC } from "./combatRules.js";
+import { getUnitAttackSpec, TURRET_ATTACK_SPEC } from "./combatRules.js";
 import {
+  ATTACK_RANGE_RING_COLOR,
+  ATTACK_RANGE_RING_OPACITY,
+  ATTACK_RANGE_RING_SEGMENTS,
+  ATTACK_RANGE_RING_THICKNESS,
+  ATTACK_RANGE_RING_Y_OFFSET,
   SELECTION_MARKER_COLOR,
-  TURRET_RANGE_RING_COLOR,
-  TURRET_RANGE_RING_THICKNESS,
 } from "./constants.ts";
 import { toggleSelectionMembership } from "./selectionRules.js";
 import {
@@ -43,6 +46,7 @@ export function toggleUnitSelection(world: World, unit: Entity): boolean {
     boardState.selectedUnit = remaining[remaining.length - 1] ?? null;
   }
   setRingVisible(world, unit, selected);
+  setUnitAttackRangeRingVisible(world, unit, selected);
   publishSelectionSummary();
   return selected;
 }
@@ -52,6 +56,8 @@ export function clearUnitSelections(): void {
     unit.setValue(UnitSelection, "selected", false);
     const ring = boardState.selectionRingByUnit.get(unit.index)?.object3D;
     if (ring) ring.visible = false;
+    const rangeRing = boardState.attackRangeRingByUnit.get(unit.index)?.object3D;
+    if (rangeRing) rangeRing.visible = false;
   }
   boardState.selectedUnits.clear();
   boardState.selectedUnit = null;
@@ -63,6 +69,8 @@ export function removeUnitFromSelection(unit: Entity): void {
   unit.setValue(UnitSelection, "selected", false);
   const ring = boardState.selectionRingByUnit.get(unit.index)?.object3D;
   if (ring) ring.visible = false;
+  const rangeRing = boardState.attackRangeRingByUnit.get(unit.index)?.object3D;
+  if (rangeRing) rangeRing.visible = false;
   if (boardState.selectedUnit === unit) {
     const remaining = getSelectedUnits();
     boardState.selectedUnit = remaining[remaining.length - 1] ?? null;
@@ -72,6 +80,13 @@ export function removeUnitFromSelection(unit: Entity): void {
 
 export function updateUnitSelectionRing(unit: Entity): void {
   const ring = boardState.selectionRingByUnit.get(unit.index)?.object3D;
+  const object = unit.object3D;
+  if (!ring || !object) return;
+  ring.position.set(object.position.x, ring.position.y, object.position.z);
+}
+
+export function updateUnitAttackRangeRing(unit: Entity): void {
+  const ring = boardState.attackRangeRingByUnit.get(unit.index)?.object3D;
   const object = unit.object3D;
   if (!ring || !object) return;
   ring.position.set(object.position.x, ring.position.y, object.position.z);
@@ -107,17 +122,21 @@ function showTurretRangeRing(world: World, turret: Entity): void {
     if (!root) return;
     const range = TURRET_ATTACK_SPEC.range;
     const ring = new Mesh(
-      new RingGeometry(range - TURRET_RANGE_RING_THICKNESS, range, 48),
+      new RingGeometry(
+        range - ATTACK_RANGE_RING_THICKNESS,
+        range,
+        ATTACK_RANGE_RING_SEGMENTS,
+      ),
       new MeshBasicMaterial({
-        color: TURRET_RANGE_RING_COLOR,
+        color: ATTACK_RANGE_RING_COLOR,
         transparent: true,
-        opacity: 0.7,
+        opacity: ATTACK_RANGE_RING_OPACITY,
         depthWrite: false,
       }),
     );
     ring.name = `TurretRangeRing_${turret.index}`;
     ring.rotateX(-Math.PI / 2);
-    ring.position.y = 0.026;
+    ring.position.y = ATTACK_RANGE_RING_Y_OFFSET;
     const object = turret.object3D;
     if (object) ring.position.set(object.position.x, ring.position.y, object.position.z);
     ringEntity = world
@@ -126,6 +145,48 @@ function showTurretRangeRing(world: World, turret: Entity): void {
     boardState.rangeRingByTurret.set(turret.index, ringEntity);
   }
   if (ringEntity.object3D) ringEntity.object3D.visible = true;
+}
+
+function setUnitAttackRangeRingVisible(
+  world: World,
+  unit: Entity,
+  visible: boolean,
+): void {
+  const spec = getUnitAttackSpec(unit.getValue(Unit, "kind") ?? "");
+  if (!spec) {
+    const ring = boardState.attackRangeRingByUnit.get(unit.index)?.object3D;
+    if (ring) ring.visible = false;
+    return;
+  }
+
+  let ringEntity = boardState.attackRangeRingByUnit.get(unit.index);
+  if (!ringEntity && visible) {
+    const root = boardState.boardRoot;
+    if (!root) return;
+    const ring = new Mesh(
+      new RingGeometry(
+        spec.range - ATTACK_RANGE_RING_THICKNESS,
+        spec.range,
+        ATTACK_RANGE_RING_SEGMENTS,
+      ),
+      new MeshBasicMaterial({
+        color: ATTACK_RANGE_RING_COLOR,
+        transparent: true,
+        opacity: ATTACK_RANGE_RING_OPACITY,
+        depthWrite: false,
+      }),
+    );
+    ring.name = `UnitAttackRangeRing_${unit.index}`;
+    ring.rotateX(-Math.PI / 2);
+    ring.position.y = ATTACK_RANGE_RING_Y_OFFSET;
+    ringEntity = world
+      .createTransformEntity(ring, { parent: root })
+      .addComponent(BoardMarker, { kind: "unit-attack-range" });
+    boardState.attackRangeRingByUnit.set(unit.index, ringEntity);
+  }
+  if (!ringEntity?.object3D) return;
+  ringEntity.object3D.visible = visible;
+  updateUnitAttackRangeRing(unit);
 }
 
 function setRingVisible(world: World, unit: Entity, visible: boolean): void {

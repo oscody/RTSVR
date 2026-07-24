@@ -58,6 +58,10 @@ export class ScenarioResetSystem extends createSystem({
     clearUnitAnimations();
     for (const ring of boardState.selectionRingByUnit.values()) ring.dispose();
     boardState.selectionRingByUnit.clear();
+    for (const ring of boardState.attackRangeRingByUnit.values()) ring.dispose();
+    boardState.attackRangeRingByUnit.clear();
+    for (const ring of boardState.rangeRingByTurret.values()) ring.dispose();
+    boardState.rangeRingByTurret.clear();
 
     const staleObjects = Array.from(this.queries.objects.entities);
     for (const entity of staleObjects) {
@@ -73,6 +77,7 @@ export class ScenarioResetSystem extends createSystem({
     boardState.pathByUnit.clear();
     boardState.selectedUnits.clear();
     boardState.selectedUnit = null;
+    boardState.selectedTurret = null;
     boardState.selectedTile = null;
     boardState.hoveredTile = null;
     resetCraftSerial();

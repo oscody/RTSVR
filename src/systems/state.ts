@@ -202,6 +202,7 @@ export const boardState = {
   selectedUnit: null as Entity | null,
   selectedUnits: new Set<Entity>(),
   selectionRingByUnit: new Map<number, Entity>(),
+  attackRangeRingByUnit: new Map<number, Entity>(),
   selectedTurret: null as Entity | null,
   rangeRingByTurret: new Map<number, Entity>(),
   resourceByKey: new Map<string, Entity>(),

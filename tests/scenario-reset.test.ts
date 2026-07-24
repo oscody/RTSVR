@@ -96,6 +96,8 @@ test("restart clears transient state and rebuilds the initial scenario", () => {
   assert.match(source, /entity\.removeComponent\(RayInteractable\)/);
   assert.match(source, /entity\.dispose\(\)/);
   assert.match(source, /selectionRingByUnit\.clear\(\)/);
+  assert.match(source, /attackRangeRingByUnit\.clear\(\)/);
+  assert.match(source, /rangeRingByTurret\.clear\(\)/);
   assert.match(source, /resourceByKey\.clear\(\)/);
   assert.match(source, /cargoVisualByUnit\.clear\(\)/);
   assert.match(source, /pathByUnit\.clear\(\)/);
