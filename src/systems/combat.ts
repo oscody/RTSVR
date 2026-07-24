@@ -16,6 +16,7 @@ import {
 import { worldToGrid } from "./board.js";
 import { footprintCells } from "./constructionRules.js";
 import { detachAlienAnimation } from "./alienAnimation.js";
+import { detachCommandCenterAnimation } from "./commandCenterAnimation.js";
 import { updateHealthBar } from "./healthBar.js";
 import { detachMinerAnimation } from "./minerAnimation.js";
 import { removeUnitFromSelection } from "./selection.js";
@@ -260,6 +261,7 @@ export class CombatSystem extends createSystem({
           ?.setValue(BoardTile, "terrain", "open");
       }
       if (kind === "command-center") {
+        detachCommandCenterAnimation(target);
         this.markCommandCenterDestroyed();
         boardState.commandCenter = null;
       }

@@ -1,5 +1,6 @@
 import { Entity, createSystem } from "@iwsdk/core";
 import { GRID_SIZE, worldToGrid } from "./board.js";
+import { triggerCommandCenterDepositDoors } from "./commandCenterAnimation.js";
 import {
   DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
   MINING_GATHER_TIME_SECONDS,
@@ -114,6 +115,7 @@ export class MiningSystem extends createSystem({
         this.issueStoredOrder(miner, "depositX", "depositY");
       } else if (transition === "deposited") {
         this.setCargoVisible(miner, false);
+        triggerCommandCenterDepositDoors(boardState.commandCenter);
         if (this.cycle.stage === "toResource") {
           this.issueStoredOrder(miner, "approachX", "approachY");
         } else {

@@ -8,6 +8,7 @@ import { BoardSystem } from "./systems/board.js";
 import { ConstructionSystem } from "./systems/construction.js";
 import { CombatSystem } from "./systems/combat.js";
 import { AlienAnimationSystem } from "./systems/alienAnimation.js";
+import { CommandCenterAnimationSystem } from "./systems/commandCenterAnimation.js";
 import { CraftProductionSystem } from "./systems/craftProduction.js";
 import { InteractionSystem } from "./systems/interaction.js";
 import { MiningSystem } from "./systems/mining.js";
@@ -28,7 +29,7 @@ const assets: AssetManifest = {
     priority: "critical",
   },
   commandCenter: {
-    url: "/gltf/kenney_style_command_center.glb",
+    url: "/gltf/command_center.glb",
     type: AssetType.GLTF,
     priority: "critical",
   },
@@ -97,6 +98,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(WaveSystem)
     .registerSystem(CombatSystem)
     .registerSystem(AlienAnimationSystem)
+    .registerSystem(CommandCenterAnimationSystem)
     .registerSystem(TurretAnimationSystem)
     .registerSystem(UnitAnimationSystem)
     .registerSystem(MiningSystem)

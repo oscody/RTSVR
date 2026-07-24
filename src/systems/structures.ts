@@ -24,6 +24,7 @@ import {
   SMALL_CRYSTAL_NODE_CAPACITY,
 } from "./economyConstants.js";
 import { attachAlienAnimation } from "./alienAnimation.js";
+import { attachCommandCenterAnimation } from "./commandCenterAnimation.js";
 import { attachHealthBar } from "./healthBar.js";
 import { attachMinerAnimation } from "./minerAnimation.js";
 import { attachTurretAnimation } from "./turretAnimation.js";
@@ -305,6 +306,9 @@ export function createInitialScenario(world: World): void {
             .addComponent(CombatState)
             .addComponent(CombatCapability, { mode: "automatic" });
           attachTurretAnimation(entity, model, gltf.animations);
+        }
+        if (spec.building === "command-center") {
+          attachCommandCenterAnimation(entity, model, gltf.animations);
         }
         attachHealthBar(holder);
       }

@@ -1,5 +1,6 @@
 import { RayInteractable, createSystem, type Entity } from "@iwsdk/core";
 import { clearAlienAnimations } from "./alienAnimation.js";
+import { clearCommandCenterAnimations } from "./commandCenterAnimation.js";
 import { clearCraftProductionAnimations } from "./craftProductionAnimation.js";
 import { resetCraftSerial } from "./craftFactory.js";
 import { STARTING_CRYSTALS } from "./economyConstants.js";
@@ -50,6 +51,7 @@ export class ScenarioResetSystem extends createSystem({
   private resetScenario(source: Entity): void {
     clearUnitSelections();
     clearAlienAnimations();
+    clearCommandCenterAnimations();
     clearCraftProductionAnimations();
     clearMinerAnimations();
     clearTurretAnimations();
