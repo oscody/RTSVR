@@ -57,10 +57,28 @@ export const WAVE_CATALOG: readonly WaveSpec[] = [
       { enemy: "strongAlienMech", count: 1, edges: ["south"], minSpacingTiles: 3 },
     ],
   },
+  {
+    waveNumber: 2,
+    groups: [
+      { enemy: "alien", count: 8, edges: ["north", "east", "south", "west"], minSpacingTiles: 3 },
+      { enemy: "alienDrake", count: 3, edges: ["east", "south"], minSpacingTiles: 3 },
+      { enemy: "strongAlienMech", count: 2, edges: ["south", "west"], minSpacingTiles: 3 },
+    ],
+  },
 ];
 
 export function getWaveSpec(waveNumber: number): WaveSpec | undefined {
   return WAVE_CATALOG.find((spec) => spec.waveNumber === waveNumber);
+}
+
+export function hasWaveSpec(waveNumber: number): boolean {
+  return getWaveSpec(waveNumber) !== undefined;
+}
+
+export function getNextWaveSpec(waveNumber: number): WaveSpec | undefined {
+  return WAVE_CATALOG
+    .filter((spec) => spec.waveNumber > waveNumber)
+    .sort((left, right) => left.waveNumber - right.waveNumber)[0];
 }
 
 export function resolveWaveSpawns(

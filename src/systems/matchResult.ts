@@ -10,6 +10,7 @@ import {
 import {
   MatchResultPanel,
   MatchState,
+  WaveSource,
   boardState,
 } from "./state.js";
 
@@ -63,6 +64,8 @@ export class MatchResultSystem extends createSystem({
 
   private presentResult(status: string): void {
     const victory = status === "victory";
+    const waveNumber =
+      boardState.waveSource?.getValue(WaveSource, "waveNumber") ?? 1;
     this.element("result-panel")?.setProperties({
       borderColor: victory ? "#22c55e" : "#ef4444",
     });
@@ -72,7 +75,7 @@ export class MatchResultSystem extends createSystem({
     });
     this.element("result-body")?.setProperties({
       text: victory
-        ? "Wave 1 cleared. All aliens were defeated."
+        ? `Wave ${waveNumber} cleared. All aliens were defeated.`
         : "All friendly forces were destroyed.",
     });
   }

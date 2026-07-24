@@ -13,6 +13,7 @@ export const ENEMY_MODEL_FORWARD_YAW: Readonly<Record<string, number>> = {
 
 export type WaveStage = "countdown" | "active" | "stopped";
 export type MatchStatus = "playing" | "defeat" | "victory" | "restarting";
+export type WaveClearOutcome = "none" | "advance" | "victory";
 
 export interface WaveClockState {
   stage: WaveStage;
@@ -105,6 +106,20 @@ export function resolveMatchAfterWaveCleared(
   waveStage: WaveStage,
   remainingEnemies: number,
 ): MatchStatus {
-  if (current !== "playing" || waveStage !== "active") return current;
-  return remainingEnemies === 0 ? "victory" : current;
+  return resolveWaveClearOutcome(current, waveStage, remainingEnemies, false) ===
+    "victory"
+    ? "victory"
+    : current;
+}
+
+export function resolveWaveClearOutcome(
+  current: MatchStatus,
+  waveStage: WaveStage,
+  remainingEnemies: number,
+  hasNextWave: boolean,
+): WaveClearOutcome {
+  if (current !== "playing" || waveStage !== "active" || remainingEnemies > 0) {
+    return "none";
+  }
+  return hasNextWave ? "advance" : "victory";
 }

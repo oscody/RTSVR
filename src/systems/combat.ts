@@ -42,13 +42,15 @@ import {
   gridKey,
 } from "./state.js";
 import {
+  INITIAL_WAVE_DELAY_SECONDS,
   enemyFacingYaw,
   isAdjacentToFootprint,
   resolveMatchAfterFriendlyElimination,
-  resolveMatchAfterWaveCleared,
+  resolveWaveClearOutcome,
   type MatchStatus,
   type WaveStage,
 } from "./waveRules.js";
+import { getNextWaveSpec } from "./waveCatalog.js";
 
 export class CombatSystem extends createSystem({
   attackers: {
@@ -367,18 +369,53 @@ export class CombatSystem extends createSystem({
       "playing") as MatchStatus;
     const waveStage = (source.getValue(WaveSource, "stage") ??
       "countdown") as WaveStage;
-    const next = resolveMatchAfterWaveCleared(current, waveStage, remaining);
-    if (next === current) return;
-    source.setValue(MatchState, "status", next);
+    const waveNumber = source.getValue(WaveSource, "waveNumber") ?? 1;
+    const nextWave = getNextWaveSpec(waveNumber);
+    const outcome = resolveWaveClearOutcome(
+      current,
+      waveStage,
+      remaining,
+      nextWave !== undefined,
+    );
+    if (outcome === "none") return;
+    const tablet = boardState.tablet;
+    if (outcome === "advance" && nextWave) {
+      this.advanceToNextWave(source, nextWave.waveNumber, tablet);
+      return;
+    }
+    source.setValue(MatchState, "status", "victory");
     source.setValue(
       MatchState,
       "revision",
       (source.getValue(MatchState, "revision") ?? 0) + 1,
     );
-    const tablet = boardState.tablet;
+    this.setTabletStatus(tablet, `Wave ${waveNumber} cleared - victory`, "success");
+  }
+
+  private advanceToNextWave(
+    source: Entity,
+    waveNumber: number,
+    tablet: Entity | null,
+  ): void {
+    source.setValue(WaveSource, "waveNumber", waveNumber);
+    source.setValue(WaveSource, "timer", INITIAL_WAVE_DELAY_SECONDS);
+    source.setValue(WaveSource, "stage", "countdown");
+    source.setValue(
+      WaveSource,
+      "revision",
+      (source.getValue(WaveSource, "revision") ?? 0) + 1,
+    );
+    this.setTabletStatus(tablet, `Wave ${waveNumber} incoming`, "info");
+  }
+
+  private setTabletStatus(
+    tablet: Entity | null,
+    status: string,
+    statusKind: string,
+  ): void {
     if (!tablet) return;
-    tablet.setValue(TabletState, "status", "Wave 1 cleared - victory");
-    tablet.setValue(TabletState, "statusKind", "success");
+    tablet.setValue(TabletState, "status", status);
+    tablet.setValue(TabletState, "statusKind", statusKind);
     tablet.setValue(
       TabletState,
       "revision",

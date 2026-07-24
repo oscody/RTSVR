@@ -123,6 +123,8 @@ export class TabletSystem extends createSystem({
     });
     if (countingDown) {
       const waveTimer = waveSource?.getValue(WaveSource, "timer") ?? 0;
+      const waveNumber = waveSource?.getValue(WaveSource, "waveNumber") ?? 1;
+      this.setText("wave-banner-label", `Wave ${waveNumber} incoming in`);
       this.setText("wave-countdown", `${Math.max(0, Math.ceil(waveTimer))}`);
     }
 

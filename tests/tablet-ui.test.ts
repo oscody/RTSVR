@@ -26,6 +26,16 @@ test("build and craft catalogs require an explicit produce command", () => {
   assert.match(source, /id="craft-produce"/);
 });
 
+test("wave banner exposes dynamic wave countdown text", () => {
+  const source = readFileSync(
+    new URL("../ui/rts-tablet.uikitml", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /id="wave-banner-label"/);
+  assert.match(source, /id="wave-countdown"/);
+  assert.match(source, /Wave 1 incoming in/);
+});
+
 test("Units view exposes four roster slots and pagination controls", () => {
   const source = readFileSync(
     new URL("../ui/rts-tablet.uikitml", import.meta.url),

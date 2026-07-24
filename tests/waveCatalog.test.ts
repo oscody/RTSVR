@@ -2,10 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  getNextWaveSpec,
   getWaveSpec,
+  hasWaveSpec,
   resolveWaveSpawns,
   type WaveSpec,
 } from "../src/systems/waveCatalog.ts";
+
+test("wave catalog exposes the next wave for progression", () => {
+  assert.equal(hasWaveSpec(1), true);
+  assert.equal(hasWaveSpec(2), true);
+  assert.equal(hasWaveSpec(3), false);
+  assert.equal(getNextWaveSpec(1)?.waveNumber, 2);
+  assert.equal(getNextWaveSpec(2), undefined);
+});
 
 test("Wave 1 resolves deterministic legal edge spawns", () => {
   const spec = getWaveSpec(1);

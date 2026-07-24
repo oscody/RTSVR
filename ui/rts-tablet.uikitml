@@ -536,7 +536,7 @@
     <button id="exit-vr" class="exit-button"><LogOutIcon class="exit-icon"></LogOutIcon><span>Exit VR</span></button>
   </div>
   <div id="wave-banner" class="wave-banner">
-    <span class="wave-banner-label">Next wave in</span>
+    <span id="wave-banner-label" class="wave-banner-label">Wave 1 incoming in</span>
     <span id="wave-countdown" class="wave-banner-value">3</span>
   </div>
   <div class="tabs">

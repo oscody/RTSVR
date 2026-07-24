@@ -16,6 +16,7 @@ import {
   isAdjacentToFootprint,
   resolveMatchAfterFriendlyElimination,
   resolveMatchAfterWaveCleared,
+  resolveWaveClearOutcome,
   type LocalPosition,
   type WaveClockState,
 } from "../src/systems/waveRules.ts";
@@ -135,4 +136,15 @@ test("Wave 1 victory waits for activation and zero living enemies", () => {
   assert.equal(resolveMatchAfterWaveCleared("playing", "active", 1), "playing");
   assert.equal(resolveMatchAfterWaveCleared("playing", "active", 0), "victory");
   assert.equal(resolveMatchAfterWaveCleared("defeat", "active", 0), "defeat");
+});
+
+test("wave clear advances when another catalog wave exists", () => {
+  assert.equal(
+    resolveWaveClearOutcome("playing", "countdown", 0, true),
+    "none",
+  );
+  assert.equal(resolveWaveClearOutcome("playing", "active", 1, true), "none");
+  assert.equal(resolveWaveClearOutcome("playing", "active", 0, true), "advance");
+  assert.equal(resolveWaveClearOutcome("playing", "active", 0, false), "victory");
+  assert.equal(resolveWaveClearOutcome("defeat", "active", 0, true), "none");
 });
