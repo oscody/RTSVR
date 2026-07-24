@@ -1,5 +1,6 @@
 import { Entity, createSystem } from "@iwsdk/core";
 import { GRID_SIZE, gridToWorld, worldToGrid } from "./board.js";
+import { UNIT_APPROACH_OFFSETS } from "./constants.ts";
 import { footprintApproaches } from "./constructionRules.js";
 import { findGridPath, type GridPosition } from "./navigation.js";
 import {
@@ -27,13 +28,6 @@ import {
   type WaveClockState,
   type WaveStage,
 } from "./waveRules.js";
-
-const UNIT_APPROACH_OFFSETS = [
-  [0, -1],
-  [1, 0],
-  [0, 1],
-  [-1, 0],
-] as const;
 
 interface TargetPath {
   target: Entity;

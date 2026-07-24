@@ -23,10 +23,37 @@ import {
   boardState,
   gridKey,
 } from "./state.js";
-
-export const GRID_SIZE = 24;
-export const TILE_SIZE = 0.18;
-export const BOARD_Y = 0.78;
+import {
+  BOARD_BACKGROUND_COLOR,
+  BOARD_SUN_COLOR,
+  BOARD_SUN_INTENSITY,
+  BOARD_SUN_POSITION,
+  BOARD_Y,
+  BUILD_MARKER_OPACITY,
+  BUILD_MARKER_COLOR,
+  GRID_SIZE,
+  HOVER_MARKER_COLOR,
+  MARKER_OPACITY,
+  MARKER_TILE_SCALE,
+  MARKER_Y_OFFSET,
+  ORDER_MARKER_COLOR,
+  ORDER_MARKER_INNER_SCALE,
+  ORDER_MARKER_OPACITY,
+  ORDER_MARKER_OUTER_SCALE,
+  ORDER_MARKER_Y_OFFSET,
+  SELECTION_MARKER_COLOR,
+  TABLE_COLOR,
+  TABLE_EDGE_PADDING,
+  TABLE_METALNESS,
+  TABLE_ROUGHNESS,
+  TABLE_THICKNESS,
+  TABLE_Y_OFFSET,
+  TERRAIN_TILE_SCALE,
+  TILE_SIZE,
+  TILE_PROXY_HEIGHT,
+  TILE_PROXY_Y_OFFSET,
+} from "./constants.ts";
+export { BOARD_Y, GRID_SIZE, TILE_SIZE } from "./constants.ts";
 
 export function gridToWorld(x: number, y: number): [number, number] {
   const offset = (GRID_SIZE * TILE_SIZE) / 2 - TILE_SIZE / 2;
@@ -43,23 +70,23 @@ export function worldToGrid(localX: number, localZ: number): [number, number] {
 
 function makeMarker(color: number): Mesh {
   const marker = new Mesh(
-    new PlaneGeometry(TILE_SIZE * 1.08, TILE_SIZE * 1.08),
+    new PlaneGeometry(TILE_SIZE * MARKER_TILE_SCALE, TILE_SIZE * MARKER_TILE_SCALE),
     new MeshBasicMaterial({
       color,
       transparent: true,
-      opacity: 0.42,
+      opacity: MARKER_OPACITY,
       depthWrite: false,
     }),
   );
   marker.rotateX(-Math.PI / 2);
-  marker.position.y = 0.023;
+  marker.position.y = MARKER_Y_OFFSET;
   marker.visible = false;
   return marker;
 }
 
 export class BoardSystem extends createSystem({}) {
   init(): void {
-    this.world.scene.background = new Color(0xb8d8f1);
+    this.world.scene.background = new Color(BOARD_BACKGROUND_COLOR);
 
     const rootObject = new Group();
     rootObject.name = "BoardRoot";
@@ -67,30 +94,30 @@ export class BoardSystem extends createSystem({}) {
     const root = this.world.createTransformEntity(rootObject);
     boardState.boardRoot = root;
 
-    const sun = new DirectionalLight(0xffffff, 2.4);
-    sun.position.set(2.5, 4, 3);
+    const sun = new DirectionalLight(BOARD_SUN_COLOR, BOARD_SUN_INTENSITY);
+    sun.position.set(...BOARD_SUN_POSITION);
     sun.name = "BoardSun";
     this.world.createTransformEntity(sun, { parent: root });
 
     const table = new Mesh(
       new BoxGeometry(
-        GRID_SIZE * TILE_SIZE + 0.45,
-        0.12,
-        GRID_SIZE * TILE_SIZE + 0.45,
+        GRID_SIZE * TILE_SIZE + TABLE_EDGE_PADDING,
+        TABLE_THICKNESS,
+        GRID_SIZE * TILE_SIZE + TABLE_EDGE_PADDING,
       ),
       new MeshStandardMaterial({
-        color: 0x5a4a36,
-        roughness: 0.8,
-        metalness: 0.05,
+        color: TABLE_COLOR,
+        roughness: TABLE_ROUGHNESS,
+        metalness: TABLE_METALNESS,
       }),
     );
     table.name = "BoardTable";
-    table.position.y = -0.08;
+    table.position.y = TABLE_Y_OFFSET;
     this.world.createTransformEntity(table, { parent: root });
 
     // The terrain.glb tile is a zero-thickness plane; give each tile a thin
     // invisible box so the ray BVH has a volume to hit.
-    const proxyGeometry = new BoxGeometry(1, 0.06, 1);
+    const proxyGeometry = new BoxGeometry(1, TILE_PROXY_HEIGHT, 1);
     const proxyMaterial = new MeshBasicMaterial({
       colorWrite: false,
       depthWrite: false,
@@ -106,9 +133,9 @@ export class BoardSystem extends createSystem({}) {
         tile.name = `Tile_${x}_${y}`;
         const [worldX, worldZ] = gridToWorld(x, y);
         tile.position.set(worldX, 0, worldZ);
-        tile.scale.setScalar(TILE_SIZE * 0.96);
+        tile.scale.setScalar(TILE_SIZE * TERRAIN_TILE_SCALE);
         const proxy = new Mesh(proxyGeometry, proxyMaterial);
-        proxy.position.y = 0.03;
+        proxy.position.y = TILE_PROXY_Y_OFFSET;
         tile.add(proxy);
         const tileEntity = this.world
           .createTransformEntity(tile, { parent: root })
@@ -118,13 +145,13 @@ export class BoardSystem extends createSystem({}) {
       }
     }
 
-    const hoverMesh = makeMarker(0xfacc15);
+    const hoverMesh = makeMarker(HOVER_MARKER_COLOR);
     hoverMesh.name = "BoardHoverMarker";
     boardState.hoverMarker = this.world
       .createTransformEntity(hoverMesh, { parent: root })
       .addComponent(BoardMarker, { kind: "hover" });
 
-    const selectionMesh = makeMarker(0x38bdf8);
+    const selectionMesh = makeMarker(SELECTION_MARKER_COLOR);
     selectionMesh.name = "BoardSelectionMarker";
     boardState.selectionMarker = this.world
       .createTransformEntity(selectionMesh, { parent: root })
@@ -132,25 +159,29 @@ export class BoardSystem extends createSystem({}) {
 
     // Order marker — an orange ring at an accepted move destination.
     const orderMesh = new Mesh(
-      new RingGeometry(TILE_SIZE * 0.38, TILE_SIZE * 0.5, 32),
+      new RingGeometry(
+        TILE_SIZE * ORDER_MARKER_INNER_SCALE,
+        TILE_SIZE * ORDER_MARKER_OUTER_SCALE,
+        32,
+      ),
       new MeshBasicMaterial({
-        color: 0xffbd59,
+        color: ORDER_MARKER_COLOR,
         transparent: true,
-        opacity: 0.9,
+        opacity: ORDER_MARKER_OPACITY,
         depthWrite: false,
       }),
     );
     orderMesh.name = "BoardOrderMarker";
     orderMesh.rotateX(-Math.PI / 2);
-    orderMesh.position.y = 0.024;
+    orderMesh.position.y = ORDER_MARKER_Y_OFFSET;
     orderMesh.visible = false;
     boardState.orderMarker = this.world
       .createTransformEntity(orderMesh, { parent: root })
       .addComponent(BoardMarker, { kind: "order" });
 
-    const buildMesh = makeMarker(0x22c55e);
+    const buildMesh = makeMarker(BUILD_MARKER_COLOR);
     buildMesh.name = "BoardBuildFootprintMarker";
-    (buildMesh.material as MeshBasicMaterial).opacity = 0.5;
+    (buildMesh.material as MeshBasicMaterial).opacity = BUILD_MARKER_OPACITY;
     boardState.buildMarker = this.world
       .createTransformEntity(buildMesh, { parent: root })
       .addComponent(BoardMarker, { kind: "build" });

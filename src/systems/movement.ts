@@ -1,12 +1,8 @@
 import { createSystem } from "@iwsdk/core";
 import { gridToWorld } from "./board.js";
+import { UNIT_ARRIVAL_EPSILON, UNIT_MOVE_SPEED } from "./constants.ts";
 import { updateUnitSelectionRing } from "./selection.js";
 import { Unit, boardState } from "./state.js";
-
-const UNIT_SPEED = 0.35; // meters per second across the tabletop
-// Arrival tolerance — a move-to-threshold check without an epsilon can stall
-// on Float32 rounding (the pre-reset tank bug).
-const ARRIVAL_EPSILON = 0.005;
 
 export class MovementSystem extends createSystem({
   units: { required: [Unit] },
@@ -25,7 +21,7 @@ export class MovementSystem extends createSystem({
       const dz = targetZ - holder.position.z;
       const distance = Math.sqrt(dx * dx + dz * dz);
 
-      if (distance <= ARRIVAL_EPSILON) {
+      if (distance <= UNIT_ARRIVAL_EPSILON) {
         holder.position.x = targetX;
         holder.position.z = targetZ;
         unit.setValue(Unit, "hasOrder", false);
@@ -39,7 +35,7 @@ export class MovementSystem extends createSystem({
       // Travel is intentionally direct and collision-free. Occupancy is only
       // enforced for the final order tile, so units can cross scenery and
       // other pieces until pathfinding is introduced.
-      const step = Math.min(distance, UNIT_SPEED * delta);
+      const step = Math.min(distance, UNIT_MOVE_SPEED * delta);
       holder.position.x += (dx / distance) * step;
       holder.position.z += (dz / distance) * step;
       holder.rotation.y = Math.atan2(dx, dz);

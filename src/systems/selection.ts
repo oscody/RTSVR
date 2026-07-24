@@ -7,6 +7,11 @@ import {
 } from "@iwsdk/core";
 import { TILE_SIZE } from "./board.js";
 import { TURRET_ATTACK_SPEC } from "./combatRules.js";
+import {
+  SELECTION_MARKER_COLOR,
+  TURRET_RANGE_RING_COLOR,
+  TURRET_RANGE_RING_THICKNESS,
+} from "./constants.ts";
 import { toggleSelectionMembership } from "./selectionRules.js";
 import {
   BoardMarker,
@@ -15,9 +20,6 @@ import {
   UnitSelection,
   boardState,
 } from "./state.js";
-
-const TURRET_RANGE_RING_COLOR = 0xff2222;
-const TURRET_RANGE_RING_THICKNESS = 0.02;
 
 export function getSelectedUnits(): Entity[] {
   return Array.from(boardState.selectedUnits).filter(
@@ -134,7 +136,7 @@ function setRingVisible(world: World, unit: Entity, visible: boolean): void {
     const ring = new Mesh(
       new RingGeometry(TILE_SIZE * 0.4, TILE_SIZE * 0.53, 32),
       new MeshBasicMaterial({
-        color: 0x38bdf8,
+        color: SELECTION_MARKER_COLOR,
         transparent: true,
         opacity: 0.9,
         depthWrite: false,

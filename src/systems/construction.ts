@@ -8,6 +8,12 @@ import {
   type World,
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
+import {
+  CONSTRUCTION_FOUNDATION_COLOR,
+  CONSTRUCTION_FOUNDATION_OPACITY,
+  PROGRESS_BACKGROUND_COLOR,
+  PROGRESS_FILL_COLOR,
+} from "./constants.ts";
 import { createBuildingEntity } from "./buildingFactory.js";
 import { getBuildingSpec, type BuildingSpec } from "./buildingCatalog.js";
 import {
@@ -46,9 +52,9 @@ export function createConstructionSite(
   const foundation = new Mesh(
     new BoxGeometry(footprintSize, 0.024, footprintSize),
     new MeshBasicMaterial({
-      color: 0x38bdf8,
+      color: CONSTRUCTION_FOUNDATION_COLOR,
       transparent: true,
-      opacity: 0.35,
+      opacity: CONSTRUCTION_FOUNDATION_OPACITY,
       depthWrite: false,
     }),
   );
@@ -57,13 +63,13 @@ export function createConstructionSite(
 
   const progressBackground = new Mesh(
     new BoxGeometry(footprintSize, 0.028, 0.035),
-    new MeshBasicMaterial({ color: 0x263845 }),
+    new MeshBasicMaterial({ color: PROGRESS_BACKGROUND_COLOR }),
   );
   progressBackground.position.set(0, TILE_SIZE * 0.8, 0);
   holder.add(progressBackground);
   const progressFill = new Mesh(
     new BoxGeometry(footprintSize, 0.032, 0.04),
-    new MeshBasicMaterial({ color: 0x22c55e }),
+    new MeshBasicMaterial({ color: PROGRESS_FILL_COLOR }),
   );
   progressFill.name = "ConstructionProgressFill";
   progressFill.position.set(-footprintSize / 2, TILE_SIZE * 0.8, 0.001);

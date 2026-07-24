@@ -1,3 +1,5 @@
+import { PATH_DIRECTIONS } from "./constants.ts";
+
 export interface GridPosition {
   x: number;
   y: number;
@@ -16,13 +18,6 @@ interface PathOptions {
   gridSize: number;
   canStandAt: (x: number, y: number) => boolean;
 }
-
-const PATH_DIRECTIONS = [
-  [0, -1],
-  [1, 0],
-  [0, 1],
-  [-1, 0],
-] as const;
 
 // Four-neighbor BFS returns a shortest grid path without the starting cell.
 // The goal list can contain every open work tile around a building footprint.

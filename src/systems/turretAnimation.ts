@@ -7,14 +7,13 @@ import {
   type Object3D,
 } from "three";
 import { TURRET_ATTACK_SPEC } from "./combatRules.js";
+import { TURRET_FIRE_RECOIL_CLIP } from "./constants.ts";
 import {
   Building,
   CombatCapability,
   CombatState,
   Health,
 } from "./state.js";
-
-const FIRE_RECOIL_CLIP = "Fire_Recoil";
 
 interface TurretAnimationController {
   action: AnimationAction;
@@ -30,7 +29,7 @@ export function attachTurretAnimation(
   root: Object3D,
   clips: AnimationClip[],
 ): void {
-  const clip = AnimationClip.findByName(clips, FIRE_RECOIL_CLIP);
+  const clip = AnimationClip.findByName(clips, TURRET_FIRE_RECOIL_CLIP);
   if (!clip) return;
 
   const mixer = new AnimationMixer(root);

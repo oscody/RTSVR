@@ -17,6 +17,40 @@ import { CRAFT_CATALOG, getCraftSpec } from "./craftCatalog.js";
 import { validateCraftPurchase } from "./craftRules.js";
 import { validateBuildOrder } from "./constructionRules.js";
 import {
+  TABLET_CARD_BORDER,
+  TABLET_COMMAND_CENTER_X_OFFSET,
+  TABLET_EMPTY_UNIT_BACKGROUND,
+  TABLET_EMPTY_UNIT_BORDER,
+  TABLET_FRAME_COLOR,
+  TABLET_FRAME_METALNESS,
+  TABLET_FRAME_ROUGHNESS,
+  TABLET_FRAME_SIZE,
+  TABLET_FRAME_Z_OFFSET,
+  TABLET_HANDLE_COLOR,
+  TABLET_HANDLE_METALNESS,
+  TABLET_HANDLE_ROUGHNESS,
+  TABLET_HANDLE_SIZE,
+  TABLET_HANDLE_X_OFFSET,
+  TABLET_LOCKED_UNIT_BACKGROUND,
+  TABLET_LOCKED_UNIT_BORDER,
+  TABLET_PANEL_MAX_HEIGHT,
+  TABLET_PANEL_MAX_WIDTH,
+  TABLET_ROTATION,
+  TABLET_SCREEN_Z_OFFSET,
+  TABLET_SELECTED_BUILD_BORDER,
+  TABLET_SELECTED_CRAFT_BORDER,
+  TABLET_SELECTED_UNIT_BACKGROUND,
+  TABLET_STATUS_ERROR_COLOR,
+  TABLET_STATUS_INFO_COLOR,
+  TABLET_STATUS_SUCCESS_COLOR,
+  TABLET_TAB_ACTIVE_BACKGROUND,
+  TABLET_TAB_ACTIVE_BORDER,
+  TABLET_TAB_INACTIVE_BACKGROUND,
+  TABLET_TAB_INACTIVE_BORDER,
+  TABLET_UNIT_BACKGROUND,
+  TABLET_Y_OFFSET,
+} from "./constants.ts";
+import {
   clearUnitSelections,
   getSingleSelectedUnit,
   toggleUnitSelection,
@@ -139,10 +173,10 @@ export class TabletSystem extends createSystem({
     element(document, "tablet-status")?.setProperties({
       color:
         tablet.getValue(TabletState, "statusKind") === "error"
-          ? "#b42318"
+          ? TABLET_STATUS_ERROR_COLOR
           : tablet.getValue(TabletState, "statusKind") === "success"
-            ? "#176b55"
-            : "#365466",
+            ? TABLET_STATUS_SUCCESS_COLOR
+            : TABLET_STATUS_INFO_COLOR,
     });
     const astronautIndex = tablet.getValue(TabletState, "astronautIndex") ?? -1;
     this.setText(
@@ -196,29 +230,29 @@ export class TabletSystem extends createSystem({
     const frame = new Group();
     frame.name = "RTSVRTablet";
     const backing = new Mesh(
-      new BoxGeometry(0.7, 0.55, 0.026),
+      new BoxGeometry(...TABLET_FRAME_SIZE),
       new MeshStandardMaterial({
-        color: 0x536a7d,
-        roughness: 0.62,
-        metalness: 0.18,
+        color: TABLET_FRAME_COLOR,
+        roughness: TABLET_FRAME_ROUGHNESS,
+        metalness: TABLET_FRAME_METALNESS,
       }),
     );
     backing.name = "RTSVRTabletFrame";
-    backing.position.z = -0.018;
+    backing.position.z = TABLET_FRAME_Z_OFFSET;
     // The backing covers the whole panel. Keep it visual-only so it cannot
     // intercept pointer rays before UIKit's buttons receive them.
     backing.raycast = () => {};
     frame.add(backing);
     const handle = new Mesh(
-      new BoxGeometry(0.045, 0.26, 0.045),
+      new BoxGeometry(...TABLET_HANDLE_SIZE),
       new MeshStandardMaterial({
-        color: 0x1d2b36,
-        roughness: 0.48,
-        metalness: 0.25,
+        color: TABLET_HANDLE_COLOR,
+        roughness: TABLET_HANDLE_ROUGHNESS,
+        metalness: TABLET_HANDLE_METALNESS,
       }),
     );
     handle.name = "RTSVRTabletGrabHandle";
-    handle.position.set(0.382, 0, 0);
+    handle.position.set(TABLET_HANDLE_X_OFFSET, 0, 0);
     frame.add(handle);
 
     const shell = this.world
@@ -230,8 +264,8 @@ export class TabletSystem extends createSystem({
       .createTransformEntity(undefined, { parent: shell })
       .addComponent(PanelUI, {
         config: "./ui/rts-tablet.json",
-        maxWidth: 0.66,
-        maxHeight: 0.51,
+        maxWidth: TABLET_PANEL_MAX_WIDTH,
+        maxHeight: TABLET_PANEL_MAX_HEIGHT,
       })
       .addComponent(RayInteractable)
       .addComponent(TabletState);
@@ -244,14 +278,14 @@ export class TabletSystem extends createSystem({
       );
     }
     tablet.object3D!.name = "RTSVRTabletScreen";
-    tablet.object3D!.position.z = 0.002;
+    tablet.object3D!.position.z = TABLET_SCREEN_Z_OFFSET;
     const commandCenter = boardState.commandCenter?.object3D;
     shell.object3D!.position.set(
-      (commandCenter?.position.x ?? 0) + 0.72,
-      0.78,
+      (commandCenter?.position.x ?? 0) + TABLET_COMMAND_CENTER_X_OFFSET,
+      TABLET_Y_OFFSET,
       commandCenter?.position.z ?? 0,
     );
-    shell.object3D!.rotation.set(-0.16, 0.25, 0);
+    shell.object3D!.rotation.set(...TABLET_ROTATION);
     boardState.tablet = tablet;
   }
 
@@ -383,8 +417,14 @@ export class TabletSystem extends createSystem({
     ];
     for (const [id, tabView] of tabs) {
       element(this.document!, id)?.setProperties({
-        backgroundColor: view === tabView ? "#93b4c5" : "#c8d4dc",
-        borderColor: view === tabView ? "#315d73" : "#8497a5",
+        backgroundColor:
+          view === tabView
+            ? TABLET_TAB_ACTIVE_BACKGROUND
+            : TABLET_TAB_INACTIVE_BACKGROUND,
+        borderColor:
+          view === tabView
+            ? TABLET_TAB_ACTIVE_BORDER
+            : TABLET_TAB_INACTIVE_BORDER,
         borderWidth: view === tabView ? 2 : 1,
       });
     }
@@ -393,7 +433,8 @@ export class TabletSystem extends createSystem({
   private applySelectedCard(kind: string): void {
     for (const spec of BUILDING_CATALOG.filter((item) => !item.locked)) {
       element(this.document!, `build-${spec.kind}`)?.setProperties({
-        borderColor: spec.kind === kind ? "#38bdf8" : "#9aa8b4",
+        borderColor:
+          spec.kind === kind ? TABLET_SELECTED_BUILD_BORDER : TABLET_CARD_BORDER,
         borderWidth: spec.kind === kind ? 3 : 1,
       });
     }
@@ -409,7 +450,10 @@ export class TabletSystem extends createSystem({
       const spec = CRAFT_CATALOG[page * 4 + slot];
       element(this.document!, `craft-card-${slot}`)?.setProperties({
         display: spec ? "flex" : "none",
-        borderColor: spec?.kind === selectedKind ? "#0e7490" : "#9aa8b4",
+        borderColor:
+          spec?.kind === selectedKind
+            ? TABLET_SELECTED_CRAFT_BORDER
+            : TABLET_CARD_BORDER,
         borderWidth: spec?.kind === selectedKind ? 3 : 1,
       });
       if (!spec) continue;
@@ -458,8 +502,12 @@ export class TabletSystem extends createSystem({
         const selected =
           entry.entity.getValue(UnitSelection, "selected") ?? false;
         card?.setProperties({
-          backgroundColor: selected ? "#d9f1f7" : "#f7fafc",
-          borderColor: selected ? "#0e7490" : "#9aa8b4",
+          backgroundColor: selected
+            ? TABLET_SELECTED_UNIT_BACKGROUND
+            : TABLET_UNIT_BACKGROUND,
+          borderColor: selected
+            ? TABLET_SELECTED_CRAFT_BORDER
+            : TABLET_CARD_BORDER,
           borderWidth: selected ? 3 : 1,
           cursor: "pointer",
         });
@@ -477,8 +525,10 @@ export class TabletSystem extends createSystem({
 
       const locked = slot === 3;
       card?.setProperties({
-        backgroundColor: locked ? "#cbd3d8" : "#edf2f5",
-        borderColor: locked ? "#a7b0b6" : "#bdc9d0",
+        backgroundColor: locked
+          ? TABLET_LOCKED_UNIT_BACKGROUND
+          : TABLET_EMPTY_UNIT_BACKGROUND,
+        borderColor: locked ? TABLET_LOCKED_UNIT_BORDER : TABLET_EMPTY_UNIT_BORDER,
         borderWidth: 1,
         cursor: "default",
       });

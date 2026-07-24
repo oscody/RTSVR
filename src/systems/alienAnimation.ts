@@ -6,11 +6,12 @@ import {
   type AnimationAction,
   type Object3D,
 } from "three";
+import {
+  ALIEN_ATTACK_CLIPS,
+  ALIEN_MOVE_CLIPS,
+  ANIMATION_CROSS_FADE_SECONDS,
+} from "./constants.ts";
 import { CombatState, Enemy, Health, WaveUnit } from "./state.js";
-
-const WALK_CLIPS = ["Walk", "Fly"];
-const ATTACK_CLIPS = ["Energy_Slam", "Attack"];
-const CROSS_FADE_SECONDS = 0.12;
 
 type AlienAnimationState = "idle" | "move" | "attack";
 
@@ -38,8 +39,8 @@ export function attachAlienAnimation(
   root: Object3D,
   clips: AnimationClip[],
 ): void {
-  const moveClip = findClipByNames(clips, WALK_CLIPS);
-  const attackClip = findClipByNames(clips, ATTACK_CLIPS);
+  const moveClip = findClipByNames(clips, ALIEN_MOVE_CLIPS);
+  const attackClip = findClipByNames(clips, ALIEN_ATTACK_CLIPS);
   if (!moveClip && !attackClip) return;
 
   const mixer = new AnimationMixer(root);
@@ -97,9 +98,9 @@ function playAnimation(
   const previous = controller.actions[controller.current as "move" | "attack"];
   const next = controller.actions[nextState as "move" | "attack"];
 
-  previous?.fadeOut(CROSS_FADE_SECONDS);
+  previous?.fadeOut(ANIMATION_CROSS_FADE_SECONDS);
   if (next) {
-    next.reset().fadeIn(CROSS_FADE_SECONDS).play();
+    next.reset().fadeIn(ANIMATION_CROSS_FADE_SECONDS).play();
   }
   controller.current = nextState;
 }

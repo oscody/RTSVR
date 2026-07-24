@@ -6,12 +6,13 @@ import {
   type AnimationAction,
   type Object3D,
 } from "three";
+import {
+  ANIMATION_CROSS_FADE_SECONDS,
+  MINER_IDLE_CLIP,
+  MINER_MINING_CLIP,
+  MINER_MOVE_CLIP,
+} from "./constants.ts";
 import { Health, MinerState, Unit } from "./state.js";
-
-const IDLE_CLIP = "Idle_Hover";
-const MOVE_CLIP = "Move";
-const MINING_CLIP = "Mining_Loop";
-const CROSS_FADE_SECONDS = 0.12;
 
 type MinerAnimationState = "idle" | "move" | "mine";
 
@@ -28,9 +29,9 @@ export function attachMinerAnimation(
   root: Object3D,
   clips: AnimationClip[],
 ): void {
-  const idleClip = AnimationClip.findByName(clips, IDLE_CLIP);
-  const moveClip = AnimationClip.findByName(clips, MOVE_CLIP);
-  const miningClip = AnimationClip.findByName(clips, MINING_CLIP);
+  const idleClip = AnimationClip.findByName(clips, MINER_IDLE_CLIP);
+  const moveClip = AnimationClip.findByName(clips, MINER_MOVE_CLIP);
+  const miningClip = AnimationClip.findByName(clips, MINER_MINING_CLIP);
   if (!idleClip && !moveClip && !miningClip) return;
 
   const mixer = new AnimationMixer(root);
@@ -86,9 +87,9 @@ function playAnimation(
   const previous = controller.actions[controller.current];
   const next = controller.actions[nextState];
 
-  previous?.fadeOut(CROSS_FADE_SECONDS);
+  previous?.fadeOut(ANIMATION_CROSS_FADE_SECONDS);
   if (next) {
-    next.reset().fadeIn(CROSS_FADE_SECONDS).play();
+    next.reset().fadeIn(ANIMATION_CROSS_FADE_SECONDS).play();
   }
   controller.current = nextState;
 }

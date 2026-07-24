@@ -1,10 +1,7 @@
+import { CRAFT_PRODUCTION_BUILDING_KINDS } from "./constants.ts";
 import type { CraftSpec } from "./craftCatalog.js";
 
-export const CRAFT_PRODUCTION_BUILDINGS = new Set([
-  "command-center",
-  "hangar",
-  "factory",
-]);
+export const CRAFT_PRODUCTION_BUILDINGS = new Set(CRAFT_PRODUCTION_BUILDING_KINDS);
 
 export interface CraftPurchaseOptions {
   spec: CraftSpec | undefined;

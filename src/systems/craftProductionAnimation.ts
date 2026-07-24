@@ -6,8 +6,7 @@ import {
   type AnimationAction,
   type Object3D,
 } from "three";
-
-const SPAWN_CONSTRUCTION_CLIP = "Spawn_Construction";
+import { CRAFT_SPAWN_CONSTRUCTION_CLIP } from "./constants.ts";
 
 interface CraftProductionAnimationController {
   action: AnimationAction;
@@ -22,7 +21,7 @@ export function attachCraftProductionAnimation(
   clips: AnimationClip[],
   duration: number,
 ): void {
-  const clip = AnimationClip.findByName(clips, SPAWN_CONSTRUCTION_CLIP);
+  const clip = AnimationClip.findByName(clips, CRAFT_SPAWN_CONSTRUCTION_CLIP);
   if (!clip) return;
 
   const mixer = new AnimationMixer(root);

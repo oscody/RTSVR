@@ -13,6 +13,12 @@ import {
 } from "@iwsdk/core";
 import type { AnimationClip } from "three";
 import { TILE_SIZE, gridToWorld } from "./board.js";
+import {
+  CRAFT_PRODUCTION_FOUNDATION_COLOR,
+  CRAFT_PRODUCTION_FOUNDATION_OPACITY,
+  PROGRESS_BACKGROUND_COLOR,
+  PROGRESS_FILL_COLOR,
+} from "./constants.ts";
 import { getCraftSpec, type CraftSpec } from "./craftCatalog.js";
 import { createCraftEntity } from "./craftFactory.js";
 import {
@@ -51,9 +57,9 @@ export function createCraftProductionSite(
   const foundation = new Mesh(
     new BoxGeometry(size, 0.024, size),
     new MeshBasicMaterial({
-      color: 0x0e7490,
+      color: CRAFT_PRODUCTION_FOUNDATION_COLOR,
       transparent: true,
-      opacity: 0.4,
+      opacity: CRAFT_PRODUCTION_FOUNDATION_OPACITY,
       depthWrite: false,
     }),
   );
@@ -62,13 +68,13 @@ export function createCraftProductionSite(
 
   const progressBackground = new Mesh(
     new BoxGeometry(size, 0.028, 0.035),
-    new MeshBasicMaterial({ color: 0x263845 }),
+    new MeshBasicMaterial({ color: PROGRESS_BACKGROUND_COLOR }),
   );
   progressBackground.position.set(0, TILE_SIZE * 0.8, 0);
   holder.add(progressBackground);
   const progressFill = new Mesh(
     new BoxGeometry(size, 0.032, 0.04),
-    new MeshBasicMaterial({ color: 0x22c55e }),
+    new MeshBasicMaterial({ color: PROGRESS_FILL_COLOR }),
   );
   progressFill.name = "CraftProductionProgressFill";
   progressFill.position.set(-size / 2, TILE_SIZE * 0.8, 0.001);

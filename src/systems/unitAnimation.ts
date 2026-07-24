@@ -8,18 +8,19 @@ import {
   type Object3D,
 } from "three";
 import {
+  ANIMATION_CROSS_FADE_SECONDS,
+  UNIT_BEACON_PLACEMENT_CLIP,
+  UNIT_LASER_POINT_ASSIST_CLIP,
+  UNIT_SHOOT_CLIP,
+  UNIT_WALK_CLIP,
+} from "./constants.ts";
+import {
   CombatState,
   ConstructionState,
   Health,
   Unit,
   UnitSelection,
 } from "./state.js";
-
-const WALK_CLIP = "Walk";
-const SHOOT_CLIP = "Shoot";
-const BEACON_PLACEMENT_CLIP = "BeaconPlacement";
-const LASER_POINT_ASSIST_CLIP = "LaserPointAssist";
-const CROSS_FADE_SECONDS = 0.12;
 
 type UnitAnimationState = "idle" | "walk" | "shoot" | "beacon" | "laser";
 type UnitActionState = Exclude<UnitAnimationState, "idle">;
@@ -38,10 +39,16 @@ export function attachUnitAnimation(
   root: Object3D,
   clips: AnimationClip[],
 ): void {
-  const walkClip = AnimationClip.findByName(clips, WALK_CLIP);
-  const shootClip = AnimationClip.findByName(clips, SHOOT_CLIP);
-  const beaconClip = AnimationClip.findByName(clips, BEACON_PLACEMENT_CLIP);
-  const laserClip = AnimationClip.findByName(clips, LASER_POINT_ASSIST_CLIP);
+  const walkClip = AnimationClip.findByName(clips, UNIT_WALK_CLIP);
+  const shootClip = AnimationClip.findByName(clips, UNIT_SHOOT_CLIP);
+  const beaconClip = AnimationClip.findByName(
+    clips,
+    UNIT_BEACON_PLACEMENT_CLIP,
+  );
+  const laserClip = AnimationClip.findByName(
+    clips,
+    UNIT_LASER_POINT_ASSIST_CLIP,
+  );
   if (!walkClip && !shootClip && !beaconClip && !laserClip) return;
 
   const mixer = new AnimationMixer(root);
@@ -110,9 +117,9 @@ function playAnimation(
   const previous = controller.actions[controller.current as UnitActionState];
   const next = controller.actions[nextState as UnitActionState];
 
-  previous?.fadeOut(CROSS_FADE_SECONDS);
+  previous?.fadeOut(ANIMATION_CROSS_FADE_SECONDS);
   if (next) {
-    next.reset().fadeIn(CROSS_FADE_SECONDS).play();
+    next.reset().fadeIn(ANIMATION_CROSS_FADE_SECONDS).play();
   }
   controller.current = nextState;
 }

@@ -7,12 +7,13 @@ import {
   type AnimationAction,
   type Object3D,
 } from "three";
+import {
+  COMMAND_CENTER_DOOR_CLOSE_CLIP,
+  COMMAND_CENTER_DOOR_HOLD_SECONDS,
+  COMMAND_CENTER_DOOR_OPEN_CLIP,
+  COMMAND_CENTER_IDLE_OPERATIONAL_CLIP,
+} from "./constants.ts";
 import { Building, Health } from "./state.js";
-
-const IDLE_OPERATIONAL_CLIP = "Idle_Operational";
-const DOOR_OPEN_CLIP = "Door_Open";
-const DOOR_CLOSE_CLIP = "Door_Close";
-const DOOR_HOLD_SECONDS = 0.25;
 
 type DoorPhase = "idle" | "opening" | "holding" | "closing";
 
@@ -34,9 +35,18 @@ export function attachCommandCenterAnimation(
   root: Object3D,
   clips: AnimationClip[],
 ): void {
-  const idleClip = AnimationClip.findByName(clips, IDLE_OPERATIONAL_CLIP);
-  const openClip = AnimationClip.findByName(clips, DOOR_OPEN_CLIP);
-  const closeClip = AnimationClip.findByName(clips, DOOR_CLOSE_CLIP);
+  const idleClip = AnimationClip.findByName(
+    clips,
+    COMMAND_CENTER_IDLE_OPERATIONAL_CLIP,
+  );
+  const openClip = AnimationClip.findByName(
+    clips,
+    COMMAND_CENTER_DOOR_OPEN_CLIP,
+  );
+  const closeClip = AnimationClip.findByName(
+    clips,
+    COMMAND_CENTER_DOOR_CLOSE_CLIP,
+  );
   if (!idleClip && !openClip && !closeClip) return;
 
   const mixer = new AnimationMixer(root);
@@ -111,7 +121,7 @@ function updateDoorSequence(
   }
   if (
     controller.doorPhase === "holding" &&
-    controller.doorTimer >= DOOR_HOLD_SECONDS
+    controller.doorTimer >= COMMAND_CENTER_DOOR_HOLD_SECONDS
   ) {
     controller.openAction?.stop();
     controller.closeAction?.reset().play();

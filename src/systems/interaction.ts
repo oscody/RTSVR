@@ -14,6 +14,11 @@ import { getCraftSpec } from "./craftCatalog.js";
 import { createCraftProductionSite } from "./craftProduction.js";
 import { validateCraftPurchase } from "./craftRules.js";
 import {
+  BLOCKED_MARKER_COLOR,
+  ORDER_MARKER_COLOR,
+  VALID_PLACEMENT_MARKER_COLOR,
+} from "./constants.ts";
+import {
   footprintApproaches,
   footprintCells,
   validateBuildOrder,
@@ -46,9 +51,6 @@ import {
   boardState,
   gridKey,
 } from "./state.js";
-
-const ORDER_COLOR = 0xffbd59; // valid destination
-const BLOCKED_COLOR = 0xff5050; // clicked a blocked/occupied tile
 
 function markerToLocal(markerEntity: Entity | null, x: number, z: number): void {
   const marker = markerEntity?.object3D;
@@ -166,7 +168,7 @@ export class InteractionSystem extends createSystem({
           `${assigned} combat unit${assigned === 1 ? "" : "s"} attacking`,
           assigned > 0 ? "info" : "error",
         );
-        setOrderMarker(ex, ey, BLOCKED_COLOR);
+        setOrderMarker(ex, ey, BLOCKED_MARKER_COLOR);
         if (assigned > 0) this.clearCommandSelection();
       }),
       // Buildings are production sources. Selecting one opens Crafts and
@@ -247,7 +249,7 @@ export class InteractionSystem extends createSystem({
               );
               this.clearCommandSelection();
             }
-            setOrderMarker(tx, ty, BLOCKED_COLOR);
+            setOrderMarker(tx, ty, BLOCKED_MARKER_COLOR);
             return;
           }
 
@@ -255,7 +257,11 @@ export class InteractionSystem extends createSystem({
           const selectedSet = new Set(units);
           const occupied = this.isOccupiedExcept(tx, ty, selectedSet);
           const assigned = this.issueGroupOrder(units, tx, ty);
-          setOrderMarker(tx, ty, blocked || occupied ? BLOCKED_COLOR : ORDER_COLOR);
+          setOrderMarker(
+            tx,
+            ty,
+            blocked || occupied ? BLOCKED_MARKER_COLOR : ORDER_MARKER_COLOR,
+          );
           if (assigned > 0) this.clearCommandSelection();
           return;
         }
@@ -496,7 +502,7 @@ export class InteractionSystem extends createSystem({
         validation.ok ? "Craft placement is unavailable" : validation.error,
         "error",
       );
-      setOrderMarker(tx, ty, BLOCKED_COLOR);
+      setOrderMarker(tx, ty, BLOCKED_MARKER_COLOR);
       return;
     }
 
@@ -519,7 +525,7 @@ export class InteractionSystem extends createSystem({
     );
     tablet.setValue(TabletState, "craftPlacementActive", false);
     hideMarker(boardState.buildMarker);
-    setOrderMarker(tx, ty, 0x22c55e);
+    setOrderMarker(tx, ty, VALID_PLACEMENT_MARKER_COLOR);
     this.setTabletStatus(
       `${spec.label} production started (${spec.duration}s)`,
       "success",
@@ -539,7 +545,7 @@ export class InteractionSystem extends createSystem({
     const object = entity.object3D;
     if (!object) return;
     const [x, y] = worldToGrid(object.position.x, object.position.z);
-    setOrderMarker(x, y, BLOCKED_COLOR);
+    setOrderMarker(x, y, BLOCKED_MARKER_COLOR);
     this.setTabletStatus("That tile is blocked. Choose an open tile", "error");
   }
 
@@ -547,7 +553,7 @@ export class InteractionSystem extends createSystem({
     const object = entity.object3D;
     if (!object) return;
     const [x, y] = worldToGrid(object.position.x, object.position.z);
-    setOrderMarker(x, y, BLOCKED_COLOR);
+    setOrderMarker(x, y, BLOCKED_MARKER_COLOR);
     this.setTabletStatus(
       "That footprint is blocked. Choose an open tile",
       "error",
@@ -580,7 +586,7 @@ export class InteractionSystem extends createSystem({
         validation.ok ? "Invalid build order" : validation.error,
         "error",
       );
-      setOrderMarker(tx, ty, BLOCKED_COLOR);
+      setOrderMarker(tx, ty, BLOCKED_MARKER_COLOR);
       return;
     }
 
@@ -614,7 +620,7 @@ export class InteractionSystem extends createSystem({
     if (next) this.issueOrder(astronaut, next.x, next.y);
     else astronaut.setValue(Unit, "hasOrder", false);
     this.setTabletStatus(`${spec.label} ordered. Astronaut moving to site`);
-    setOrderMarker(tx, ty, ORDER_COLOR);
+    setOrderMarker(tx, ty, ORDER_MARKER_COLOR);
     this.clearCommandSelection();
   }
 
@@ -666,7 +672,7 @@ export class InteractionSystem extends createSystem({
     marker.position.set((x0 + x1) / 2, marker.position.y, (z0 + z1) / 2);
     marker.scale.set(spec.widthTiles, spec.widthTiles, 1);
     (marker.material as MeshBasicMaterial).color.setHex(
-      validation.ok ? 0x22c55e : BLOCKED_COLOR,
+      validation.ok ? VALID_PLACEMENT_MARKER_COLOR : BLOCKED_MARKER_COLOR,
     );
     marker.visible = true;
   }
@@ -691,7 +697,7 @@ export class InteractionSystem extends createSystem({
     marker.position.set(worldX, marker.position.y, worldZ);
     marker.scale.set(1, 1, 1);
     (marker.material as MeshBasicMaterial).color.setHex(
-      validation.ok ? 0x22c55e : BLOCKED_COLOR,
+      validation.ok ? VALID_PLACEMENT_MARKER_COLOR : BLOCKED_MARKER_COLOR,
     );
     marker.visible = true;
   }
