@@ -92,6 +92,7 @@ const STRUCTURES: StructureSpec[] = [
   // Crystal field C — front-right pocket.
   { asset: "rockCrystalsLargeB", name: "CrystalC1", widthTiles: 1, gridX: [19, 19], gridY: [17, 17], yawDeg: 270, terrain: "crystal", resource: { kind: "large", capacity: LARGE_CRYSTAL_NODE_CAPACITY } },
   { asset: "rockCrystals", name: "CrystalC2", widthTiles: 1, gridX: [20, 20], gridY: [16, 16], terrain: "crystal", resource: { kind: "small", capacity: SMALL_CRYSTAL_NODE_CAPACITY } },
+  { asset: "rockCrystals", name: "CrystalBaseA", widthTiles: 1, gridX: [8, 8], gridY: [11, 11], terrain: "crystal", resource: { kind: "small", capacity: SMALL_CRYSTAL_NODE_CAPACITY } },
 
   // Landmark boulder — a rockLargeA scaled onto 2x2 tiles, north of the base.
   { asset: "rockLargeA", name: "BoulderLarge", widthTiles: 2, gridX: [11, 12], gridY: [4, 4], terrain: "blocked" },
@@ -117,19 +118,19 @@ const STRUCTURES: StructureSpec[] = [
 
   // Aliens use live occupancy instead of stamped terrain so their old tile
   // automatically becomes open when wave movement is added.
-  { asset: "alienWalkingSlam", name: "Alien1", widthTiles: 1, gridX: [1, 1], gridY: [1, 1], yawDeg: 180, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien2", widthTiles: 1, gridX: [6, 6], gridY: [22, 22], yawDeg: 180, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien3", widthTiles: 1, gridX: [12, 12], gridY: [1, 1], yawDeg: 180, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien1", widthTiles: 1, gridX: [1, 1], gridY: [1, 1], yawDeg: 180, enemy: "alien" },
+  { asset: "alienWalkingSlam", name: "Alien1", widthTiles: 1, gridX: [1, 1], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
+  { asset: "alienWalkingSlam", name: "Alien2", widthTiles: 1, gridX: [6, 6], gridY: [23, 23], yawDeg: 180, enemy: "alien" },
+  { asset: "alienWalkingSlam", name: "Alien3", widthTiles: 1, gridX: [12, 12], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
+  { asset: "alienWalkingSlam", name: "Alien1", widthTiles: 1, gridX: [1, 1], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
   { asset: "alienWalkingSlam", name: "Alien2", widthTiles: 1, gridX: [6, 6], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien3", widthTiles: 1, gridX: [12, 12], gridY: [1, 1], yawDeg: 180, enemy: "alien" },
+  { asset: "alienWalkingSlam", name: "Alien3", widthTiles: 1, gridX: [12, 12], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
   { asset: "alienWalkingSlam", name: "Alien4", widthTiles: 1, gridX: [18, 18], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien5", widthTiles: 1, gridX: [22, 22], gridY: [1, 1], yawDeg: 180, enemy: "alien" },
+  { asset: "alienWalkingSlam", name: "Alien5", widthTiles: 1, gridX: [22, 22], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
   { asset: "alienWalkingSlam", name: "Alien6", widthTiles: 1, gridX: [23, 23], gridY: [8, 8], yawDeg: 270, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien7", widthTiles: 1, gridX: [22, 22], gridY: [15, 15], yawDeg: 270, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien8", widthTiles: 1, gridX: [21, 21], gridY: [22, 22], enemy: "alien" },
-  { asset: "alienDrakeFlyingAttack", name: "Alien9", widthTiles: 1, gridX: [12, 12], gridY: [22, 22], enemy: "alienDrake" },
-  { asset: "strongAlienMech", name: "Alien10", widthTiles: 1, gridX: [3, 3], gridY: [22, 22], yawDeg: 324, enemy: "strongAlienMech" },
+  { asset: "alienWalkingSlam", name: "Alien7", widthTiles: 1, gridX: [23, 23], gridY: [15, 15], yawDeg: 270, enemy: "alien" },
+  { asset: "alienWalkingSlam", name: "Alien8", widthTiles: 1, gridX: [21, 21], gridY: [23, 23], enemy: "alien" },
+  { asset: "alienDrakeFlyingAttack", name: "Alien9", widthTiles: 1, gridX: [12, 12], gridY: [23, 23], enemy: "alienDrake" },
+  { asset: "strongAlienMech", name: "Alien10", widthTiles: 1, gridX: [3, 3], gridY: [23, 23], yawDeg: 326, enemy: "strongAlienMech" },
   { asset: "craftMinerAnimated", name: "CraftMiner", widthTiles: 1, gridX: [11, 11], gridY: [13, 13], yawDeg: 180, unit: "miner", unitCategory: "factory" },
   // Base defense — two turrets flanking opposite corners of the command center.
   { asset: "turretSingle", name: "TurretSingle", widthTiles: 1, gridX: [13, 13], gridY: [9, 9], yawDeg: 180, terrain: "blocked", building: "turret" },
