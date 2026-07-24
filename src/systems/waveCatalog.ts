@@ -9,11 +9,31 @@ export interface WaveSpawnGroup {
   count: number;
   edges: readonly WaveEdge[];
   minSpacingTiles?: number;
+  releaseDelaySeconds?: number;
+}
+
+export interface WaveThreatBudget {
+  budget: number;
+  enemies: readonly EnemyKind[];
+  edges: readonly WaveEdge[];
+  minSpacingTiles?: number;
+  releaseDelaySeconds?: number;
+}
+
+export interface WaveDifficulty {
+  healthMultiplier?: number;
+  speedMultiplier?: number;
+  maxActiveAliensMultiplier?: number;
+  releaseIntervalMultiplier?: number;
 }
 
 export interface WaveSpec {
   waveNumber: number;
-  groups: readonly WaveSpawnGroup[];
+  maxActiveAliens: number;
+  releaseIntervalSeconds: number;
+  groups?: readonly WaveSpawnGroup[];
+  threatBudget?: WaveThreatBudget;
+  difficulty?: WaveDifficulty;
 }
 
 export interface ResolvedWaveSpawn {
@@ -24,11 +44,15 @@ export interface ResolvedWaveSpawn {
   x: number;
   y: number;
   yawDeg: number;
+  releaseDelaySeconds: number;
+  healthMultiplier: number;
+  speedMultiplier: number;
 }
 
 interface EnemySpawnProfile {
   asset: string;
   namePrefix: string;
+  threatCost: number;
 }
 
 interface EdgeCandidate {
@@ -43,14 +67,24 @@ interface ResolveWaveSpawnOptions {
 }
 
 const ENEMY_SPAWN_PROFILES: Readonly<Record<EnemyKind, EnemySpawnProfile>> = {
-  alien: { asset: "alienWalkingSlam", namePrefix: "Alien" },
-  alienDrake: { asset: "alienDrakeFlyingAttack", namePrefix: "AlienDrake" },
-  strongAlienMech: { asset: "strongAlienMech", namePrefix: "StrongAlienMech" },
+  alien: { asset: "alienWalkingSlam", namePrefix: "Alien", threatCost: 1 },
+  alienDrake: {
+    asset: "alienDrakeFlyingAttack",
+    namePrefix: "AlienDrake",
+    threatCost: 2,
+  },
+  strongAlienMech: {
+    asset: "strongAlienMech",
+    namePrefix: "StrongAlienMech",
+    threatCost: 4,
+  },
 };
 
 export const WAVE_CATALOG: readonly WaveSpec[] = [
   {
     waveNumber: 1,
+    maxActiveAliens: 3,
+    releaseIntervalSeconds: 8,
     groups: [
       { enemy: "alien", count: 7, edges: ["north", "east", "south"], minSpacingTiles: 3 },
       { enemy: "alienDrake", count: 3, edges: ["south"], minSpacingTiles: 3 },
@@ -59,11 +93,37 @@ export const WAVE_CATALOG: readonly WaveSpec[] = [
   },
   {
     waveNumber: 2,
-    groups: [
-      { enemy: "alien", count: 8, edges: ["north", "east", "south", "west"], minSpacingTiles: 3 },
-      { enemy: "alienDrake", count: 3, edges: ["east", "south"], minSpacingTiles: 3 },
-      { enemy: "strongAlienMech", count: 2, edges: ["south", "west"], minSpacingTiles: 3 },
-    ],
+    maxActiveAliens: 3,
+    releaseIntervalSeconds: 8,
+    threatBudget: {
+      budget: 24,
+      enemies: ["strongAlienMech", "alienDrake", "alien"],
+      edges: ["north", "east", "south", "west"],
+      minSpacingTiles: 3,
+    },
+    difficulty: {
+      healthMultiplier: 1.25,
+      speedMultiplier: 1.1,
+      maxActiveAliensMultiplier: 1.34,
+      releaseIntervalMultiplier: 0.85,
+    },
+  },
+  {
+    waveNumber: 3,
+    maxActiveAliens: 3,
+    releaseIntervalSeconds: 8,
+    threatBudget: {
+      budget: 34,
+      enemies: ["strongAlienMech", "alienDrake", "alien"],
+      edges: ["north", "east", "south", "west"],
+      minSpacingTiles: 3,
+    },
+    difficulty: {
+      healthMultiplier: 1.45,
+      speedMultiplier: 1.18,
+      maxActiveAliensMultiplier: 1.67,
+      releaseIntervalMultiplier: 0.75,
+    },
   },
 ];
 
@@ -81,6 +141,30 @@ export function getNextWaveSpec(waveNumber: number): WaveSpec | undefined {
     .sort((left, right) => left.waveNumber - right.waveNumber)[0];
 }
 
+export function resolveWaveSpawnGroups(spec: WaveSpec): WaveSpawnGroup[] {
+  if (spec.groups) return [...spec.groups];
+  if (!spec.threatBudget) return [];
+  return composeThreatBudgetGroups(spec);
+}
+
+export function resolveWavePacing(spec: WaveSpec): {
+  maxActiveAliens: number;
+  releaseIntervalSeconds: number;
+} {
+  const maxActiveAliens = Math.max(
+    1,
+    Math.round(
+      spec.maxActiveAliens * (spec.difficulty?.maxActiveAliensMultiplier ?? 1),
+    ),
+  );
+  const releaseIntervalSeconds = Math.max(
+    0,
+    spec.releaseIntervalSeconds *
+      (spec.difficulty?.releaseIntervalMultiplier ?? 1),
+  );
+  return { maxActiveAliens, releaseIntervalSeconds };
+}
+
 export function resolveWaveSpawns(
   spec: WaveSpec,
   { canSpawnAt, gridSize = GRID_SIZE }: ResolveWaveSpawnOptions,
@@ -88,9 +172,10 @@ export function resolveWaveSpawns(
   const occupied = new Set<string>();
   const accepted: EdgeCandidate[] = [];
   const spawns: ResolvedWaveSpawn[] = [];
+  const groups = resolveWaveSpawnGroups(spec);
 
-  for (let groupIndex = 0; groupIndex < spec.groups.length; groupIndex += 1) {
-    const group = spec.groups[groupIndex];
+  for (let groupIndex = 0; groupIndex < groups.length; groupIndex += 1) {
+    const group = groups[groupIndex];
     const candidates = edgeCandidates(group.edges, gridSize, spec.waveNumber, groupIndex);
     let groupCount = 0;
     for (const candidate of candidates) {
@@ -110,6 +195,9 @@ export function resolveWaveSpawns(
         x: candidate.x,
         y: candidate.y,
         yawDeg: inwardYaw(candidate.edge, group.enemy),
+        releaseDelaySeconds: group.releaseDelaySeconds ?? 0,
+        healthMultiplier: spec.difficulty?.healthMultiplier ?? 1,
+        speedMultiplier: spec.difficulty?.speedMultiplier ?? 1,
       });
       occupied.add(key);
       accepted.push(candidate);
@@ -124,6 +212,55 @@ export function resolveWaveSpawns(
   }
 
   return spawns;
+}
+
+function composeThreatBudgetGroups(spec: WaveSpec): WaveSpawnGroup[] {
+  const threatBudget = spec.threatBudget;
+  if (!threatBudget) return [];
+  const pool = threatBudget.enemies.filter(
+    (enemy) => ENEMY_SPAWN_PROFILES[enemy].threatCost <= threatBudget.budget,
+  );
+  if (pool.length === 0) return [];
+
+  const counts = new Map<EnemyKind, number>();
+  let remaining = Math.max(0, Math.floor(threatBudget.budget));
+  let cursor = (spec.waveNumber - 1) % pool.length;
+  const minCost = Math.min(
+    ...pool.map((enemy) => ENEMY_SPAWN_PROFILES[enemy].threatCost),
+  );
+
+  while (remaining >= minCost) {
+    const nextIndex = nextAffordableEnemyIndex(pool, cursor, remaining);
+    if (nextIndex < 0) break;
+    const enemy = pool[nextIndex];
+    counts.set(enemy, (counts.get(enemy) ?? 0) + 1);
+    remaining -= ENEMY_SPAWN_PROFILES[enemy].threatCost;
+    cursor = (nextIndex + 1) % pool.length;
+  }
+
+  return pool
+    .map((enemy) => ({
+      enemy,
+      count: counts.get(enemy) ?? 0,
+      edges: threatBudget.edges,
+      minSpacingTiles: threatBudget.minSpacingTiles,
+      releaseDelaySeconds: threatBudget.releaseDelaySeconds,
+    }))
+    .filter((group) => group.count > 0);
+}
+
+function nextAffordableEnemyIndex(
+  enemies: readonly EnemyKind[],
+  cursor: number,
+  remainingBudget: number,
+): number {
+  for (let offset = 0; offset < enemies.length; offset += 1) {
+    const index = (cursor + offset) % enemies.length;
+    if (ENEMY_SPAWN_PROFILES[enemies[index]].threatCost <= remainingBudget) {
+      return index;
+    }
+  }
+  return -1;
 }
 
 function edgeCandidates(

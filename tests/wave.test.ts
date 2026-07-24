@@ -10,6 +10,7 @@ import { findGridPath } from "../src/systems/navigation.ts";
 import {
   INITIAL_WAVE_DELAY_SECONDS,
   advanceAlienMovement,
+  advanceWaveRelease,
   advanceWaveClock,
   alienFacingYaw,
   enemyFacingYaw,
@@ -18,6 +19,7 @@ import {
   resolveMatchAfterWaveCleared,
   resolveWaveClearOutcome,
   type LocalPosition,
+  type WaveReleaseState,
   type WaveClockState,
 } from "../src/systems/waveRules.ts";
 
@@ -147,4 +149,62 @@ test("wave clear advances when another catalog wave exists", () => {
   assert.equal(resolveWaveClearOutcome("playing", "active", 0, true), "advance");
   assert.equal(resolveWaveClearOutcome("playing", "active", 0, false), "victory");
   assert.equal(resolveWaveClearOutcome("defeat", "active", 0, true), "none");
+});
+
+test("staged wave release starts with one batch and paces reserves", () => {
+  const state: WaveReleaseState = {
+    releaseTimer: 0,
+    releasedAlienCount: 0,
+  };
+  const config = { maxActiveAliens: 3, releaseIntervalSeconds: 8 };
+
+  assert.equal(
+    advanceWaveRelease(
+      state,
+      { activeLiving: 0, waitingReady: 9 },
+      config,
+      0,
+    ),
+    3,
+  );
+  assert.deepEqual(state, { releaseTimer: 8, releasedAlienCount: 3 });
+
+  assert.equal(
+    advanceWaveRelease(
+      state,
+      { activeLiving: 3, waitingReady: 6 },
+      config,
+      4,
+    ),
+    0,
+  );
+  assert.deepEqual(state, { releaseTimer: 4, releasedAlienCount: 3 });
+
+  assert.equal(
+    advanceWaveRelease(
+      state,
+      { activeLiving: 3, waitingReady: 6 },
+      config,
+      4,
+    ),
+    3,
+  );
+  assert.deepEqual(state, { releaseTimer: 8, releasedAlienCount: 6 });
+});
+
+test("staged wave release refills one reserve early after active deaths", () => {
+  const state: WaveReleaseState = {
+    releaseTimer: 6,
+    releasedAlienCount: 3,
+  };
+  assert.equal(
+    advanceWaveRelease(
+      state,
+      { activeLiving: 2, waitingReady: 6 },
+      { maxActiveAliens: 3, releaseIntervalSeconds: 8 },
+      1,
+    ),
+    1,
+  );
+  assert.deepEqual(state, { releaseTimer: 8, releasedAlienCount: 4 });
 });

@@ -5,6 +5,8 @@ import {
   getNextWaveSpec,
   getWaveSpec,
   hasWaveSpec,
+  resolveWavePacing,
+  resolveWaveSpawnGroups,
   resolveWaveSpawns,
   type WaveSpec,
 } from "../src/systems/waveCatalog.ts";
@@ -12,9 +14,11 @@ import {
 test("wave catalog exposes the next wave for progression", () => {
   assert.equal(hasWaveSpec(1), true);
   assert.equal(hasWaveSpec(2), true);
-  assert.equal(hasWaveSpec(3), false);
+  assert.equal(hasWaveSpec(3), true);
+  assert.equal(hasWaveSpec(4), false);
   assert.equal(getNextWaveSpec(1)?.waveNumber, 2);
-  assert.equal(getNextWaveSpec(2), undefined);
+  assert.equal(getNextWaveSpec(2)?.waveNumber, 3);
+  assert.equal(getNextWaveSpec(3), undefined);
 });
 
 test("Wave 1 resolves deterministic legal edge spawns", () => {
@@ -44,9 +48,61 @@ test("Wave 1 resolves deterministic legal edge spawns", () => {
   assert.equal(first.find(({ enemy }) => enemy === "strongAlienMech")?.yawDeg, 180);
 });
 
+test("Wave 2 is composed from a higher threat budget and difficulty multipliers", () => {
+  const wave1 = getWaveSpec(1);
+  const wave2 = getWaveSpec(2);
+  assert.ok(wave1);
+  assert.ok(wave2);
+
+  const wave1Threat = threatTotal(resolveWaveSpawnGroups(wave1));
+  const wave2Groups = resolveWaveSpawnGroups(wave2);
+  const wave2Threat = threatTotal(wave2Groups);
+  const wave2Spawns = resolveWaveSpawns(wave2, { canSpawnAt: () => true });
+
+  assert.equal(wave2.threatBudget?.budget, 24);
+  assert.ok(wave2Threat > wave1Threat);
+  assert.equal(wave2Threat, wave2.threatBudget?.budget);
+  assert.ok(wave2Groups.some(({ enemy }) => enemy === "strongAlienMech"));
+  assert.ok(wave2Groups.some(({ enemy }) => enemy === "alienDrake"));
+  assert.ok(wave2Groups.some(({ enemy }) => enemy === "alien"));
+  assert.deepEqual(resolveWavePacing(wave2), {
+    maxActiveAliens: 4,
+    releaseIntervalSeconds: 6.8,
+  });
+  assert.ok(wave2Spawns.every(({ healthMultiplier }) => healthMultiplier === 1.25));
+  assert.ok(wave2Spawns.every(({ speedMultiplier }) => speedMultiplier === 1.1));
+});
+
+test("Wave 3 is a stronger final budget wave", () => {
+  const wave2 = getWaveSpec(2);
+  const wave3 = getWaveSpec(3);
+  assert.ok(wave2);
+  assert.ok(wave3);
+
+  const wave2Threat = threatTotal(resolveWaveSpawnGroups(wave2));
+  const wave3Groups = resolveWaveSpawnGroups(wave3);
+  const wave3Threat = threatTotal(wave3Groups);
+  const wave3Spawns = resolveWaveSpawns(wave3, { canSpawnAt: () => true });
+
+  assert.equal(wave3.threatBudget?.budget, 34);
+  assert.ok(wave3Threat > wave2Threat);
+  assert.equal(wave3Threat, wave3.threatBudget?.budget);
+  assert.ok(wave3Groups.some(({ enemy }) => enemy === "strongAlienMech"));
+  assert.ok(wave3Groups.some(({ enemy }) => enemy === "alienDrake"));
+  assert.ok(wave3Groups.some(({ enemy }) => enemy === "alien"));
+  assert.deepEqual(resolveWavePacing(wave3), {
+    maxActiveAliens: 5,
+    releaseIntervalSeconds: 6,
+  });
+  assert.ok(wave3Spawns.every(({ healthMultiplier }) => healthMultiplier === 1.45));
+  assert.ok(wave3Spawns.every(({ speedMultiplier }) => speedMultiplier === 1.18));
+});
+
 test("wave spawn resolver skips blocked cells and keeps spacing", () => {
   const spec: WaveSpec = {
     waveNumber: 1,
+    maxActiveAliens: 3,
+    releaseIntervalSeconds: 8,
     groups: [{ enemy: "alien", count: 3, edges: ["north"], minSpacingTiles: 3 }],
   };
   const blocked = new Set(["0,0", "1,0", "2,0", "3,0"]);
@@ -63,3 +119,8 @@ test("wave spawn resolver skips blocked cells and keeps spacing", () => {
     ],
   );
 });
+
+function threatTotal(groups: ReturnType<typeof resolveWaveSpawnGroups>): number {
+  const costs = { alien: 1, alienDrake: 2, strongAlienMech: 4 };
+  return groups.reduce((sum, group) => sum + group.count * costs[group.enemy], 0);
+}

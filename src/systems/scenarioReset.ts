@@ -142,6 +142,12 @@ export class ScenarioResetSystem extends createSystem({
       "spawnedWaveNumber",
       SCENARIO_RESET_DEFAULTS.spawnedWaveNumber,
     );
+    source.setValue(WaveSource, "releaseTimer", SCENARIO_RESET_DEFAULTS.releaseTimer);
+    source.setValue(
+      WaveSource,
+      "releasedAlienCount",
+      SCENARIO_RESET_DEFAULTS.releasedAlienCount,
+    );
     source.setValue(
       WaveSource,
       "revision",

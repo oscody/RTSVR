@@ -80,6 +80,7 @@ export interface EnemyEntitySpec {
   x: number;
   y: number;
   yawDeg?: number;
+  healthMultiplier?: number;
 }
 
 interface InteractionProxySpec {
@@ -229,7 +230,9 @@ export function createEnemyEntity(
   holder.add(model);
   addInteractionProxy(holder, spec, model);
 
-  const maxHealth = getEnemyMaxHealth(spec.kind);
+  const maxHealth = Math.ceil(
+    getEnemyMaxHealth(spec.kind) * (spec.healthMultiplier ?? 1),
+  );
   const entity = world
     .createTransformEntity(holder, { parent })
     .addComponent(ScenarioObject)

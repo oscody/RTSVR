@@ -60,6 +60,8 @@ export const WaveUnit = createComponent("WaveUnit", {
   nextY: { type: Types.Int16, default: -1 },
   hasWaypoint: { type: Types.Boolean, default: false },
   repathTimer: { type: Types.Float32, default: 0 },
+  releaseDelay: { type: Types.Float32, default: 0 },
+  speedMultiplier: { type: Types.Float32, default: 1 },
 });
 
 export const WaveSource = createComponent("WaveSource", {
@@ -67,6 +69,8 @@ export const WaveSource = createComponent("WaveSource", {
   timer: { type: Types.Float32, default: INITIAL_WAVE_DELAY_SECONDS },
   stage: { type: Types.String, default: "countdown" },
   spawnedWaveNumber: { type: Types.Int16, default: 0 },
+  releaseTimer: { type: Types.Float32, default: 0 },
+  releasedAlienCount: { type: Types.Int16, default: 0 },
   revision: { type: Types.Int32, default: 0 },
 });
 

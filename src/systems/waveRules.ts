@@ -32,6 +32,21 @@ export interface MovementStepResult {
   z: number;
 }
 
+export interface WaveReleaseConfig {
+  maxActiveAliens: number;
+  releaseIntervalSeconds: number;
+}
+
+export interface WaveReleaseState {
+  releaseTimer: number;
+  releasedAlienCount: number;
+}
+
+export interface WaveReleaseCounts {
+  activeLiving: number;
+  waitingReady: number;
+}
+
 export function alienFacingYaw(dx: number, dz: number): number {
   return Math.atan2(dx, dz) + ALIEN_MODEL_FORWARD_YAW;
 }
@@ -77,6 +92,43 @@ export function advanceAlienMovement(
     x: distance - step <= ALIEN_ARRIVAL_EPSILON ? target.x : x,
     z: distance - step <= ALIEN_ARRIVAL_EPSILON ? target.z : z,
   };
+}
+
+export function advanceWaveRelease(
+  state: WaveReleaseState,
+  counts: WaveReleaseCounts,
+  config: WaveReleaseConfig,
+  delta: number,
+): number {
+  if (counts.waitingReady <= 0) {
+    state.releaseTimer = Math.max(0, config.releaseIntervalSeconds);
+    return 0;
+  }
+
+  const batchSize = Math.max(1, Math.floor(config.maxActiveAliens));
+  if (state.releasedAlienCount <= 0) {
+    const released = Math.min(batchSize, counts.waitingReady);
+    state.releasedAlienCount += released;
+    state.releaseTimer = Math.max(0, config.releaseIntervalSeconds);
+    return released;
+  }
+
+  if (counts.activeLiving < batchSize) {
+    state.releasedAlienCount += 1;
+    state.releaseTimer = Math.max(0, config.releaseIntervalSeconds);
+    return 1;
+  }
+
+  state.releaseTimer = Math.max(
+    0,
+    state.releaseTimer - Math.max(0, delta),
+  );
+  if (state.releaseTimer > 0) return 0;
+
+  const released = Math.min(batchSize, counts.waitingReady);
+  state.releasedAlienCount += released;
+  state.releaseTimer = Math.max(0, config.releaseIntervalSeconds);
+  return released;
 }
 
 export function isAdjacentToFootprint(

@@ -10,6 +10,8 @@ export function createScenarioResetDefaults(
     waveTimer,
     waveStage: "countdown",
     spawnedWaveNumber: 0,
+    releaseTimer: 0,
+    releasedAlienCount: 0,
     matchStatus: "playing",
     commandCenterAlive: true,
   });

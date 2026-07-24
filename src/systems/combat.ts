@@ -240,7 +240,7 @@ export class CombatSystem extends createSystem({
     for (const attacker of this.queries.enemyAttackers.entities) {
       if (attacker.getValue(CombatState, "target") === target) {
         this.clearAttack(attacker);
-        attacker.setValue(WaveUnit, "stage", "waiting");
+        attacker.setValue(WaveUnit, "stage", "released");
         attacker.setValue(WaveUnit, "repathTimer", 0);
       }
     }
@@ -400,6 +400,8 @@ export class CombatSystem extends createSystem({
     source.setValue(WaveSource, "waveNumber", waveNumber);
     source.setValue(WaveSource, "timer", INITIAL_WAVE_DELAY_SECONDS);
     source.setValue(WaveSource, "stage", "countdown");
+    source.setValue(WaveSource, "releaseTimer", 0);
+    source.setValue(WaveSource, "releasedAlienCount", 0);
     source.setValue(
       WaveSource,
       "revision",

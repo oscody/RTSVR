@@ -22,14 +22,20 @@ import {
   ALIEN_REPATH_DELAY,
   INITIAL_WAVE_DELAY_SECONDS,
   advanceAlienMovement,
+  advanceWaveRelease,
   advanceWaveClock,
   enemyFacingYaw,
   isAdjacentToFootprint,
   type MatchStatus,
+  type WaveReleaseState,
   type WaveClockState,
   type WaveStage,
 } from "./waveRules.js";
-import { getWaveSpec, resolveWaveSpawns } from "./waveCatalog.js";
+import {
+  getWaveSpec,
+  resolveWavePacing,
+  resolveWaveSpawns,
+} from "./waveCatalog.js";
 
 interface TargetPath {
   target: Entity;
@@ -65,6 +71,7 @@ export class WaveSystem extends createSystem({
     source.setValue(WaveSource, "stage", this.clock.stage);
     if (this.clock.stage === "active" && matchStatus === "playing") {
       this.spawnWaveIfNeeded(source);
+      this.updateWaveRelease(source, delta);
     }
     if (activated) {
       source.setValue(
@@ -81,6 +88,7 @@ export class WaveSystem extends createSystem({
 
     for (const alien of this.queries.aliens.entities) {
       if ((alien.getValue(Health, "current") ?? 0) <= 0) continue;
+      if (alien.getValue(WaveUnit, "stage") === "waiting") continue;
       if (alien.getValue(WaveUnit, "hasWaypoint") ?? false) {
         this.advanceAlien(alien, delta);
         continue;
@@ -102,7 +110,7 @@ export class WaveSystem extends createSystem({
 
       const targetPath = this.findNearestTargetPath(alien);
       if (!targetPath) {
-        this.clearAlienTarget(alien, "waiting");
+        this.clearAlienTarget(alien, "released");
         alien.setValue(WaveUnit, "repathTimer", ALIEN_REPATH_DELAY);
         continue;
       }
@@ -138,7 +146,7 @@ export class WaveSystem extends createSystem({
     const root = boardState.boardRoot;
     if (!root) throw new Error("Wave spawning requires BoardSystem first");
     for (const spawn of spawns) {
-      createEnemyEntity(this.world, root, {
+      const alien = createEnemyEntity(this.world, root, {
         asset: spawn.asset,
         kind: spawn.enemy,
         name: spawn.name,
@@ -146,9 +154,87 @@ export class WaveSystem extends createSystem({
         x: spawn.x,
         y: spawn.y,
         yawDeg: spawn.yawDeg,
+        healthMultiplier: spawn.healthMultiplier,
       });
+      alien.setValue(WaveUnit, "stage", "waiting");
+      alien.setValue(WaveUnit, "releaseDelay", spawn.releaseDelaySeconds);
+      alien.setValue(WaveUnit, "speedMultiplier", spawn.speedMultiplier);
     }
     source.setValue(WaveSource, "spawnedWaveNumber", this.clock.waveNumber);
+    source.setValue(WaveSource, "releaseTimer", 0);
+    source.setValue(WaveSource, "releasedAlienCount", 0);
+  }
+
+  private updateWaveRelease(source: Entity, delta: number): void {
+    const spec = getWaveSpec(this.clock.waveNumber);
+    if (!spec) return;
+    this.tickWaitingReleaseDelays(delta);
+    const waitingReady = this.waitingReadyAliens();
+    const state: WaveReleaseState = {
+      releaseTimer: source.getValue(WaveSource, "releaseTimer") ?? 0,
+      releasedAlienCount: source.getValue(WaveSource, "releasedAlienCount") ?? 0,
+    };
+    const pacing = resolveWavePacing(spec);
+    const releaseCount = advanceWaveRelease(
+      state,
+      {
+        activeLiving: this.activeLivingAlienCount(),
+        waitingReady: waitingReady.length,
+      },
+      pacing,
+      delta,
+    );
+    if (releaseCount > 0) {
+      this.releaseReserveAliens(waitingReady, releaseCount);
+    }
+    source.setValue(WaveSource, "releaseTimer", state.releaseTimer);
+    source.setValue(WaveSource, "releasedAlienCount", state.releasedAlienCount);
+  }
+
+  private tickWaitingReleaseDelays(delta: number): void {
+    for (const alien of this.queries.aliens.entities) {
+      if (alien.getValue(WaveUnit, "stage") !== "waiting") continue;
+      alien.setValue(
+        WaveUnit,
+        "releaseDelay",
+        Math.max(
+          0,
+          (alien.getValue(WaveUnit, "releaseDelay") ?? 0) - Math.max(0, delta),
+        ),
+      );
+    }
+  }
+
+  private waitingReadyAliens(): Entity[] {
+    return Array.from(this.queries.aliens.entities)
+      .filter(
+        (alien) =>
+          (alien.getValue(Health, "current") ?? 0) > 0 &&
+          alien.getValue(WaveUnit, "stage") === "waiting" &&
+          (alien.getValue(WaveUnit, "releaseDelay") ?? 0) <= 0,
+      )
+      .sort((left, right) => left.index - right.index);
+  }
+
+  private activeLivingAlienCount(): number {
+    let count = 0;
+    for (const alien of this.queries.aliens.entities) {
+      if ((alien.getValue(Health, "current") ?? 0) <= 0) continue;
+      if (alien.getValue(WaveUnit, "stage") === "waiting") continue;
+      count += 1;
+    }
+    return count;
+  }
+
+  private releaseReserveAliens(
+    waitingReady: readonly Entity[],
+    count: number,
+  ): void {
+    for (const alien of waitingReady.slice(0, Math.max(0, count))) {
+      this.clearAlienTarget(alien, "released");
+      alien.setValue(WaveUnit, "releaseDelay", 0);
+      alien.setValue(WaveUnit, "repathTimer", 0);
+    }
   }
 
   private advanceAlien(alien: Entity, delta: number): void {
@@ -161,7 +247,7 @@ export class WaveSystem extends createSystem({
     const movement = advanceAlienMovement(
       { x: object.position.x, z: object.position.z },
       { x: targetX, z: targetZ },
-      ALIEN_MOVE_SPEED,
+      ALIEN_MOVE_SPEED * (alien.getValue(WaveUnit, "speedMultiplier") ?? 1),
       delta,
     );
     const dx = targetX - object.position.x;
