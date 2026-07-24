@@ -12,6 +12,7 @@ import {
   advanceAlienMovement,
   advanceWaveClock,
   alienFacingYaw,
+  enemyFacingYaw,
   isAdjacentToFootprint,
   resolveMatchAfterFriendlyElimination,
   resolveMatchAfterWaveCleared,
@@ -30,6 +31,16 @@ test("alien facing compensates for the model's negative-Z forward axis", () => {
   assert.ok(Math.abs(angleDifference(alienFacingYaw(0, -1), 0)) < 1e-9);
   assert.ok(
     Math.abs(angleDifference(alienFacingYaw(-1, 0), Math.PI / 2)) < 1e-9,
+  );
+});
+
+test("strong alien mech uses its own forward-axis compensation", () => {
+  assert.ok(
+    Math.abs(angleDifference(enemyFacingYaw("strongAlienMech", 0, -1), Math.PI)) <
+      1e-9,
+  );
+  assert.ok(
+    Math.abs(angleDifference(enemyFacingYaw("alien", 0, -1), 0)) < 1e-9,
   );
 });
 

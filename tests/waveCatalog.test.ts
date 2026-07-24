@@ -13,14 +13,25 @@ test("Wave 1 resolves deterministic legal edge spawns", () => {
 
   const first = resolveWaveSpawns(spec, { canSpawnAt: () => true });
   const second = resolveWaveSpawns(spec, { canSpawnAt: () => true });
+  const expectedCount = spec.groups.reduce((sum, group) => sum + group.count, 0);
 
-  assert.equal(first.length, 13);
+  assert.equal(first.length, expectedCount);
   assert.deepEqual(second, first);
   assert.equal(new Set(first.map(({ x, y }) => `${x},${y}`)).size, first.length);
   assert.ok(first.every(({ x, y }) => x === 0 || x === 23 || y === 0 || y === 23));
-  assert.equal(first.filter(({ enemy }) => enemy === "alien").length, 11);
-  assert.equal(first.filter(({ enemy }) => enemy === "alienDrake").length, 1);
-  assert.equal(first.filter(({ enemy }) => enemy === "strongAlienMech").length, 1);
+  assert.equal(
+    first.filter(({ enemy }) => enemy === "alien").length,
+    spec.groups.find(({ enemy }) => enemy === "alien")?.count,
+  );
+  assert.equal(
+    first.filter(({ enemy }) => enemy === "alienDrake").length,
+    spec.groups.find(({ enemy }) => enemy === "alienDrake")?.count,
+  );
+  assert.equal(
+    first.filter(({ enemy }) => enemy === "strongAlienMech").length,
+    spec.groups.find(({ enemy }) => enemy === "strongAlienMech")?.count,
+  );
+  assert.equal(first.find(({ enemy }) => enemy === "strongAlienMech")?.yawDeg, 180);
 });
 
 test("wave spawn resolver skips blocked cells and keeps spacing", () => {

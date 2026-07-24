@@ -23,7 +23,7 @@ import {
   INITIAL_WAVE_DELAY_SECONDS,
   advanceAlienMovement,
   advanceWaveClock,
-  alienFacingYaw,
+  enemyFacingYaw,
   isAdjacentToFootprint,
   type MatchStatus,
   type WaveClockState,
@@ -168,7 +168,13 @@ export class WaveSystem extends createSystem({
     const dz = targetZ - object.position.z;
     object.position.x = movement.x;
     object.position.z = movement.z;
-    if (dx !== 0 || dz !== 0) object.rotation.y = alienFacingYaw(dx, dz);
+    if (dx !== 0 || dz !== 0) {
+      object.rotation.y = enemyFacingYaw(
+        alien.getValue(Enemy, "kind") ?? "alien",
+        dx,
+        dz,
+      );
+    }
     if (!movement.arrived) return;
     alien.setValue(WaveUnit, "hasWaypoint", false);
     alien.setValue(WaveUnit, "nextX", -1);

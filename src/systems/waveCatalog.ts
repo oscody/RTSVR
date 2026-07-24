@@ -1,4 +1,5 @@
 import { GRID_SIZE } from "./constants.ts";
+import { enemyFacingYaw } from "./waveRules.ts";
 
 export type EnemyKind = "alien" | "alienDrake" | "strongAlienMech";
 export type WaveEdge = "north" | "east" | "south" | "west";
@@ -90,7 +91,7 @@ export function resolveWaveSpawns(
         widthTiles: 1,
         x: candidate.x,
         y: candidate.y,
-        yawDeg: inwardYaw(candidate.edge),
+        yawDeg: inwardYaw(candidate.edge, group.enemy),
       });
       occupied.add(key);
       accepted.push(candidate);
@@ -157,11 +158,15 @@ function tooClose(
   );
 }
 
-function inwardYaw(edge: WaveEdge): number {
-  if (edge === "north") return 180;
-  if (edge === "east") return 270;
-  if (edge === "south") return 0;
-  return 90;
+function inwardYaw(edge: WaveEdge, enemy: EnemyKind): number {
+  if (edge === "north") return radiansToDegrees(enemyFacingYaw(enemy, 0, 1));
+  if (edge === "east") return radiansToDegrees(enemyFacingYaw(enemy, -1, 0));
+  if (edge === "south") return radiansToDegrees(enemyFacingYaw(enemy, 0, -1));
+  return radiansToDegrees(enemyFacingYaw(enemy, 1, 0));
+}
+
+function radiansToDegrees(radians: number): number {
+  return (radians * 180) / Math.PI;
 }
 
 function spawnKey(x: number, y: number): string {

@@ -5,6 +5,11 @@ export const ALIEN_MOVE_SPEED = 0.18;
 export const ALIEN_ARRIVAL_EPSILON = 0.005;
 export const ALIEN_REPATH_DELAY = 0.2;
 export const ALIEN_MODEL_FORWARD_YAW = Math.PI;
+export const ENEMY_MODEL_FORWARD_YAW: Readonly<Record<string, number>> = {
+  alien: ALIEN_MODEL_FORWARD_YAW,
+  alienDrake: ALIEN_MODEL_FORWARD_YAW,
+  strongAlienMech: 0,
+};
 
 export type WaveStage = "countdown" | "active" | "stopped";
 export type MatchStatus = "playing" | "defeat" | "victory" | "restarting";
@@ -28,6 +33,10 @@ export interface MovementStepResult {
 
 export function alienFacingYaw(dx: number, dz: number): number {
   return Math.atan2(dx, dz) + ALIEN_MODEL_FORWARD_YAW;
+}
+
+export function enemyFacingYaw(kind: string, dx: number, dz: number): number {
+  return Math.atan2(dx, dz) + (ENEMY_MODEL_FORWARD_YAW[kind] ?? ALIEN_MODEL_FORWARD_YAW);
 }
 
 export function advanceWaveClock(

@@ -42,7 +42,7 @@ import {
   gridKey,
 } from "./state.js";
 import {
-  alienFacingYaw,
+  enemyFacingYaw,
   isAdjacentToFootprint,
   resolveMatchAfterFriendlyElimination,
   resolveMatchAfterWaveCleared,
@@ -203,7 +203,7 @@ export class CombatSystem extends createSystem({
   ): void {
     attacker.setValue(CombatState, "stage", "attacking");
     attacker.object3D!.rotation.y = attacker.hasComponent(Enemy)
-      ? alienFacingYaw(dx, dz)
+      ? enemyFacingYaw(attacker.getValue(Enemy, "kind") ?? "alien", dx, dz)
       : Math.atan2(dx, dz);
     this.cycle.timer = attacker.getValue(CombatState, "timer") ?? 0;
     this.cycle.cadence = spec.cadence;
