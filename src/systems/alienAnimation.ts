@@ -8,11 +8,11 @@ import {
 } from "three";
 import { CombatState, Enemy, Health, WaveUnit } from "./state.js";
 
-const WALK_CLIP = "Walk";
-const SLAM_CLIP = "Energy_Slam";
+const WALK_CLIPS = ["Walk", "Fly"];
+const ATTACK_CLIPS = ["Energy_Slam", "Attack"];
 const CROSS_FADE_SECONDS = 0.12;
 
-type AlienAnimationState = "idle" | "walk" | "slam";
+type AlienAnimationState = "idle" | "move" | "attack";
 
 interface AlienAnimationController {
   current: AlienAnimationState;
@@ -22,26 +22,37 @@ interface AlienAnimationController {
 
 const controllers = new Map<number, AlienAnimationController>();
 
+function findClipByNames(
+  clips: AnimationClip[],
+  names: readonly string[],
+): AnimationClip | undefined {
+  for (const name of names) {
+    const clip = AnimationClip.findByName(clips, name);
+    if (clip) return clip;
+  }
+  return undefined;
+}
+
 export function attachAlienAnimation(
   entity: Entity,
   root: Object3D,
   clips: AnimationClip[],
 ): void {
-  const walkClip = AnimationClip.findByName(clips, WALK_CLIP);
-  const slamClip = AnimationClip.findByName(clips, SLAM_CLIP);
-  if (!walkClip && !slamClip) return;
+  const moveClip = findClipByNames(clips, WALK_CLIPS);
+  const attackClip = findClipByNames(clips, ATTACK_CLIPS);
+  if (!moveClip && !attackClip) return;
 
   const mixer = new AnimationMixer(root);
-  const walk = walkClip ? mixer.clipAction(walkClip) : undefined;
-  const slam = slamClip ? mixer.clipAction(slamClip) : undefined;
+  const move = moveClip ? mixer.clipAction(moveClip) : undefined;
+  const attack = attackClip ? mixer.clipAction(attackClip) : undefined;
 
-  walk?.setLoop(LoopRepeat, Infinity);
-  slam?.setLoop(LoopRepeat, Infinity);
+  move?.setLoop(LoopRepeat, Infinity);
+  attack?.setLoop(LoopRepeat, Infinity);
 
   controllers.set(entity.index, {
     current: "idle",
     mixer,
-    actions: { walk, slam },
+    actions: { move, attack },
   });
 }
 
@@ -65,14 +76,14 @@ function desiredAnimation(entity: Entity): AlienAnimationState {
     entity.getValue(CombatState, "stage") === "attacking" ||
     entity.getValue(WaveUnit, "stage") === "attacking"
   ) {
-    return "slam";
+    return "attack";
   }
   if (
     (entity.getValue(WaveUnit, "hasWaypoint") ?? false) ||
     entity.getValue(WaveUnit, "stage") === "marching" ||
     entity.getValue(CombatState, "stage") === "approaching"
   ) {
-    return "walk";
+    return "move";
   }
   return "idle";
 }
@@ -83,8 +94,8 @@ function playAnimation(
 ): void {
   if (controller.current === nextState) return;
 
-  const previous = controller.actions[controller.current as "walk" | "slam"];
-  const next = controller.actions[nextState as "walk" | "slam"];
+  const previous = controller.actions[controller.current as "move" | "attack"];
+  const next = controller.actions[nextState as "move" | "attack"];
 
   previous?.fadeOut(CROSS_FADE_SECONDS);
   if (next) {

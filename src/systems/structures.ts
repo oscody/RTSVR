@@ -128,8 +128,8 @@ const STRUCTURES: StructureSpec[] = [
   { asset: "alienWalkingSlam", name: "Alien6", widthTiles: 1, gridX: [23, 23], gridY: [8, 8], yawDeg: 270, enemy: "alien" },
   { asset: "alienWalkingSlam", name: "Alien7", widthTiles: 1, gridX: [22, 22], gridY: [15, 15], yawDeg: 270, enemy: "alien" },
   { asset: "alienWalkingSlam", name: "Alien8", widthTiles: 1, gridX: [21, 21], gridY: [22, 22], enemy: "alien" },
-  { asset: "alien", name: "Alien9", widthTiles: 1, gridX: [12, 12], gridY: [22, 22], enemy: "alien" },
-  { asset: "alien", name: "Alien10", widthTiles: 1, gridX: [3, 3], gridY: [22, 22], enemy: "alien" },
+  { asset: "alienDrakeFlyingAttack", name: "Alien9", widthTiles: 1, gridX: [12, 12], gridY: [22, 22], enemy: "alien" },
+  { asset: "strongAlienMech", name: "Alien10", widthTiles: 1, gridX: [3, 3], gridY: [22, 22], yawDeg: 324, enemy: "alien" },
   { asset: "craftMinerAnimated", name: "CraftMiner", widthTiles: 1, gridX: [11, 11], gridY: [13, 13], yawDeg: 180, unit: "miner", unitCategory: "factory" },
   // Base defense — two turrets flanking opposite corners of the command center.
   { asset: "turretSingle", name: "TurretSingle", widthTiles: 1, gridX: [13, 13], gridY: [9, 9], yawDeg: 180, terrain: "blocked", building: "turret" },
@@ -279,7 +279,11 @@ export function createInitialScenario(world: World): void {
           .addComponent(CombatState)
           .addComponent(WaveUnit)
           .addComponent(RayInteractable);
-        if (spec.asset === "alienWalkingSlam") {
+        if (
+          spec.asset === "alienWalkingSlam" ||
+          spec.asset === "alienDrakeFlyingAttack" ||
+          spec.asset === "strongAlienMech"
+        ) {
           attachAlienAnimation(entity, model, gltf.animations);
         }
         attachHealthBar(holder);

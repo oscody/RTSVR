@@ -56,6 +56,8 @@ const assets: AssetManifest = {
   astronautB: { url: "/gltf/astronautB.glb", type: AssetType.GLTF, priority: "critical" },
   alien: { url: "/gltf/alien.glb", type: AssetType.GLTF, priority: "critical" },
   alienWalkingSlam: { url: "/gltf/alien_walking_slam_no_fx.glb", type: AssetType.GLTF, priority: "critical" },
+  alienDrakeFlyingAttack: { url: "/gltf/alien_drake.glb", type: AssetType.GLTF, priority: "critical" },
+  strongAlienMech: { url: "/gltf/alien_strong.glb", type: AssetType.GLTF, priority: "critical" },
   craftCargoA: { url: "/gltf/craft/craft_cargoA.glb", type: AssetType.GLTF, priority: "critical" },
   craftMinerAnimated: { url: "/gltf/craft/craft_cargoA_A.glb", type: AssetType.GLTF, priority: "critical" },
   craftMiner: { url: "/gltf/craft/craft_miner.glb", type: AssetType.GLTF, priority: "critical" },
