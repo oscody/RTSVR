@@ -9,6 +9,7 @@ export function createScenarioResetDefaults(
     waveNumber: 1,
     waveTimer,
     waveStage: "countdown",
+    spawnedWaveNumber: 0,
     matchStatus: "playing",
     commandCenterAlive: true,
   });

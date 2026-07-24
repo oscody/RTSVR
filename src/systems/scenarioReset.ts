@@ -139,6 +139,11 @@ export class ScenarioResetSystem extends createSystem({
     source.setValue(WaveSource, "stage", SCENARIO_RESET_DEFAULTS.waveStage);
     source.setValue(
       WaveSource,
+      "spawnedWaveNumber",
+      SCENARIO_RESET_DEFAULTS.spawnedWaveNumber,
+    );
+    source.setValue(
+      WaveSource,
       "revision",
       (source.getValue(WaveSource, "revision") ?? 0) + 1,
     );

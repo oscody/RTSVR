@@ -3,6 +3,7 @@ import { GRID_SIZE, gridToWorld, worldToGrid } from "./board.js";
 import { UNIT_APPROACH_OFFSETS } from "./constants.ts";
 import { footprintApproaches } from "./constructionRules.js";
 import { findGridPath, type GridPosition } from "./navigation.js";
+import { createEnemyEntity } from "./structures.js";
 import {
   BoardTile,
   Building,
@@ -28,6 +29,7 @@ import {
   type WaveClockState,
   type WaveStage,
 } from "./waveRules.js";
+import { getWaveSpec, resolveWaveSpawns } from "./waveCatalog.js";
 
 interface TargetPath {
   target: Entity;
@@ -61,6 +63,9 @@ export class WaveSystem extends createSystem({
     const activated = advanceWaveClock(this.clock, delta, matchStatus);
     source.setValue(WaveSource, "timer", this.clock.timer);
     source.setValue(WaveSource, "stage", this.clock.stage);
+    if (this.clock.stage === "active" && matchStatus === "playing") {
+      this.spawnWaveIfNeeded(source);
+    }
     if (activated) {
       source.setValue(
         WaveSource,
@@ -115,6 +120,35 @@ export class WaveSystem extends createSystem({
       alien.setValue(WaveUnit, "stage", "marching");
       alien.setValue(CombatState, "stage", "approaching");
     }
+  }
+
+  private spawnWaveIfNeeded(source: Entity): void {
+    if ((source.getValue(WaveSource, "spawnedWaveNumber") ?? 0) === this.clock.waveNumber) {
+      return;
+    }
+    const spec = getWaveSpec(this.clock.waveNumber);
+    if (!spec) {
+      source.setValue(WaveSource, "spawnedWaveNumber", this.clock.waveNumber);
+      return;
+    }
+
+    const spawns = resolveWaveSpawns(spec, {
+      canSpawnAt: (x, y) => this.canSpawnAlienAt(x, y),
+    });
+    const root = boardState.boardRoot;
+    if (!root) throw new Error("Wave spawning requires BoardSystem first");
+    for (const spawn of spawns) {
+      createEnemyEntity(this.world, root, {
+        asset: spawn.asset,
+        kind: spawn.enemy,
+        name: spawn.name,
+        widthTiles: spawn.widthTiles,
+        x: spawn.x,
+        y: spawn.y,
+        yawDeg: spawn.yawDeg,
+      });
+    }
+    source.setValue(WaveSource, "spawnedWaveNumber", this.clock.waveNumber);
   }
 
   private advanceAlien(alien: Entity, delta: number): void {
@@ -202,7 +236,14 @@ export class WaveSystem extends createSystem({
     return terrain === "open" && !this.isOccupied(x, y, exclude);
   }
 
-  private isOccupied(x: number, y: number, exclude: Entity): boolean {
+  private canSpawnAlienAt(x: number, y: number): boolean {
+    const terrain = boardState.tileByKey
+      .get(gridKey(x, y))
+      ?.getValue(BoardTile, "terrain");
+    return terrain === "open" && !this.isOccupied(x, y);
+  }
+
+  private isOccupied(x: number, y: number, exclude?: Entity): boolean {
     for (const unit of this.queries.units.entities) {
       const object = unit.object3D;
       if (!object || (unit.getValue(Health, "current") ?? 0) <= 0) continue;
@@ -210,7 +251,10 @@ export class WaveSystem extends createSystem({
       if (unitX === x && unitY === y) return true;
     }
     for (const alien of this.queries.aliens.entities) {
-      if (alien === exclude || (alien.getValue(Health, "current") ?? 0) <= 0) {
+      if (
+        (exclude && alien === exclude) ||
+        (alien.getValue(Health, "current") ?? 0) <= 0
+      ) {
         continue;
       }
       const object = alien.object3D;

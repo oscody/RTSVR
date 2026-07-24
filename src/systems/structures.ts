@@ -9,6 +9,7 @@ import {
   RayInteractable,
   Vector3,
   createSystem,
+  type Entity,
   type World,
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
@@ -63,14 +64,27 @@ interface StructureSpec {
   unit?: string;
   /** building category shown by the live unit roster */
   unitCategory?: string;
-  /** enemy: attaches Enemy {kind} + RayInteractable (approach/attack target) */
-  enemy?: string;
   /** stamps the tiles under the footprint: "crystal" (minable) | "blocked" */
   terrain?: string;
   /** finite crystal deposit configuration */
   resource?: { kind: "small" | "large"; capacity: number };
   /** friendly building category used by construction and production */
   building?: string;
+}
+
+export interface EnemyEntitySpec {
+  asset: string;
+  name: string;
+  kind: string;
+  widthTiles: number;
+  x: number;
+  y: number;
+  yawDeg?: number;
+}
+
+interface InteractionProxySpec {
+  name: string;
+  widthTiles: number;
 }
 
 const STRUCTURES: StructureSpec[] = [
@@ -116,21 +130,6 @@ const STRUCTURES: StructureSpec[] = [
   { asset: "astronautAAnimated", name: "AstronautA", widthTiles: 1, gridX: [9, 9], gridY: [12, 12], yawDeg: 180, unit: "astronaut", unitCategory: "command-center" },
   { asset: "astronautB", name: "AstronautB", widthTiles: 1, gridX: [13, 13], gridY: [12, 12], yawDeg: 180, unit: "astronaut", unitCategory: "command-center" },
 
-  // Aliens use live occupancy instead of stamped terrain so their old tile
-  // automatically becomes open when wave movement is added.
-  { asset: "alienWalkingSlam", name: "Alien1", widthTiles: 1, gridX: [1, 1], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien2", widthTiles: 1, gridX: [6, 6], gridY: [23, 23], yawDeg: 180, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien3", widthTiles: 1, gridX: [12, 12], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien1", widthTiles: 1, gridX: [1, 1], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien2", widthTiles: 1, gridX: [6, 6], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien3", widthTiles: 1, gridX: [12, 12], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien4", widthTiles: 1, gridX: [18, 18], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien5", widthTiles: 1, gridX: [22, 22], gridY: [0, 0], yawDeg: 180, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien6", widthTiles: 1, gridX: [23, 23], gridY: [8, 8], yawDeg: 270, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien7", widthTiles: 1, gridX: [23, 23], gridY: [15, 15], yawDeg: 270, enemy: "alien" },
-  { asset: "alienWalkingSlam", name: "Alien8", widthTiles: 1, gridX: [21, 21], gridY: [23, 23], enemy: "alien" },
-  { asset: "alienDrakeFlyingAttack", name: "Alien9", widthTiles: 1, gridX: [12, 12], gridY: [23, 23], enemy: "alienDrake" },
-  { asset: "strongAlienMech", name: "Alien10", widthTiles: 1, gridX: [3, 3], gridY: [23, 23], yawDeg: 326, enemy: "strongAlienMech" },
   { asset: "craftMinerAnimated", name: "CraftMiner", widthTiles: 1, gridX: [11, 11], gridY: [13, 13], yawDeg: 180, unit: "miner", unitCategory: "factory" },
   // Base defense — two turrets flanking opposite corners of the command center.
   { asset: "turretSingle", name: "TurretSingle", widthTiles: 1, gridX: [13, 13], gridY: [9, 9], yawDeg: 180, terrain: "blocked", building: "turret" },
@@ -176,7 +175,11 @@ const interactionProxyMaterial = new MeshBasicMaterial({
   depthWrite: false,
 });
 
-function addInteractionProxy(holder: Group, spec: StructureSpec, model: Object3D): void {
+function addInteractionProxy(
+  holder: Group,
+  spec: InteractionProxySpec,
+  model: Object3D,
+): void {
   const size = new Box3().setFromObject(model).getSize(new Vector3());
   const footprint = spec.widthTiles * TILE_SIZE * 0.82;
   const height = Math.max(size.y, TILE_SIZE * 0.8);
@@ -203,6 +206,50 @@ function addCargoVisual(holder: Group, model: Object3D): Object3D {
   return cargo;
 }
 
+export function createEnemyEntity(
+  world: World,
+  parent: Entity,
+  spec: EnemyEntitySpec,
+): Entity {
+  const gltf = AssetManager.getGLTF(spec.asset);
+  if (!gltf) throw new Error(`${spec.asset} not preloaded`);
+  const model = gltf.scene;
+  const width = new Box3().setFromObject(model).getSize(new Vector3()).x;
+  const scale = (spec.widthTiles * TILE_SIZE) / width;
+  model.scale.setScalar(scale);
+  seatModel(model);
+
+  const holder = new Group();
+  holder.name = spec.name;
+  if (spec.yawDeg !== undefined) {
+    holder.rotation.y = (spec.yawDeg * Math.PI) / 180;
+  }
+  const [worldX, worldZ] = gridToWorld(spec.x, spec.y);
+  holder.position.set(worldX, 0.006, worldZ);
+  holder.add(model);
+  addInteractionProxy(holder, spec, model);
+
+  const maxHealth = getEnemyMaxHealth(spec.kind);
+  const entity = world
+    .createTransformEntity(holder, { parent })
+    .addComponent(ScenarioObject)
+    .addComponent(Enemy, { kind: spec.kind })
+    .addComponent(Health, { current: maxHealth, max: maxHealth })
+    .addComponent(CombatState)
+    .addComponent(WaveUnit)
+    .addComponent(RayInteractable);
+
+  if (
+    spec.asset === "alienWalkingSlam" ||
+    spec.asset === "alienDrakeFlyingAttack" ||
+    spec.asset === "strongAlienMech"
+  ) {
+    attachAlienAnimation(entity, model, gltf.animations);
+  }
+  attachHealthBar(holder);
+  return entity;
+}
+
 export function createInitialScenario(world: World): void {
   const root = boardState.boardRoot;
   if (!root) throw new Error("Initial scenario requires BoardSystem first");
@@ -213,9 +260,7 @@ export function createInitialScenario(world: World): void {
       const model = gltf.scene;
 
       // Rotate BEFORE measuring/seating so bounds reflect the final pose.
-      // Moving aliens rotate their holder at runtime. Keep the model itself at
-      // a consistent forward axis so its spawn decoration cannot skew facing.
-      if (spec.yawDeg && !spec.enemy) {
+      if (spec.yawDeg) {
         model.rotation.y = (spec.yawDeg * Math.PI) / 180;
       }
 
@@ -226,16 +271,13 @@ export function createInitialScenario(world: World): void {
 
       const holder = new Group();
       holder.name = spec.name;
-      if (spec.enemy && spec.yawDeg) {
-        holder.rotation.y = (spec.yawDeg * Math.PI) / 180;
-      }
       const [x0, x1] = spec.gridX;
       const [y0, y1] = spec.gridY;
       const [wx0, wz0] = gridToWorld(x0, y0);
       const [wx1, wz1] = gridToWorld(x1, y1);
       holder.position.set((wx0 + wx1) / 2, 0.006, (wz0 + wz1) / 2);
       holder.add(model);
-      if (spec.unit || spec.enemy || spec.building) {
+      if (spec.unit || spec.building) {
         addInteractionProxy(holder, spec, model);
       }
       const entity = world
@@ -269,23 +311,6 @@ export function createInitialScenario(world: World): void {
         }
         if (spec.asset === "astronautAAnimated") {
           attachUnitAnimation(entity, model, gltf.animations);
-        }
-        attachHealthBar(holder);
-      }
-      if (spec.enemy) {
-        const maxHealth = getEnemyMaxHealth(spec.enemy);
-        entity
-          .addComponent(Enemy, { kind: spec.enemy })
-          .addComponent(Health, { current: maxHealth, max: maxHealth })
-          .addComponent(CombatState)
-          .addComponent(WaveUnit)
-          .addComponent(RayInteractable);
-        if (
-          spec.asset === "alienWalkingSlam" ||
-          spec.asset === "alienDrakeFlyingAttack" ||
-          spec.asset === "strongAlienMech"
-        ) {
-          attachAlienAnimation(entity, model, gltf.animations);
         }
         attachHealthBar(holder);
       }

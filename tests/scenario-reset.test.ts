@@ -15,6 +15,7 @@ test("scenario reset restores initial economy, statistics, wave, and match value
     waveNumber: 1,
     waveTimer: 3,
     waveStage: "countdown",
+    spawnedWaveNumber: 0,
     matchStatus: "playing",
     commandCenterAlive: true,
   });
@@ -102,6 +103,7 @@ test("restart clears transient state and rebuilds the initial scenario", () => {
   assert.match(source, /cargoVisualByUnit\.clear\(\)/);
   assert.match(source, /pathByUnit\.clear\(\)/);
   assert.match(source, /setValue\(BoardTile, "terrain", "open"\)/);
+  assert.match(source, /"spawnedWaveNumber"/);
   assert.match(source, /createInitialScenario\(this\.world\)/);
   assert.match(source, /resetTablet\(\)/);
 });

@@ -66,6 +66,7 @@ export const WaveSource = createComponent("WaveSource", {
   waveNumber: { type: Types.Int16, default: 1 },
   timer: { type: Types.Float32, default: INITIAL_WAVE_DELAY_SECONDS },
   stage: { type: Types.String, default: "countdown" },
+  spawnedWaveNumber: { type: Types.Int16, default: 0 },
   revision: { type: Types.Int32, default: 0 },
 });
 
