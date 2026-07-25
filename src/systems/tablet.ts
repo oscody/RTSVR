@@ -517,7 +517,12 @@ export class TabletSystem extends createSystem({
       (settings.getValue(DebugSettings, "revision") ?? 0) + 1,
     );
     if (spec.key === "turretRange") refreshTurretRangeRingGeometry();
-    if (spec.key === "astronautAttackRange") refreshUnitAttackRangeRingGeometry();
+    if (
+      spec.key === "astronautAttackRange" ||
+      spec.key === "craftRacerAttackRange"
+    ) {
+      refreshUnitAttackRangeRingGeometry();
+    }
     this.touch(tablet, `${spec.label}: ${this.formatSettingValue(next, spec.decimals)}`);
   }
 

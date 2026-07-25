@@ -212,6 +212,10 @@ export const DebugSettings = createComponent("DebugSettings", {
     type: Types.Float32,
     default: UNIT_ATTACK_SPECS.astronaut.range,
   },
+  craftRacerAttackRange: {
+    type: Types.Float32,
+    default: UNIT_ATTACK_SPECS.racer.range,
+  },
   miningGatherTimeSeconds: {
     type: Types.Float32,
     default: MINING_GATHER_TIME_SECONDS,
@@ -230,6 +234,7 @@ export type DebugSettingKey =
   | "waveReleaseIntervalSeconds"
   | "turretRange"
   | "astronautAttackRange"
+  | "craftRacerAttackRange"
   | "miningGatherTimeSeconds";
 
 export const boardState = {

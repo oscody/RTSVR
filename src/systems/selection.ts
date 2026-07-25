@@ -35,13 +35,23 @@ function currentTurretRange(): number {
 function currentUnitAttackRange(kind: string): number | null {
   const spec = getUnitAttackSpec(kind);
   if (!spec) return null;
-  if (kind !== "astronaut") return spec.range;
-  return (
-    boardState.debugSettings?.getValue(
-      DebugSettings,
-      "astronautAttackRange",
-    ) ?? spec.range
-  );
+  if (kind === "astronaut") {
+    return (
+      boardState.debugSettings?.getValue(
+        DebugSettings,
+        "astronautAttackRange",
+      ) ?? spec.range
+    );
+  }
+  if (kind === "racer") {
+    return (
+      boardState.debugSettings?.getValue(
+        DebugSettings,
+        "craftRacerAttackRange",
+      ) ?? spec.range
+    );
+  }
+  return spec.range;
 }
 
 export function getSelectedUnits(): Entity[] {

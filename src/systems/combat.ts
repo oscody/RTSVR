@@ -436,13 +436,24 @@ export class CombatSystem extends createSystem({
 
   private currentUnitAttackSpec(kind: string): AttackSpec | undefined {
     const spec = getUnitAttackSpec(kind);
-    if (!spec || kind !== "astronaut") return spec;
-    const range =
-      boardState.debugSettings?.getValue(
-        DebugSettings,
-        "astronautAttackRange",
-      ) ?? spec.range;
-    return { ...spec, range };
+    if (!spec) return spec;
+    if (kind === "astronaut") {
+      const range =
+        boardState.debugSettings?.getValue(
+          DebugSettings,
+          "astronautAttackRange",
+        ) ?? spec.range;
+      return { ...spec, range };
+    }
+    if (kind === "racer") {
+      const range =
+        boardState.debugSettings?.getValue(
+          DebugSettings,
+          "craftRacerAttackRange",
+        ) ?? spec.range;
+      return { ...spec, range };
+    }
+    return spec;
   }
 
   private pursueTarget(attacker: Entity, target: Entity): void {

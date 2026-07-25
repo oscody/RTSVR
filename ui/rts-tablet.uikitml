@@ -587,8 +587,8 @@
     align-items: center;
     justify-content: space-between;
     width: 548px;
-    height: 30px;
-    margin-top: 4px;
+    height: 28px;
+    margin-top: 3px;
     padding-left: 10px;
     padding-right: 10px;
     background-color: #f7fafc;
@@ -794,6 +794,14 @@
         <button id="setting-astronautAttackRange-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
         <span id="setting-astronautAttackRange-value" class="settings-value">0.29</span>
         <button id="setting-astronautAttackRange-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">CraftRacer Attack Range</span>
+      <div class="settings-controls">
+        <button id="setting-craftRacerAttackRange-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
+        <span id="setting-craftRacerAttackRange-value" class="settings-value">0.29</span>
+        <button id="setting-craftRacerAttackRange-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
       </div>
     </div>
     <div class="settings-row">

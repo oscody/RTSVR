@@ -37,7 +37,7 @@ test("wave banner exposes dynamic wave countdown text", () => {
   assert.match(source, /Wave 1 incoming in/);
 });
 
-test("settings view exposes astronaut attack range controls", () => {
+test("settings view exposes friendly attack range controls", () => {
   const source = readFileSync(
     new URL("../ui/rts-tablet.uikitml", import.meta.url),
     "utf8",
@@ -45,6 +45,9 @@ test("settings view exposes astronaut attack range controls", () => {
   assert.match(source, /id="setting-astronautAttackRange-minus"/);
   assert.match(source, /id="setting-astronautAttackRange-value"/);
   assert.match(source, /id="setting-astronautAttackRange-plus"/);
+  assert.match(source, /id="setting-craftRacerAttackRange-minus"/);
+  assert.match(source, /id="setting-craftRacerAttackRange-value"/);
+  assert.match(source, /id="setting-craftRacerAttackRange-plus"/);
 });
 
 test("Units view exposes four roster slots and pagination controls", () => {

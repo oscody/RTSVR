@@ -71,6 +71,14 @@ export const DEBUG_SETTINGS_CATALOG: readonly DebugSettingSpec[] = [
     decimals: 2,
   },
   {
+    key: "craftRacerAttackRange",
+    label: "CraftRacer Attack Range",
+    step: 0.05,
+    min: 0.1,
+    max: 5,
+    decimals: 2,
+  },
+  {
     key: "miningGatherTimeSeconds",
     label: "Mining Gather Time (s)",
     step: 0.1,
