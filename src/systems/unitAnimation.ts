@@ -9,10 +9,11 @@ import {
 } from "three";
 import {
   ANIMATION_CROSS_FADE_SECONDS,
+  UNIT_ATTACK_CLIPS,
   UNIT_BEACON_PLACEMENT_CLIP,
+  UNIT_IDLE_CLIPS,
   UNIT_LASER_POINT_ASSIST_CLIP,
-  UNIT_SHOOT_CLIP,
-  UNIT_WALK_CLIP,
+  UNIT_MOVE_CLIPS,
 } from "./constants.ts";
 import {
   CombatState,
@@ -23,24 +24,35 @@ import {
 } from "./state.js";
 
 type UnitAnimationState = "idle" | "walk" | "shoot" | "beacon" | "laser";
-type UnitActionState = Exclude<UnitAnimationState, "idle">;
 
 interface UnitAnimationController {
   beaconDuration: number;
   current: UnitAnimationState;
   mixer: AnimationMixer;
-  actions: Partial<Record<UnitActionState, AnimationAction>>;
+  actions: Partial<Record<UnitAnimationState, AnimationAction>>;
 }
 
 const controllers = new Map<number, UnitAnimationController>();
+
+function findFirstClip(
+  clips: AnimationClip[],
+  names: readonly string[],
+): AnimationClip | undefined {
+  for (const name of names) {
+    const clip = AnimationClip.findByName(clips, name);
+    if (clip) return clip;
+  }
+  return undefined;
+}
 
 export function attachUnitAnimation(
   entity: Entity,
   root: Object3D,
   clips: AnimationClip[],
 ): void {
-  const walkClip = AnimationClip.findByName(clips, UNIT_WALK_CLIP);
-  const shootClip = AnimationClip.findByName(clips, UNIT_SHOOT_CLIP);
+  const idleClip = findFirstClip(clips, UNIT_IDLE_CLIPS);
+  const walkClip = findFirstClip(clips, UNIT_MOVE_CLIPS);
+  const shootClip = findFirstClip(clips, UNIT_ATTACK_CLIPS);
   const beaconClip = AnimationClip.findByName(
     clips,
     UNIT_BEACON_PLACEMENT_CLIP,
@@ -49,14 +61,16 @@ export function attachUnitAnimation(
     clips,
     UNIT_LASER_POINT_ASSIST_CLIP,
   );
-  if (!walkClip && !shootClip && !beaconClip && !laserClip) return;
+  if (!idleClip && !walkClip && !shootClip && !beaconClip && !laserClip) return;
 
   const mixer = new AnimationMixer(root);
+  const idle = idleClip ? mixer.clipAction(idleClip) : undefined;
   const walk = walkClip ? mixer.clipAction(walkClip) : undefined;
   const shoot = shootClip ? mixer.clipAction(shootClip) : undefined;
   const beacon = beaconClip ? mixer.clipAction(beaconClip) : undefined;
   const laser = laserClip ? mixer.clipAction(laserClip) : undefined;
 
+  idle?.setLoop(LoopRepeat, Infinity);
   walk?.setLoop(LoopRepeat, Infinity);
   shoot?.setLoop(LoopRepeat, Infinity);
   beacon?.setLoop(LoopOnce, 1);
@@ -67,8 +81,9 @@ export function attachUnitAnimation(
     beaconDuration: beaconClip?.duration ?? 0,
     current: "idle",
     mixer,
-    actions: { walk, shoot, beacon, laser },
+    actions: { idle, walk, shoot, beacon, laser },
   });
+  idle?.play();
 }
 
 export function detachUnitAnimation(entity: Entity): void {
@@ -114,8 +129,8 @@ function playAnimation(
 ): void {
   if (controller.current === nextState) return;
 
-  const previous = controller.actions[controller.current as UnitActionState];
-  const next = controller.actions[nextState as UnitActionState];
+  const previous = controller.actions[controller.current];
+  const next = controller.actions[nextState];
 
   previous?.fadeOut(ANIMATION_CROSS_FADE_SECONDS);
   if (next) {

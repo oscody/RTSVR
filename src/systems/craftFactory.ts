@@ -16,6 +16,7 @@ import { canUnitAttack, getUnitMaxHealth } from "./combatRules.js";
 import type { CraftSpec } from "./craftCatalog.js";
 import { attachHealthBar } from "./healthBar.js";
 import { attachMinerAnimation } from "./minerAnimation.js";
+import { attachUnitAnimation } from "./unitAnimation.js";
 import {
   CombatState,
   CombatCapability,
@@ -90,6 +91,9 @@ export function createCraftEntity(
     if (spec.asset === "craftMinerAnimated") {
       attachMinerAnimation(entity, model, gltf.animations);
     }
+  }
+  if (spec.asset === "craftRacer") {
+    attachUnitAnimation(entity, model, gltf.animations);
   }
   attachHealthBar(holder);
   return entity;

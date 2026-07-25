@@ -61,7 +61,7 @@ const assets: AssetManifest = {
   craftCargoA: { url: "/gltf/craft/craft_cargoA.glb", type: AssetType.GLTF, priority: "critical" },
   craftMinerAnimated: { url: "/gltf/craft/craft_miner_A.glb", type: AssetType.GLTF, priority: "critical" },
   craftMiner: { url: "/gltf/craft/craft_miner.glb", type: AssetType.GLTF, priority: "critical" },
-  craftRacer: { url: "/gltf/craft/craft_racer.glb", type: AssetType.GLTF, priority: "critical" },
+  craftRacer: { url: "/gltf/craft/craft_racerA.glb", type: AssetType.GLTF, priority: "critical" },
   rover: { url: "/gltf/craft/rover.glb", type: AssetType.GLTF, priority: "critical" },
   turretSingle: { url: "/gltf/equipment/turret_single.glb", type: AssetType.GLTF, priority: "critical" },
   meteor: { url: "/gltf/terrain/meteor/meteor.glb", type: AssetType.GLTF, priority: "critical" },

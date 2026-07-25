@@ -83,7 +83,7 @@ export function createCraftProductionSite(
 
   let animatedModel: Object3D | null = null;
   let animatedClips: AnimationClip[] = [];
-  if (spec.asset === "craftMinerAnimated") {
+  if (spec.asset === "craftMinerAnimated" || spec.asset === "craftRacer") {
     const gltf = AssetManager.getGLTF(spec.asset);
     if (!gltf) throw new Error(`${spec.asset} not preloaded`);
     animatedModel = gltf.scene;

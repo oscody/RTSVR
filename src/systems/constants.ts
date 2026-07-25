@@ -67,6 +67,9 @@ export const ANIMATION_CROSS_FADE_SECONDS = 0.12;
 export const ALIEN_MOVE_CLIPS = ["Walk", "Fly"] as const;
 export const ALIEN_ATTACK_CLIPS = ["Energy_Slam", "Attack"] as const;
 
+export const UNIT_IDLE_CLIPS = ["Idle", "Idle_Hover"] as const;
+export const UNIT_MOVE_CLIPS = ["Walk", "Move"] as const;
+export const UNIT_ATTACK_CLIPS = ["Shoot", "StrafeFire"] as const;
 export const UNIT_WALK_CLIP = "Walk";
 export const UNIT_SHOOT_CLIP = "Shoot";
 export const UNIT_BEACON_PLACEMENT_CLIP = "BeaconPlacement";

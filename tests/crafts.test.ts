@@ -35,7 +35,7 @@ test("craft catalog exposes every model and tablet image", () => {
       },
       {
         kind: "racer",
-        glb: "/gltf/craft/craft_racer.glb",
+        glb: "/gltf/craft/craft_racerA.glb",
         image: "/images/craft_racer.png",
         duration: 8,
         locked: false,
