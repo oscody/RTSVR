@@ -20,11 +20,38 @@
   }
 
   .title {
-    width: 250px;
+    width: 178px;
     height: 30px;
     color: #15212a;
     font-size: 24px;
     font-weight: 700;
+  }
+
+  .level-chip {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    width: 86px;
+    height: 28px;
+    background-color: #ecf7fb;
+    border-width: 1px;
+    border-color: #74a7bb;
+    border-radius: 5px;
+  }
+
+  .level-label {
+    height: 22px;
+    color: #365466;
+    font-size: 13px;
+    font-weight: 700;
+    margin-right: 5px;
+  }
+
+  .level-value {
+    height: 24px;
+    color: #0e7490;
+    font-size: 20px;
+    font-weight: 800;
   }
 
   .balance {
@@ -528,6 +555,10 @@
 <Panel class="tablet">
   <div class="top-row">
     <span class="title">RTS-VR</span>
+    <div class="level-chip">
+      <span class="level-label">Level</span>
+      <span id="current-level" class="level-value">1</span>
+    </div>
     <div class="balance">
       <GemIcon class="balance-icon"></GemIcon>
       <span class="balance-label">Crystals</span>

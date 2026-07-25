@@ -117,13 +117,14 @@ export class TabletSystem extends createSystem({
     // countdown timer changes continuously while wave stage is "countdown".
     const waveSource = boardState.waveSource;
     const waveStage = waveSource?.getValue(WaveSource, "stage") ?? "countdown";
+    const waveNumber = waveSource?.getValue(WaveSource, "waveNumber") ?? 1;
+    this.setText("current-level", `${waveNumber}`);
     const countingDown = waveStage === "countdown";
     element(document, "wave-banner")?.setProperties({
       display: countingDown ? "flex" : "none",
     });
     if (countingDown) {
       const waveTimer = waveSource?.getValue(WaveSource, "timer") ?? 0;
-      const waveNumber = waveSource?.getValue(WaveSource, "waveNumber") ?? 1;
       this.setText("wave-banner-label", `Wave ${waveNumber} incoming in`);
       this.setText("wave-countdown", `${Math.max(0, Math.ceil(waveTimer))}`);
     }

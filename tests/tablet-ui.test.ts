@@ -31,6 +31,7 @@ test("wave banner exposes dynamic wave countdown text", () => {
     new URL("../ui/rts-tablet.uikitml", import.meta.url),
     "utf8",
   );
+  assert.match(source, /id="current-level"/);
   assert.match(source, /id="wave-banner-label"/);
   assert.match(source, /id="wave-countdown"/);
   assert.match(source, /Wave 1 incoming in/);
