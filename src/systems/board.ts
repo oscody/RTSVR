@@ -15,6 +15,7 @@ import { Object3D, RingGeometry } from "@iwsdk/core";
 import {
   BoardMarker,
   BoardTile,
+  DebugSettings,
   GameState,
   GameStats,
   MatchState,
@@ -211,5 +212,11 @@ export class BoardSystem extends createSystem({}) {
       .createTransformEntity(waveSourceObject, { parent: root })
       .addComponent(WaveSource)
       .addComponent(MatchState);
+
+    const debugSettingsObject = new Object3D();
+    debugSettingsObject.name = "DebugSettings";
+    boardState.debugSettings = this.world
+      .createTransformEntity(debugSettingsObject, { parent: root })
+      .addComponent(DebugSettings);
   }
 }

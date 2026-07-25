@@ -14,6 +14,7 @@ import {
 } from "./scenarioResetRules.js";
 import {
   BoardTile,
+  DebugSettings,
   GameState,
   GameStats,
   MatchResultPanel,
@@ -135,7 +136,14 @@ export class ScenarioResetSystem extends createSystem({
       "waveNumber",
       SCENARIO_RESET_DEFAULTS.waveNumber,
     );
-    source.setValue(WaveSource, "timer", SCENARIO_RESET_DEFAULTS.waveTimer);
+    source.setValue(
+      WaveSource,
+      "timer",
+      boardState.debugSettings?.getValue(
+        DebugSettings,
+        "initialWaveDelaySeconds",
+      ) ?? SCENARIO_RESET_DEFAULTS.waveTimer,
+    );
     source.setValue(WaveSource, "stage", SCENARIO_RESET_DEFAULTS.waveStage);
     source.setValue(
       WaveSource,

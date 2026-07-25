@@ -29,6 +29,7 @@ import {
   CombatState,
   ConstructionSite,
   ConstructionState,
+  DebugSettings,
   Enemy,
   GameStats,
   Health,
@@ -71,7 +72,9 @@ export class CombatSystem extends createSystem({
 
   update(delta: number): void {
     for (const attacker of this.queries.attackers.entities) {
-      const spec = getUnitAttackSpec(attacker.getValue(Unit, "kind") ?? "rover");
+      const spec = this.currentUnitAttackSpec(
+        attacker.getValue(Unit, "kind") ?? "rover",
+      );
       if (!spec) {
         this.clearAttack(attacker);
         continue;
@@ -139,11 +142,14 @@ export class CombatSystem extends createSystem({
       this.applyAttack(attacker, target, spec, current, delta, dx, dz);
     }
 
+    const turretRange =
+      boardState.debugSettings?.getValue(DebugSettings, "turretRange") ??
+      TURRET_ATTACK_SPEC.range;
     for (const turret of this.queries.turrets.entities) {
       if (turret.getValue(Building, "kind") !== "turret") continue;
       let target = turret.getValue(CombatState, "target") as Entity | null;
-      if (!this.isEnemyInRange(turret, target, TURRET_ATTACK_SPEC.range)) {
-        target = this.findNearestEnemyInRange(turret, TURRET_ATTACK_SPEC.range);
+      if (!this.isEnemyInRange(turret, target, turretRange)) {
+        target = this.findNearestEnemyInRange(turret, turretRange);
         turret.setValue(CombatState, "target", target);
         turret.setValue(CombatState, "timer", 0);
       }
@@ -398,7 +404,14 @@ export class CombatSystem extends createSystem({
     tablet: Entity | null,
   ): void {
     source.setValue(WaveSource, "waveNumber", waveNumber);
-    source.setValue(WaveSource, "timer", INITIAL_WAVE_DELAY_SECONDS);
+    source.setValue(
+      WaveSource,
+      "timer",
+      boardState.debugSettings?.getValue(
+        DebugSettings,
+        "initialWaveDelaySeconds",
+      ) ?? INITIAL_WAVE_DELAY_SECONDS,
+    );
     source.setValue(WaveSource, "stage", "countdown");
     source.setValue(WaveSource, "releaseTimer", 0);
     source.setValue(WaveSource, "releasedAlienCount", 0);
@@ -423,6 +436,17 @@ export class CombatSystem extends createSystem({
       "revision",
       (tablet.getValue(TabletState, "revision") ?? 0) + 1,
     );
+  }
+
+  private currentUnitAttackSpec(kind: string): AttackSpec | undefined {
+    const spec = getUnitAttackSpec(kind);
+    if (!spec || kind !== "astronaut") return spec;
+    const range =
+      boardState.debugSettings?.getValue(
+        DebugSettings,
+        "astronautAttackRange",
+      ) ?? spec.range;
+    return { ...spec, range };
   }
 
   private pursueTarget(attacker: Entity, target: Entity): void {

@@ -8,6 +8,7 @@ import {
   BoardTile,
   Building,
   CombatState,
+  DebugSettings,
   Enemy,
   Health,
   MatchState,
@@ -163,6 +164,24 @@ export class WaveSystem extends createSystem({
     source.setValue(WaveSource, "spawnedWaveNumber", this.clock.waveNumber);
     source.setValue(WaveSource, "releaseTimer", 0);
     source.setValue(WaveSource, "releasedAlienCount", 0);
+
+    // Seed the Settings tab's live pacing override with this wave's own
+    // catalog-scaled default, so difficulty escalation still applies unless
+    // the player has since changed it for testing.
+    const debugSettings = boardState.debugSettings;
+    if (debugSettings) {
+      const pacing = resolveWavePacing(spec);
+      debugSettings.setValue(
+        DebugSettings,
+        "waveMaxActiveAliens",
+        pacing.maxActiveAliens,
+      );
+      debugSettings.setValue(
+        DebugSettings,
+        "waveReleaseIntervalSeconds",
+        pacing.releaseIntervalSeconds,
+      );
+    }
   }
 
   private updateWaveRelease(source: Entity, delta: number): void {
@@ -174,7 +193,18 @@ export class WaveSystem extends createSystem({
       releaseTimer: source.getValue(WaveSource, "releaseTimer") ?? 0,
       releasedAlienCount: source.getValue(WaveSource, "releasedAlienCount") ?? 0,
     };
-    const pacing = resolveWavePacing(spec);
+    const debugSettings = boardState.debugSettings;
+    const pacing = debugSettings
+      ? {
+          maxActiveAliens:
+            debugSettings.getValue(DebugSettings, "waveMaxActiveAliens") ?? 3,
+          releaseIntervalSeconds:
+            debugSettings.getValue(
+              DebugSettings,
+              "waveReleaseIntervalSeconds",
+            ) ?? 8,
+        }
+      : resolveWavePacing(spec);
     const releaseCount = advanceWaveRelease(
       state,
       {
@@ -244,10 +274,13 @@ export class WaveSystem extends createSystem({
       alien.getValue(WaveUnit, "nextX") ?? 0,
       alien.getValue(WaveUnit, "nextY") ?? 0,
     );
+    const baseSpeed =
+      boardState.debugSettings?.getValue(DebugSettings, "alienMoveSpeed") ??
+      ALIEN_MOVE_SPEED;
     const movement = advanceAlienMovement(
       { x: object.position.x, z: object.position.z },
       { x: targetX, z: targetZ },
-      ALIEN_MOVE_SPEED * (alien.getValue(WaveUnit, "speedMultiplier") ?? 1),
+      baseSpeed * (alien.getValue(WaveUnit, "speedMultiplier") ?? 1),
       delta,
     );
     const dx = targetX - object.position.x;

@@ -16,6 +16,7 @@ import { BUILDING_CATALOG, getBuildingSpec } from "./buildingCatalog.js";
 import { CRAFT_CATALOG, getCraftSpec } from "./craftCatalog.js";
 import { validateCraftPurchase } from "./craftRules.js";
 import { validateBuildOrder } from "./constructionRules.js";
+import { DEBUG_SETTINGS_CATALOG } from "./debugSettingsCatalog.js";
 import {
   TABLET_CARD_BORDER,
   TABLET_COMMAND_CENTER_X_OFFSET,
@@ -53,6 +54,8 @@ import {
 import {
   clearUnitSelections,
   getSingleSelectedUnit,
+  refreshTurretRangeRingGeometry,
+  refreshUnitAttackRangeRingGeometry,
   toggleUnitSelection,
 } from "./selection.js";
 import {
@@ -63,15 +66,18 @@ import {
 import {
   Building,
   ConstructionState,
+  DebugSettings,
   Enemy,
   GameState,
   GameStats,
+  MatchState,
   SelectionState,
   TabletState,
   Unit,
   UnitSelection,
   WaveSource,
   boardState,
+  type DebugSettingKey,
 } from "./state.js";
 
 type UiElement = UIKit.Text & {
@@ -149,6 +155,7 @@ export class TabletSystem extends createSystem({
       this.queries.enemies.entities.size,
       stats?.getValue(GameStats, "enemiesKilled") ?? 0,
       boardState.selection?.getValue(SelectionState, "revision") ?? 0,
+      boardState.debugSettings?.getValue(DebugSettings, "revision") ?? 0,
       Array.from(this.queries.units.entities)
         .sort((a, b) => a.index - b.index)
         .map(
@@ -225,6 +232,7 @@ export class TabletSystem extends createSystem({
     );
     this.applyCraftPage(tablet, craftKind);
     this.applyUnitPage(tablet);
+    this.applySettingsView();
   }
 
   private createTablet(): void {
@@ -300,9 +308,20 @@ export class TabletSystem extends createSystem({
     on("tab-build", () => this.setView(tablet, "build", "Choose a building"));
     on("tab-crafts", () => this.openCrafts(tablet));
     on("tab-units", () => this.openUnits(tablet));
+    on("tab-settings", () => this.setView(tablet, "settings", "Playtesting settings"));
     on("exit-vr", () => {
       this.world.exitXR();
     });
+    on("restart-game", () => {
+      const source = boardState.waveSource;
+      if (!source) return;
+      source.setValue(MatchState, "status", "restarting");
+    });
+
+    for (const spec of DEBUG_SETTINGS_CATALOG) {
+      on(`setting-${spec.key}-minus`, () => this.adjustSetting(tablet, spec.key, -1));
+      on(`setting-${spec.key}-plus`, () => this.adjustSetting(tablet, spec.key, 1));
+    }
 
     for (const spec of BUILDING_CATALOG) {
       on(`build-${spec.kind}`, () => {
@@ -412,11 +431,15 @@ export class TabletSystem extends createSystem({
     element(this.document!, "units-view")?.setProperties({
       display: view === "units" ? "flex" : "none",
     });
+    element(this.document!, "settings-view")?.setProperties({
+      display: view === "settings" ? "flex" : "none",
+    });
     const tabs = [
       ["tab-overview", "overview"],
       ["tab-build", "build"],
       ["tab-crafts", "crafts"],
       ["tab-units", "units"],
+      ["tab-settings", "settings"],
     ];
     for (const [id, tabView] of tabs) {
       element(this.document!, id)?.setProperties({
@@ -473,6 +496,45 @@ export class TabletSystem extends createSystem({
     element(this.document!, "craft-next")?.setProperties({
       opacity: page < pageCount - 1 ? 1 : 0.35,
     });
+  }
+
+  private adjustSetting(
+    tablet: Entity,
+    key: DebugSettingKey,
+    direction: number,
+  ): void {
+    const spec = DEBUG_SETTINGS_CATALOG.find((item) => item.key === key);
+    const settings = boardState.debugSettings;
+    if (!spec || !settings) return;
+    const current = (settings.getValue(DebugSettings, spec.key) as number) ?? spec.min;
+    const raw = current + spec.step * direction;
+    const rounded = Math.round(raw / spec.step) * spec.step;
+    const next = Math.min(spec.max, Math.max(spec.min, rounded));
+    settings.setValue(DebugSettings, spec.key, next);
+    settings.setValue(
+      DebugSettings,
+      "revision",
+      (settings.getValue(DebugSettings, "revision") ?? 0) + 1,
+    );
+    if (spec.key === "turretRange") refreshTurretRangeRingGeometry();
+    if (spec.key === "astronautAttackRange") refreshUnitAttackRangeRingGeometry();
+    this.touch(tablet, `${spec.label}: ${this.formatSettingValue(next, spec.decimals)}`);
+  }
+
+  private applySettingsView(): void {
+    const settings = boardState.debugSettings;
+    if (!settings) return;
+    for (const spec of DEBUG_SETTINGS_CATALOG) {
+      const value = (settings.getValue(DebugSettings, spec.key) as number) ?? spec.min;
+      this.setText(
+        `setting-${spec.key}-value`,
+        this.formatSettingValue(value, spec.decimals),
+      );
+    }
+  }
+
+  private formatSettingValue(value: number, decimals: number): string {
+    return value.toFixed(decimals);
   }
 
   private applyUnitPage(tablet: Entity): void {

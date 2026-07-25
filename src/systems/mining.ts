@@ -17,6 +17,7 @@ import type {
 import { findApproachTile } from "./navigation.js";
 import {
   BoardTile,
+  DebugSettings,
   Enemy,
   GameState,
   GameStats,
@@ -69,6 +70,11 @@ export class MiningSystem extends createSystem({
         node.getValue(ResourceNode, "amountPerTrip") ??
         DEFAULT_RESOURCE_AMOUNT_PER_TRIP;
       this.cycle.crystals = gameState.getValue(GameState, "crystals") ?? 0;
+      this.cycle.gatherDuration =
+        boardState.debugSettings?.getValue(
+          DebugSettings,
+          "miningGatherTimeSeconds",
+        ) ?? MINING_GATHER_TIME_SECONDS;
 
       const previousRemaining = this.cycle.nodeRemaining;
       const previousCrystals = this.cycle.crystals;

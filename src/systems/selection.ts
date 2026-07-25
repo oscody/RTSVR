@@ -18,11 +18,31 @@ import {
 import { toggleSelectionMembership } from "./selectionRules.js";
 import {
   BoardMarker,
+  DebugSettings,
   SelectionState,
   Unit,
   UnitSelection,
   boardState,
 } from "./state.js";
+
+function currentTurretRange(): number {
+  return (
+    boardState.debugSettings?.getValue(DebugSettings, "turretRange") ??
+    TURRET_ATTACK_SPEC.range
+  );
+}
+
+function currentUnitAttackRange(kind: string): number | null {
+  const spec = getUnitAttackSpec(kind);
+  if (!spec) return null;
+  if (kind !== "astronaut") return spec.range;
+  return (
+    boardState.debugSettings?.getValue(
+      DebugSettings,
+      "astronautAttackRange",
+    ) ?? spec.range
+  );
+}
 
 export function getSelectedUnits(): Entity[] {
   return Array.from(boardState.selectedUnits).filter(
@@ -120,7 +140,7 @@ function showTurretRangeRing(world: World, turret: Entity): void {
   if (!ringEntity) {
     const root = boardState.boardRoot;
     if (!root) return;
-    const range = TURRET_ATTACK_SPEC.range;
+    const range = currentTurretRange();
     const ring = new Mesh(
       new RingGeometry(
         range - ATTACK_RANGE_RING_THICKNESS,
@@ -147,13 +167,48 @@ function showTurretRangeRing(world: World, turret: Entity): void {
   if (ringEntity.object3D) ringEntity.object3D.visible = true;
 }
 
+// Called from the tablet's Settings tab when the turret-range debug value
+// changes, so an already-visible range ring reflects the new radius
+// immediately instead of only on next select/deselect.
+export function refreshTurretRangeRingGeometry(): void {
+  const turret = boardState.selectedTurret;
+  if (!turret) return;
+  const ringEntity = boardState.rangeRingByTurret.get(turret.index);
+  const mesh = ringEntity?.object3D as Mesh | undefined;
+  if (!mesh) return;
+  const range = currentTurretRange();
+  mesh.geometry.dispose();
+  mesh.geometry = new RingGeometry(
+    range - ATTACK_RANGE_RING_THICKNESS,
+    range,
+    ATTACK_RANGE_RING_SEGMENTS,
+  );
+}
+
+export function refreshUnitAttackRangeRingGeometry(): void {
+  for (const unit of boardState.selectedUnits) {
+    const kind = unit.getValue(Unit, "kind") ?? "";
+    const range = currentUnitAttackRange(kind);
+    if (range === null) continue;
+    const ringEntity = boardState.attackRangeRingByUnit.get(unit.index);
+    const mesh = ringEntity?.object3D as Mesh | undefined;
+    if (!mesh) continue;
+    mesh.geometry.dispose();
+    mesh.geometry = new RingGeometry(
+      range - ATTACK_RANGE_RING_THICKNESS,
+      range,
+      ATTACK_RANGE_RING_SEGMENTS,
+    );
+  }
+}
+
 function setUnitAttackRangeRingVisible(
   world: World,
   unit: Entity,
   visible: boolean,
 ): void {
-  const spec = getUnitAttackSpec(unit.getValue(Unit, "kind") ?? "");
-  if (!spec) {
+  const range = currentUnitAttackRange(unit.getValue(Unit, "kind") ?? "");
+  if (range === null) {
     const ring = boardState.attackRangeRingByUnit.get(unit.index)?.object3D;
     if (ring) ring.visible = false;
     return;
@@ -165,8 +220,8 @@ function setUnitAttackRangeRingVisible(
     if (!root) return;
     const ring = new Mesh(
       new RingGeometry(
-        spec.range - ATTACK_RANGE_RING_THICKNESS,
-        spec.range,
+        range - ATTACK_RANGE_RING_THICKNESS,
+        range,
         ATTACK_RANGE_RING_SEGMENTS,
       ),
       new MeshBasicMaterial({

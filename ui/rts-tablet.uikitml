@@ -110,20 +110,50 @@
     font-weight: 800;
   }
 
+  .session-actions {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 548px;
+    height: 34px;
+    margin-top: 8px;
+  }
+
+  .restart-button {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    width: 268px;
+    min-width: 268px;
+    height: 34px;
+    padding: 0px;
+    background-color: #176b55;
+    border-width: 1px;
+    border-color: #105446;
+    border-radius: 5px;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .restart-button:hover {
+    background-color: #105446;
+  }
+
   .exit-button {
     flex-direction: row;
     align-items: center;
     justify-content: center;
-    width: 82px;
-    min-width: 82px;
-    height: 30px;
+    width: 268px;
+    min-width: 268px;
+    height: 34px;
     padding: 0px;
     background-color: #b42318;
     border-width: 1px;
     border-color: #7a271a;
     border-radius: 5px;
     color: #ffffff;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
     cursor: pointer;
   }
@@ -132,7 +162,7 @@
     background-color: #912018;
   }
 
-  .exit-icon {
+  .exit-icon, .restart-icon {
     width: 15px;
     height: 15px;
     color: #ffffff;
@@ -151,8 +181,8 @@
     flex-direction: row;
     align-items: center;
     justify-content: center;
-    width: 130px;
-    min-width: 130px;
+    width: 104px;
+    min-width: 104px;
     height: 38px;
     padding: 0px;
     background-color: #c8d4dc;
@@ -160,7 +190,7 @@
     border-color: #8497a5;
     border-radius: 5px;
     color: #1d3442;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 700;
     cursor: pointer;
   }
@@ -170,10 +200,10 @@
   }
 
   .tab-icon {
-    width: 17px;
-    height: 17px;
+    width: 15px;
+    height: 15px;
     color: #1d3442;
-    margin-right: 6px;
+    margin-right: 4px;
   }
 
   .view {
@@ -551,6 +581,75 @@
     text-align: center;
     margin-top: 5px;
   }
+
+  .settings-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 548px;
+    height: 30px;
+    margin-top: 4px;
+    padding-left: 10px;
+    padding-right: 10px;
+    background-color: #f7fafc;
+    border-width: 1px;
+    border-color: #afbec8;
+    border-radius: 5px;
+  }
+
+  .settings-label {
+    width: 260px;
+    height: 20px;
+    color: #244152;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .settings-controls {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .settings-value {
+    width: 64px;
+    height: 22px;
+    color: #0e7490;
+    font-size: 15px;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .settings-button {
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    min-width: 26px;
+    height: 26px;
+    padding: 0px;
+    background-color: #c8d4dc;
+    border-width: 1px;
+    border-color: #8497a5;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+
+  .settings-button:hover {
+    background-color: #b4c7d2;
+  }
+
+  .settings-button-icon {
+    width: 14px;
+    height: 14px;
+    color: #1d3442;
+  }
+
+  .settings-hint {
+    width: 548px;
+    height: 18px;
+    color: #607482;
+    font-size: 11px;
+    margin-top: 4px;
+  }
 </style>
 <Panel class="tablet">
   <div class="top-row">
@@ -564,6 +663,9 @@
       <span class="balance-label">Crystals</span>
       <span id="crystal-balance" class="balance-value">0</span>
     </div>
+  </div>
+  <div class="session-actions">
+    <button id="restart-game" class="restart-button"><RotateCcwIcon class="restart-icon"></RotateCcwIcon><span>Restart</span></button>
     <button id="exit-vr" class="exit-button"><LogOutIcon class="exit-icon"></LogOutIcon><span>Exit VR</span></button>
   </div>
   <div id="wave-banner" class="wave-banner">
@@ -575,6 +677,7 @@
     <button id="tab-build" class="tab"><HammerIcon class="tab-icon"></HammerIcon><span>Build</span></button>
     <button id="tab-crafts" class="tab"><RocketIcon class="tab-icon"></RocketIcon><span>Crafts</span></button>
     <button id="tab-units" class="tab"><UsersIcon class="tab-icon"></UsersIcon><span>Units</span></button>
+    <button id="tab-settings" class="tab"><SlidersHorizontalIcon class="tab-icon"></SlidersHorizontalIcon><span>Settings</span></button>
   </div>
   <div id="overview-view" class="view">
     <span class="section-title">Economy and forces</span>
@@ -634,6 +737,74 @@
       <button id="unit-card-3" class="unit-card"><img id="unit-image-3" class="unit-image" src="/images/rover.png"></img><div class="unit-copy"><span id="unit-name-3" class="unit-name">Locked</span><span id="unit-meta-3" class="unit-meta">Future reinforcement</span></div></button>
     </div>
     <div class="unit-action-row"><div class="craft-pagination"><button id="unit-prev" class="page-button"><ChevronLeftIcon class="page-icon"></ChevronLeftIcon></button><span id="unit-page-label" class="craft-page">Page 1 / 1</span><button id="unit-next" class="page-button"><ChevronRightIcon class="page-icon"></ChevronRightIcon></button></div><button id="unit-clear" class="unit-clear"><span>Clear selection</span></button></div>
+  </div>
+  <div id="settings-view" class="view" style="display: none;">
+    <span class="section-title">Playtesting settings</span>
+    <div class="settings-row">
+      <span class="settings-label">Alien Move Speed</span>
+      <div class="settings-controls">
+        <button id="setting-alienMoveSpeed-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
+        <span id="setting-alienMoveSpeed-value" class="settings-value">0.90</span>
+        <button id="setting-alienMoveSpeed-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Unit Move Speed</span>
+      <div class="settings-controls">
+        <button id="setting-unitMoveSpeed-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
+        <span id="setting-unitMoveSpeed-value" class="settings-value">0.35</span>
+        <button id="setting-unitMoveSpeed-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Wave Start Delay (s)</span>
+      <div class="settings-controls">
+        <button id="setting-initialWaveDelaySeconds-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
+        <span id="setting-initialWaveDelaySeconds-value" class="settings-value">30</span>
+        <button id="setting-initialWaveDelaySeconds-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Max Active Aliens</span>
+      <div class="settings-controls">
+        <button id="setting-waveMaxActiveAliens-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
+        <span id="setting-waveMaxActiveAliens-value" class="settings-value">3</span>
+        <button id="setting-waveMaxActiveAliens-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Release Interval (s)</span>
+      <div class="settings-controls">
+        <button id="setting-waveReleaseIntervalSeconds-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
+        <span id="setting-waveReleaseIntervalSeconds-value" class="settings-value">8.0</span>
+        <button id="setting-waveReleaseIntervalSeconds-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Turret Range</span>
+      <div class="settings-controls">
+        <button id="setting-turretRange-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
+        <span id="setting-turretRange-value" class="settings-value">0.72</span>
+        <button id="setting-turretRange-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">AstronautA Attack Range</span>
+      <div class="settings-controls">
+        <button id="setting-astronautAttackRange-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
+        <span id="setting-astronautAttackRange-value" class="settings-value">0.29</span>
+        <button id="setting-astronautAttackRange-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Mining Gather Time (s)</span>
+      <div class="settings-controls">
+        <button id="setting-miningGatherTimeSeconds-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
+        <span id="setting-miningGatherTimeSeconds-value" class="settings-value">1.1</span>
+        <button id="setting-miningGatherTimeSeconds-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
+      </div>
+    </div>
+    <span class="settings-hint">Changes apply immediately and persist through Restart this session.</span>
   </div>
   <span id="tablet-status" class="status">Select an astronaut to build</span>
 </Panel>

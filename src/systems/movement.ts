@@ -5,12 +5,15 @@ import {
   updateUnitAttackRangeRing,
   updateUnitSelectionRing,
 } from "./selection.js";
-import { Unit, boardState } from "./state.js";
+import { DebugSettings, Unit, boardState } from "./state.js";
 
 export class MovementSystem extends createSystem({
   units: { required: [Unit] },
 }) {
   update(delta: number): void {
+    const unitSpeed =
+      boardState.debugSettings?.getValue(DebugSettings, "unitMoveSpeed") ??
+      UNIT_MOVE_SPEED;
     this.queries.units.entities.forEach((unit) => {
       if (!unit.getValue(Unit, "hasOrder")) return;
       const holder = unit.object3D;
@@ -39,7 +42,7 @@ export class MovementSystem extends createSystem({
       // Travel is intentionally direct and collision-free. Occupancy is only
       // enforced for the final order tile, so units can cross scenery and
       // other pieces until pathfinding is introduced.
-      const step = Math.min(distance, UNIT_MOVE_SPEED * delta);
+      const step = Math.min(distance, unitSpeed * delta);
       holder.position.x += (dx / distance) * step;
       holder.position.z += (dz / distance) * step;
       holder.rotation.y = Math.atan2(dx, dz);

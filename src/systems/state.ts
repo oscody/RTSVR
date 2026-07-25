@@ -1,10 +1,13 @@
 import { Entity, Object3D, Types, createComponent } from "@iwsdk/core";
+import { UNIT_MOVE_SPEED } from "./constants.ts";
+import { TURRET_ATTACK_SPEC, UNIT_ATTACK_SPECS } from "./combatRules.js";
 import {
   DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
   DEFAULT_RESOURCE_CAPACITY,
+  MINING_GATHER_TIME_SECONDS,
   STARTING_CRYSTALS,
 } from "./economyConstants.js";
-import { INITIAL_WAVE_DELAY_SECONDS } from "./waveRules.js";
+import { ALIEN_MOVE_SPEED, INITIAL_WAVE_DELAY_SECONDS } from "./waveRules.js";
 
 export const BoardTile = createComponent("BoardTile", {
   x: { type: Types.Int16, default: 0 },
@@ -188,6 +191,47 @@ export const SelectionState = createComponent("SelectionState", {
   revision: { type: Types.Int32, default: 0 },
 });
 
+// Live-tunable playtesting knobs, exposed on the tablet's Settings tab.
+// Deliberately NOT reset by ScenarioResetSystem — a debug panel is only
+// useful if a tweak survives Restart within the same play session.
+// waveMaxActiveAliens/waveReleaseIntervalSeconds are reseeded from that
+// wave's own catalog-scaled pacing every time a new wave spawns (see
+// WaveSystem.spawnWaveIfNeeded), so per-wave difficulty scaling still
+// applies by default; these fields are just the current override layer.
+export const DebugSettings = createComponent("DebugSettings", {
+  alienMoveSpeed: { type: Types.Float32, default: ALIEN_MOVE_SPEED },
+  unitMoveSpeed: { type: Types.Float32, default: UNIT_MOVE_SPEED },
+  initialWaveDelaySeconds: {
+    type: Types.Float32,
+    default: INITIAL_WAVE_DELAY_SECONDS,
+  },
+  waveMaxActiveAliens: { type: Types.Int16, default: 3 },
+  waveReleaseIntervalSeconds: { type: Types.Float32, default: 8 },
+  turretRange: { type: Types.Float32, default: TURRET_ATTACK_SPEC.range },
+  astronautAttackRange: {
+    type: Types.Float32,
+    default: UNIT_ATTACK_SPECS.astronaut.range,
+  },
+  miningGatherTimeSeconds: {
+    type: Types.Float32,
+    default: MINING_GATHER_TIME_SECONDS,
+  },
+  revision: { type: Types.Int32, default: 0 },
+});
+
+// The tunable-field subset of DebugSettings (excludes "revision") — shared
+// with debugSettingsCatalog.ts so its spec table's `key` is checked against
+// the component's real field names instead of a plain string.
+export type DebugSettingKey =
+  | "alienMoveSpeed"
+  | "unitMoveSpeed"
+  | "initialWaveDelaySeconds"
+  | "waveMaxActiveAliens"
+  | "waveReleaseIntervalSeconds"
+  | "turretRange"
+  | "astronautAttackRange"
+  | "miningGatherTimeSeconds";
+
 export const boardState = {
   boardRoot: null as Entity | null,
   tileByKey: new Map<string, Entity>(),
@@ -213,4 +257,5 @@ export const boardState = {
   resourceByKey: new Map<string, Entity>(),
   cargoVisualByUnit: new Map<number, Object3D>(),
   pathByUnit: new Map<number, { x: number; y: number }[]>(),
+  debugSettings: null as Entity | null,
 };
