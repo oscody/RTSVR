@@ -28,7 +28,7 @@ test("craft catalog exposes every model and tablet image", () => {
       },
       {
         kind: "miner",
-        glb: "/gltf/craft/craft_cargoA_A.glb",
+        glb: "/gltf/craft/craft_miner_A.glb",
         image: "/images/craft_miner.png",
         duration: 6,
         locked: false,
