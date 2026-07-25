@@ -129,12 +129,12 @@ const STRUCTURES: StructureSpec[] = [
 
   // Crew — flanking the command center's front corners.
   { asset: "astronautAAnimated", name: "AstronautA", widthTiles: 1, gridX: [9, 9], gridY: [12, 12], yawDeg: 180, unit: "astronaut", unitCategory: "command-center" },
-  { asset: "astronautB", name: "AstronautB", widthTiles: 1, gridX: [13, 13], gridY: [12, 12], yawDeg: 180, unit: "astronaut", unitCategory: "command-center" },
+  // { asset: "astronautB", name: "AstronautB", widthTiles: 1, gridX: [13, 13], gridY: [12, 12], yawDeg: 180, unit: "astronaut", unitCategory: "command-center" },
 
   { asset: "craftMinerAnimated", name: "CraftMiner", widthTiles: 1, gridX: [11, 11], gridY: [13, 13], yawDeg: 180, unit: "miner", unitCategory: "factory" },
-  // Base defense — two turrets flanking opposite corners of the command center.
-  { asset: "turretSingle", name: "TurretSingle", widthTiles: 1, gridX: [13, 13], gridY: [9, 9], yawDeg: 180, terrain: "blocked", building: "turret" },
-  { asset: "turretSingle", name: "TurretSingle2", widthTiles: 1, gridX: [9, 9], gridY: [13, 13], yawDeg: 180, terrain: "blocked", building: "turret" },
+  // // Base defense — two turrets flanking opposite corners of the command center.
+  // { asset: "turretSingle", name: "TurretSingle", widthTiles: 1, gridX: [13, 13], gridY: [9, 9], yawDeg: 180, terrain: "blocked", building: "turret" },
+  // { asset: "turretSingle", name: "TurretSingle2", widthTiles: 1, gridX: [9, 9], gridY: [13, 13], yawDeg: 180, terrain: "blocked", building: "turret" },
 
 
   // Meteors — sprinkled impact debris.
@@ -312,7 +312,7 @@ export function createInitialScenario(world: World): void {
         if (spec.unit === "astronaut") {
           entity.addComponent(ConstructionState);
         }
-        if (spec.asset === "astronautAAnimated") {
+        if (spec.asset === "astronautAAnimated" || spec.asset === "craftRacer") {
           attachUnitAnimation(entity, model, gltf.animations);
         }
         attachHealthBar(holder);

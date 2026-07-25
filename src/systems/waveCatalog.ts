@@ -83,8 +83,8 @@ const ENEMY_SPAWN_PROFILES: Readonly<Record<EnemyKind, EnemySpawnProfile>> = {
 export const WAVE_CATALOG: readonly WaveSpec[] = [
   {
     waveNumber: 1,
-    maxActiveAliens: 3,
-    releaseIntervalSeconds: 8,
+    maxActiveAliens: 1,
+    releaseIntervalSeconds: 20,
     groups: [
       { enemy: "alien", count: 7, edges: ["north", "east", "south"], minSpacingTiles: 3 },
       { enemy: "alienDrake", count: 3, edges: ["south"], minSpacingTiles: 3 },
@@ -93,8 +93,8 @@ export const WAVE_CATALOG: readonly WaveSpec[] = [
   },
   {
     waveNumber: 2,
-    maxActiveAliens: 3,
-    releaseIntervalSeconds: 8,
+    maxActiveAliens: 2,
+    releaseIntervalSeconds: 15,
     threatBudget: {
       budget: 24,
       enemies: ["strongAlienMech", "alienDrake", "alien"],
@@ -110,8 +110,8 @@ export const WAVE_CATALOG: readonly WaveSpec[] = [
   },
   {
     waveNumber: 3,
-    maxActiveAliens: 3,
-    releaseIntervalSeconds: 8,
+    maxActiveAliens: 2,
+    releaseIntervalSeconds: 20,
     threatBudget: {
       budget: 34,
       enemies: ["strongAlienMech", "alienDrake", "alien"],
@@ -128,7 +128,7 @@ export const WAVE_CATALOG: readonly WaveSpec[] = [
   {
     waveNumber: 4,
     maxActiveAliens: 3,
-    releaseIntervalSeconds: 8,
+    releaseIntervalSeconds: 20,
     threatBudget: {
       budget: 46,
       enemies: ["strongAlienMech", "alienDrake", "alien"],
@@ -145,7 +145,7 @@ export const WAVE_CATALOG: readonly WaveSpec[] = [
   {
     waveNumber: 5,
     maxActiveAliens: 3,
-    releaseIntervalSeconds: 8,
+    releaseIntervalSeconds: 20,
     threatBudget: {
       budget: 60,
       enemies: ["strongAlienMech", "alienDrake", "alien"],
@@ -162,7 +162,7 @@ export const WAVE_CATALOG: readonly WaveSpec[] = [
   {
     waveNumber: 6,
     maxActiveAliens: 3,
-    releaseIntervalSeconds: 8,
+    releaseIntervalSeconds: 20,
     threatBudget: {
       budget: 76,
       enemies: ["strongAlienMech", "alienDrake", "alien"],
