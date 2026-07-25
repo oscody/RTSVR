@@ -1,7 +1,6 @@
 import { Entity, RayInteractable, createSystem } from "@iwsdk/core";
 import {
   TURRET_ATTACK_SPEC,
-  UNIT_AUTO_ACQUIRE_RANGE,
   advanceAttackCycle,
   getEnemyAttackSpec,
   getUnitAttackSpec,
@@ -85,7 +84,7 @@ export class CombatSystem extends createSystem({
       const selected = attacker.getValue(UnitSelection, "selected") ?? false;
       if (
         targetMode === "automatic" &&
-        (selected || !this.isEnemyInRange(attacker, target, spec.range))
+        !this.isEnemyInRange(attacker, target, spec.range)
       ) {
         this.clearAttack(attacker);
         target = null;
@@ -99,10 +98,7 @@ export class CombatSystem extends createSystem({
         !target &&
         shouldAutoAcquireUnitTarget(selected, constructionActive)
       ) {
-        target = this.findNearestEnemyInRange(
-          attacker,
-          UNIT_AUTO_ACQUIRE_RANGE,
-        );
+        target = this.findNearestEnemyInRange(attacker, spec.range);
         if (target) {
           targetMode = "automatic";
           attacker.setValue(CombatState, "target", target);

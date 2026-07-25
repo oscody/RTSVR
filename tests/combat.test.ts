@@ -6,7 +6,6 @@ import {
   ATTACK_TIMER_EPSILON,
   TURRET_ATTACK_SPEC,
   UNIT_ATTACK_SPECS,
-  UNIT_AUTO_ACQUIRE_RANGE,
   advanceAttackCycle,
   canUnitAttack,
   getEnemyAttackSpec,
@@ -39,16 +38,15 @@ test("alien variants define distinct health and attack power", () => {
   assert.ok(getEnemyAttackSpec("strongAlienMech").damage > getEnemyAttackSpec("alien").damage);
 });
 
-test("friendly automatic acquisition is shorter than turret range", () => {
-  assert.ok(UNIT_AUTO_ACQUIRE_RANGE < TURRET_ATTACK_SPEC.range);
+test("friendly automatic acquisition uses each unit attack range", () => {
   for (const spec of Object.values(UNIT_ATTACK_SPECS)) {
-    assert.ok(UNIT_AUTO_ACQUIRE_RANGE <= spec.range);
+    assert.ok(spec.range < TURRET_ATTACK_SPEC.range);
   }
 });
 
-test("only unselected units that are not constructing auto-acquire", () => {
+test("friendly units auto-acquire unless constructing", () => {
   assert.equal(shouldAutoAcquireUnitTarget(false, false), true);
-  assert.equal(shouldAutoAcquireUnitTarget(true, false), false);
+  assert.equal(shouldAutoAcquireUnitTarget(true, false), true);
   assert.equal(shouldAutoAcquireUnitTarget(false, true), false);
 });
 

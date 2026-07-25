@@ -19,8 +19,6 @@ export const TURRET_ATTACK_SPEC: Readonly<AttackSpec> = {
   range: 0.72,
 };
 
-export const UNIT_AUTO_ACQUIRE_RANGE = 0.24;
-
 export const UNIT_MAX_HEALTH: Readonly<Record<string, number>> = {
   astronaut: 75,
   rover: 120,
@@ -57,10 +55,10 @@ export function getUnitAttackSpec(kind: string): AttackSpec | undefined {
 }
 
 export function shouldAutoAcquireUnitTarget(
-  selected: boolean,
+  _selected: boolean,
   constructionActive: boolean,
 ): boolean {
-  return !selected && !constructionActive;
+  return !constructionActive;
 }
 
 export function getUnitMaxHealth(kind: string): number {
