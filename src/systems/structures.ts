@@ -19,10 +19,12 @@ import {
 } from "./constants.ts";
 import {
   canUnitAttack,
-  getBuildingMaxHealth,
-  getEnemyMaxHealth,
-  getUnitMaxHealth,
 } from "./combatRules.js";
+import {
+  currentBuildingMaxHealth,
+  currentEnemyMaxHealth,
+  currentUnitMaxHealth,
+} from "./debugStatOverrides.js";
 import {
   DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
   LARGE_CRYSTAL_NODE_CAPACITY,
@@ -256,8 +258,9 @@ export function createEnemyEntity(
   holder.add(model);
   addInteractionProxy(holder, spec, model, visualYOffset);
 
-  const maxHealth = Math.ceil(
-    getEnemyMaxHealth(spec.kind) * (spec.healthMultiplier ?? 1),
+  const maxHealth = currentEnemyMaxHealth(
+    spec.kind,
+    spec.healthMultiplier ?? 1,
   );
   const entity = world
     .createTransformEntity(holder, { parent })
@@ -318,7 +321,7 @@ export function createInitialScenario(world: World): void {
         boardState.commandCenter = entity;
       }
       if (spec.unit) {
-        const maxHealth = getUnitMaxHealth(spec.unit);
+        const maxHealth = currentUnitMaxHealth(spec.unit);
         entity
           .addComponent(Unit, { kind: spec.unit })
           .addComponent(UnitSelection, {
@@ -349,7 +352,7 @@ export function createInitialScenario(world: World): void {
         attachHealthBar(holder);
       }
       if (spec.building) {
-        const maxHealth = getBuildingMaxHealth(spec.building);
+        const maxHealth = currentBuildingMaxHealth(spec.building);
         const startX = Math.round(
           (spec.gridX[0] + spec.gridX[1]) / 2 - (spec.widthTiles - 1) / 2,
         );

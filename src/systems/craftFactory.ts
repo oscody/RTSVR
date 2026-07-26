@@ -12,10 +12,11 @@ import {
   type World,
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
-import { canUnitAttack, getUnitMaxHealth } from "./combatRules.js";
+import { canUnitAttack } from "./combatRules.js";
 import { CRAFT_VISUAL_ELEVATION } from "./constants.ts";
 import type { CraftSpec } from "./craftCatalog.js";
 import { attachCraftVisualRise } from "./craftVisualRise.js";
+import { currentUnitMaxHealth } from "./debugStatOverrides.js";
 import { attachHealthBar } from "./healthBar.js";
 import { attachMinerAnimation } from "./minerAnimation.js";
 import { attachUnitAnimation } from "./unitAnimation.js";
@@ -77,7 +78,7 @@ export function createCraftEntity(
   proxy.position.y = proxyHeight / 2;
   holder.add(proxy);
 
-  const maxHealth = getUnitMaxHealth(spec.kind);
+  const maxHealth = currentUnitMaxHealth(spec.kind);
   const entity = world
     .createTransformEntity(holder, { parent })
     .addComponent(ScenarioObject)

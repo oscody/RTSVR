@@ -6,6 +6,7 @@ import {
   ATTACK_TIMER_EPSILON,
   TURRET_ATTACK_SPEC,
   UNIT_ATTACK_SPECS,
+  UNIT_MAX_HEALTH,
   advanceAttackCycle,
   canUnitAttack,
   getEnemyAttackSpec,
@@ -16,6 +17,7 @@ import {
   shouldAutoAcquireUnitTarget,
   type AttackCycleState,
 } from "../src/systems/combatRules.ts";
+import { DEBUG_SETTINGS_CATALOG } from "../src/systems/debugSettingsCatalog.ts";
 
 test("only astronauts, rovers, and racers can attack", () => {
   assert.equal(canUnitAttack("astronaut"), true);
@@ -48,6 +50,28 @@ test("friendly units auto-acquire unless constructing", () => {
   assert.equal(shouldAutoAcquireUnitTarget(false, false), true);
   assert.equal(shouldAutoAcquireUnitTarget(true, false), true);
   assert.equal(shouldAutoAcquireUnitTarget(false, true), false);
+});
+
+test("debug settings catalog exposes combat health and attack power knobs", () => {
+  const keys = new Set(DEBUG_SETTINGS_CATALOG.map(({ key }) => key));
+  for (const key of [
+    "buildingHealthScale",
+    "astronautHealth",
+    "craftRacerHealth",
+    "craftMinerHealth",
+    "alienHealthScale",
+    "astronautAttackDamage",
+    "craftRacerAttackDamage",
+    "turretAttackDamage",
+  ]) {
+    assert.equal(keys.has(key), true);
+  }
+  assert.equal(UNIT_MAX_HEALTH.astronaut, 75);
+  assert.equal(UNIT_MAX_HEALTH.racer, 90);
+  assert.equal(UNIT_MAX_HEALTH.miner, 100);
+  assert.equal(UNIT_ATTACK_SPECS.astronaut.damage, 8);
+  assert.equal(UNIT_ATTACK_SPECS.racer.damage, 12);
+  assert.equal(TURRET_ATTACK_SPEC.damage, 18);
 });
 
 test("turret cadence can destroy a full-health alien", () => {

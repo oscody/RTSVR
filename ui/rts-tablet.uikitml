@@ -586,11 +586,11 @@
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-    width: 548px;
-    height: 28px;
-    margin-top: 3px;
-    padding-left: 10px;
-    padding-right: 10px;
+    width: 266px;
+    height: 25px;
+    margin-top: 2px;
+    padding-left: 6px;
+    padding-right: 6px;
     background-color: #f7fafc;
     border-width: 1px;
     border-color: #afbec8;
@@ -598,11 +598,25 @@
   }
 
   .settings-label {
-    width: 260px;
-    height: 20px;
+    width: 136px;
+    height: 18px;
     color: #244152;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 700;
+  }
+
+  .settings-columns {
+    flex-direction: row;
+    width: 548px;
+    height: 244px;
+    justify-content: space-between;
+    margin-top: 1px;
+  }
+
+  .settings-column {
+    flex-direction: column;
+    width: 268px;
+    height: 244px;
   }
 
   .settings-controls {
@@ -611,10 +625,10 @@
   }
 
   .settings-value {
-    width: 64px;
-    height: 22px;
+    width: 48px;
+    height: 20px;
     color: #0e7490;
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 800;
     text-align: center;
   }
@@ -622,9 +636,9 @@
   .settings-button {
     align-items: center;
     justify-content: center;
-    width: 26px;
-    min-width: 26px;
-    height: 26px;
+    width: 22px;
+    min-width: 22px;
+    height: 22px;
     padding: 0px;
     background-color: #c8d4dc;
     border-width: 1px;
@@ -638,8 +652,8 @@
   }
 
   .settings-button-icon {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     color: #1d3442;
   }
 
@@ -740,76 +754,27 @@
   </div>
   <div id="settings-view" class="view" style="display: none;">
     <span class="section-title">Playtesting settings</span>
-    <div class="settings-row">
-      <span class="settings-label">Alien Move Speed</span>
-      <div class="settings-controls">
-        <button id="setting-alienMoveSpeed-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
-        <span id="setting-alienMoveSpeed-value" class="settings-value">0.90</span>
-        <button id="setting-alienMoveSpeed-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
+    <div class="settings-columns">
+      <div class="settings-column">
+        <div class="settings-row"><span class="settings-label">Alien Speed</span><div class="settings-controls"><button id="setting-alienMoveSpeed-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-alienMoveSpeed-value" class="settings-value">0.10</span><button id="setting-alienMoveSpeed-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Unit Speed</span><div class="settings-controls"><button id="setting-unitMoveSpeed-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-unitMoveSpeed-value" class="settings-value">0.35</span><button id="setting-unitMoveSpeed-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Wave Delay</span><div class="settings-controls"><button id="setting-initialWaveDelaySeconds-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-initialWaveDelaySeconds-value" class="settings-value">10</span><button id="setting-initialWaveDelaySeconds-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Max Aliens</span><div class="settings-controls"><button id="setting-waveMaxActiveAliens-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-waveMaxActiveAliens-value" class="settings-value">3</span><button id="setting-waveMaxActiveAliens-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Release Time</span><div class="settings-controls"><button id="setting-waveReleaseIntervalSeconds-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-waveReleaseIntervalSeconds-value" class="settings-value">8.0</span><button id="setting-waveReleaseIntervalSeconds-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Turret Range</span><div class="settings-controls"><button id="setting-turretRange-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-turretRange-value" class="settings-value">0.72</span><button id="setting-turretRange-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Astro Range</span><div class="settings-controls"><button id="setting-astronautAttackRange-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-astronautAttackRange-value" class="settings-value">0.29</span><button id="setting-astronautAttackRange-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Racer Range</span><div class="settings-controls"><button id="setting-craftRacerAttackRange-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-craftRacerAttackRange-value" class="settings-value">0.29</span><button id="setting-craftRacerAttackRange-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Mining Time</span><div class="settings-controls"><button id="setting-miningGatherTimeSeconds-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-miningGatherTimeSeconds-value" class="settings-value">1.1</span><button id="setting-miningGatherTimeSeconds-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
       </div>
-    </div>
-    <div class="settings-row">
-      <span class="settings-label">Unit Move Speed</span>
-      <div class="settings-controls">
-        <button id="setting-unitMoveSpeed-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
-        <span id="setting-unitMoveSpeed-value" class="settings-value">0.35</span>
-        <button id="setting-unitMoveSpeed-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
-      </div>
-    </div>
-    <div class="settings-row">
-      <span class="settings-label">Wave Start Delay (s)</span>
-      <div class="settings-controls">
-        <button id="setting-initialWaveDelaySeconds-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
-        <span id="setting-initialWaveDelaySeconds-value" class="settings-value">30</span>
-        <button id="setting-initialWaveDelaySeconds-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
-      </div>
-    </div>
-    <div class="settings-row">
-      <span class="settings-label">Max Active Aliens</span>
-      <div class="settings-controls">
-        <button id="setting-waveMaxActiveAliens-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
-        <span id="setting-waveMaxActiveAliens-value" class="settings-value">3</span>
-        <button id="setting-waveMaxActiveAliens-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
-      </div>
-    </div>
-    <div class="settings-row">
-      <span class="settings-label">Release Interval (s)</span>
-      <div class="settings-controls">
-        <button id="setting-waveReleaseIntervalSeconds-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
-        <span id="setting-waveReleaseIntervalSeconds-value" class="settings-value">8.0</span>
-        <button id="setting-waveReleaseIntervalSeconds-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
-      </div>
-    </div>
-    <div class="settings-row">
-      <span class="settings-label">Turret Range</span>
-      <div class="settings-controls">
-        <button id="setting-turretRange-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
-        <span id="setting-turretRange-value" class="settings-value">0.72</span>
-        <button id="setting-turretRange-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
-      </div>
-    </div>
-    <div class="settings-row">
-      <span class="settings-label">AstronautA Attack Range</span>
-      <div class="settings-controls">
-        <button id="setting-astronautAttackRange-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
-        <span id="setting-astronautAttackRange-value" class="settings-value">0.29</span>
-        <button id="setting-astronautAttackRange-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
-      </div>
-    </div>
-    <div class="settings-row">
-      <span class="settings-label">CraftRacer Attack Range</span>
-      <div class="settings-controls">
-        <button id="setting-craftRacerAttackRange-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
-        <span id="setting-craftRacerAttackRange-value" class="settings-value">0.29</span>
-        <button id="setting-craftRacerAttackRange-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
-      </div>
-    </div>
-    <div class="settings-row">
-      <span class="settings-label">Mining Gather Time (s)</span>
-      <div class="settings-controls">
-        <button id="setting-miningGatherTimeSeconds-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button>
-        <span id="setting-miningGatherTimeSeconds-value" class="settings-value">1.1</span>
-        <button id="setting-miningGatherTimeSeconds-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button>
+      <div class="settings-column">
+        <div class="settings-row"><span class="settings-label">Building HP x</span><div class="settings-controls"><button id="setting-buildingHealthScale-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-buildingHealthScale-value" class="settings-value">1.0</span><button id="setting-buildingHealthScale-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Astro HP</span><div class="settings-controls"><button id="setting-astronautHealth-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-astronautHealth-value" class="settings-value">75</span><button id="setting-astronautHealth-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Racer HP</span><div class="settings-controls"><button id="setting-craftRacerHealth-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-craftRacerHealth-value" class="settings-value">90</span><button id="setting-craftRacerHealth-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Miner HP</span><div class="settings-controls"><button id="setting-craftMinerHealth-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-craftMinerHealth-value" class="settings-value">100</span><button id="setting-craftMinerHealth-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Alien HP x</span><div class="settings-controls"><button id="setting-alienHealthScale-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-alienHealthScale-value" class="settings-value">1.0</span><button id="setting-alienHealthScale-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Astro Power</span><div class="settings-controls"><button id="setting-astronautAttackDamage-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-astronautAttackDamage-value" class="settings-value">8</span><button id="setting-astronautAttackDamage-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Racer Power</span><div class="settings-controls"><button id="setting-craftRacerAttackDamage-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-craftRacerAttackDamage-value" class="settings-value">12</span><button id="setting-craftRacerAttackDamage-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Turret Power</span><div class="settings-controls"><button id="setting-turretAttackDamage-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-turretAttackDamage-value" class="settings-value">18</span><button id="setting-turretAttackDamage-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
       </div>
     </div>
     <span class="settings-hint">Changes apply immediately and persist through Restart this session.</span>

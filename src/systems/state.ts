@@ -1,6 +1,10 @@
 import { Entity, Object3D, Types, createComponent } from "@iwsdk/core";
 import { UNIT_MOVE_SPEED } from "./constants.ts";
-import { TURRET_ATTACK_SPEC, UNIT_ATTACK_SPECS } from "./combatRules.js";
+import {
+  TURRET_ATTACK_SPEC,
+  UNIT_ATTACK_SPECS,
+  UNIT_MAX_HEALTH,
+} from "./combatRules.js";
 import {
   DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
   DEFAULT_RESOURCE_CAPACITY,
@@ -216,6 +220,32 @@ export const DebugSettings = createComponent("DebugSettings", {
     type: Types.Float32,
     default: UNIT_ATTACK_SPECS.racer.range,
   },
+  buildingHealthScale: { type: Types.Float32, default: 1 },
+  astronautHealth: {
+    type: Types.Float32,
+    default: UNIT_MAX_HEALTH.astronaut,
+  },
+  craftRacerHealth: {
+    type: Types.Float32,
+    default: UNIT_MAX_HEALTH.racer,
+  },
+  craftMinerHealth: {
+    type: Types.Float32,
+    default: UNIT_MAX_HEALTH.miner,
+  },
+  alienHealthScale: { type: Types.Float32, default: 1 },
+  astronautAttackDamage: {
+    type: Types.Float32,
+    default: UNIT_ATTACK_SPECS.astronaut.damage,
+  },
+  craftRacerAttackDamage: {
+    type: Types.Float32,
+    default: UNIT_ATTACK_SPECS.racer.damage,
+  },
+  turretAttackDamage: {
+    type: Types.Float32,
+    default: TURRET_ATTACK_SPEC.damage,
+  },
   miningGatherTimeSeconds: {
     type: Types.Float32,
     default: MINING_GATHER_TIME_SECONDS,
@@ -235,6 +265,14 @@ export type DebugSettingKey =
   | "turretRange"
   | "astronautAttackRange"
   | "craftRacerAttackRange"
+  | "buildingHealthScale"
+  | "astronautHealth"
+  | "craftRacerHealth"
+  | "craftMinerHealth"
+  | "alienHealthScale"
+  | "astronautAttackDamage"
+  | "craftRacerAttackDamage"
+  | "turretAttackDamage"
   | "miningGatherTimeSeconds";
 
 export const boardState = {

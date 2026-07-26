@@ -13,8 +13,8 @@ import {
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
 import type { BuildingSpec } from "./buildingCatalog.js";
-import { getBuildingMaxHealth } from "./combatRules.js";
 import { footprintCells } from "./constructionRules.js";
+import { currentBuildingMaxHealth } from "./debugStatOverrides.js";
 import { attachHealthBar } from "./healthBar.js";
 import { attachTurretAnimation } from "./turretAnimation.js";
 import {
@@ -87,7 +87,7 @@ export function createBuildingEntity(
   proxy.position.y = Math.max(size.y, TILE_SIZE * 0.8) / 2;
   holder.add(proxy);
 
-  const maxHealth = getBuildingMaxHealth(spec.kind);
+  const maxHealth = currentBuildingMaxHealth(spec.kind);
   const entity = world
     .createTransformEntity(holder, { parent })
     .addComponent(ScenarioObject)

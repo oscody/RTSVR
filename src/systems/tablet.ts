@@ -16,7 +16,13 @@ import { BUILDING_CATALOG, getBuildingSpec } from "./buildingCatalog.js";
 import { CRAFT_CATALOG, getCraftSpec } from "./craftCatalog.js";
 import { validateCraftPurchase } from "./craftRules.js";
 import { validateBuildOrder } from "./constructionRules.js";
+import {
+  currentBuildingMaxHealth,
+  currentEnemyMaxHealth,
+  currentUnitMaxHealth,
+} from "./debugStatOverrides.js";
 import { DEBUG_SETTINGS_CATALOG } from "./debugSettingsCatalog.js";
+import { updateHealthBar } from "./healthBar.js";
 import {
   TABLET_CARD_BORDER,
   TABLET_COMMAND_CENTER_X_OFFSET,
@@ -70,6 +76,7 @@ import {
   Enemy,
   GameState,
   GameStats,
+  Health,
   MatchState,
   SelectionState,
   TabletState,
@@ -94,9 +101,9 @@ interface LiveRosterEntry extends RosterEntry {
 
 export class TabletSystem extends createSystem({
   tablets: { required: [TabletState, PanelUI, PanelDocument] },
-  buildings: { required: [Building] },
-  units: { required: [Unit, UnitSelection] },
-  enemies: { required: [Enemy] },
+  buildings: { required: [Building, Health] },
+  units: { required: [Unit, UnitSelection, Health] },
+  enemies: { required: [Enemy, Health] },
 }) {
   private document: UIKitDocument | null = null;
   private tabletEntity: Entity | null = null;
@@ -523,7 +530,74 @@ export class TabletSystem extends createSystem({
     ) {
       refreshUnitAttackRangeRingGeometry();
     }
-    this.touch(tablet, `${spec.label}: ${this.formatSettingValue(next, spec.decimals)}`);
+    this.applyHealthSetting(spec.key, current, next);
+    this.touch(
+      tablet,
+      `${spec.label}: ${this.formatSettingValue(next, spec.decimals)}`,
+    );
+  }
+
+  private applyHealthSetting(
+    key: DebugSettingKey,
+    previousValue: number,
+    nextValue: number,
+  ): void {
+    if (key === "buildingHealthScale") {
+      for (const building of this.queries.buildings.entities) {
+        this.setEntityMaxHealth(
+          building,
+          currentBuildingMaxHealth(building.getValue(Building, "kind") ?? ""),
+        );
+      }
+      return;
+    }
+    if (key === "alienHealthScale") {
+      const ratio = nextValue / Math.max(0.01, previousValue);
+      for (const enemy of this.queries.enemies.entities) {
+        const previousMax =
+          enemy.getValue(Health, "max") ??
+          currentEnemyMaxHealth(enemy.getValue(Enemy, "kind") ?? "alien");
+        this.setEntityMaxHealth(
+          enemy,
+          Math.round(previousMax * ratio),
+        );
+      }
+      return;
+    }
+    if (
+      key !== "astronautHealth" &&
+      key !== "craftRacerHealth" &&
+      key !== "craftMinerHealth"
+    ) {
+      return;
+    }
+    for (const unit of this.queries.units.entities) {
+      const kind = unit.getValue(Unit, "kind") ?? "";
+      if (
+        (key === "astronautHealth" && kind !== "astronaut") ||
+        (key === "craftRacerHealth" && kind !== "racer") ||
+        (key === "craftMinerHealth" && kind !== "miner")
+      ) {
+        continue;
+      }
+      this.setEntityMaxHealth(unit, currentUnitMaxHealth(kind));
+    }
+  }
+
+  private setEntityMaxHealth(entity: Entity, nextMax: number): void {
+    const previousMax = Math.max(1, entity.getValue(Health, "max") ?? nextMax);
+    const previousCurrent = Math.max(
+      0,
+      entity.getValue(Health, "current") ?? previousMax,
+    );
+    const max = Math.max(1, Math.round(nextMax));
+    const current = Math.min(
+      max,
+      Math.max(0, previousCurrent + max - previousMax),
+    );
+    entity.setValue(Health, "max", max);
+    entity.setValue(Health, "current", current);
+    updateHealthBar(entity);
   }
 
   private applySettingsView(): void {

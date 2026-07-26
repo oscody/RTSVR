@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { DEBUG_SETTINGS_CATALOG } from "../src/systems/debugSettingsCatalog.ts";
+
 test("tablet avoids unsupported multi-value Yoga spacing", () => {
   const source = readFileSync(
     new URL("../ui/rts-tablet.uikitml", import.meta.url),
@@ -37,17 +39,17 @@ test("wave banner exposes dynamic wave countdown text", () => {
   assert.match(source, /Wave 1 incoming in/);
 });
 
-test("settings view exposes friendly attack range controls", () => {
+test("settings view exposes every debug catalog control", () => {
   const source = readFileSync(
     new URL("../ui/rts-tablet.uikitml", import.meta.url),
     "utf8",
   );
-  assert.match(source, /id="setting-astronautAttackRange-minus"/);
-  assert.match(source, /id="setting-astronautAttackRange-value"/);
-  assert.match(source, /id="setting-astronautAttackRange-plus"/);
-  assert.match(source, /id="setting-craftRacerAttackRange-minus"/);
-  assert.match(source, /id="setting-craftRacerAttackRange-value"/);
-  assert.match(source, /id="setting-craftRacerAttackRange-plus"/);
+  assert.match(source, /class="settings-columns"/);
+  for (const { key } of DEBUG_SETTINGS_CATALOG) {
+    assert.match(source, new RegExp(`id="setting-${key}-minus"`));
+    assert.match(source, new RegExp(`id="setting-${key}-value"`));
+    assert.match(source, new RegExp(`id="setting-${key}-plus"`));
+  }
 });
 
 test("Units view exposes four roster slots and pagination controls", () => {
