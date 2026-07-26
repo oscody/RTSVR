@@ -14,6 +14,10 @@ import {
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
 import {
+  ALIEN_DRAKE_VISUAL_ELEVATION,
+  CRAFT_VISUAL_ELEVATION,
+} from "./constants.ts";
+import {
   canUnitAttack,
   getBuildingMaxHealth,
   getEnemyMaxHealth,
@@ -171,6 +175,21 @@ function seatModel(model: Object3D): void {
   model.position.y -= box.min.y;
 }
 
+function structureVisualElevation(spec: StructureSpec): number {
+  return isHoverCraftAsset(spec.asset) ? CRAFT_VISUAL_ELEVATION : 0;
+}
+
+function enemyVisualElevation(spec: EnemyEntitySpec): number {
+  return spec.kind === "alienDrake" ? ALIEN_DRAKE_VISUAL_ELEVATION : 0;
+}
+
+function isHoverCraftAsset(asset: string): boolean {
+  return (
+    asset === "craftCargoA" ||
+    asset === "craftRacer"
+  );
+}
+
 const interactionProxyMaterial = new MeshBasicMaterial({
   colorWrite: false,
   depthWrite: false,
@@ -180,10 +199,11 @@ function addInteractionProxy(
   holder: Group,
   spec: InteractionProxySpec,
   model: Object3D,
+  visualYOffset = 0,
 ): void {
   const size = new Box3().setFromObject(model).getSize(new Vector3());
   const footprint = spec.widthTiles * TILE_SIZE * 0.82;
-  const height = Math.max(size.y, TILE_SIZE * 0.8);
+  const height = Math.max(size.y + visualYOffset, TILE_SIZE * 0.8);
   const proxy = new Mesh(
     new BoxGeometry(footprint, height, footprint),
     interactionProxyMaterial,
@@ -193,7 +213,11 @@ function addInteractionProxy(
   holder.add(proxy);
 }
 
-function addCargoVisual(holder: Group, model: Object3D): Object3D {
+function addCargoVisual(
+  holder: Group,
+  model: Object3D,
+  visualYOffset: number,
+): Object3D {
   const cargo = AssetManager.getGLTF("rockCrystals")?.scene;
   if (!cargo) throw new Error("rockCrystals not preloaded for miner cargo");
   const cargoWidth = new Box3().setFromObject(cargo).getSize(new Vector3()).x;
@@ -201,7 +225,7 @@ function addCargoVisual(holder: Group, model: Object3D): Object3D {
   seatModel(cargo);
   const modelHeight = new Box3().setFromObject(model).getSize(new Vector3()).y;
   cargo.name = "MinerCargoVisual";
-  cargo.position.y = modelHeight + TILE_SIZE * 0.04;
+  cargo.position.y = visualYOffset + modelHeight + TILE_SIZE * 0.04;
   cargo.visible = false;
   holder.add(cargo);
   return cargo;
@@ -219,6 +243,8 @@ export function createEnemyEntity(
   const scale = (spec.widthTiles * TILE_SIZE) / width;
   model.scale.setScalar(scale);
   seatModel(model);
+  const visualYOffset = enemyVisualElevation(spec);
+  model.position.y += visualYOffset;
 
   const holder = new Group();
   holder.name = spec.name;
@@ -228,7 +254,7 @@ export function createEnemyEntity(
   const [worldX, worldZ] = gridToWorld(spec.x, spec.y);
   holder.position.set(worldX, 0.006, worldZ);
   holder.add(model);
-  addInteractionProxy(holder, spec, model);
+  addInteractionProxy(holder, spec, model, visualYOffset);
 
   const maxHealth = Math.ceil(
     getEnemyMaxHealth(spec.kind) * (spec.healthMultiplier ?? 1),
@@ -271,6 +297,8 @@ export function createInitialScenario(world: World): void {
       const scale = (spec.widthTiles * TILE_SIZE) / width;
       model.scale.setScalar(scale);
       seatModel(model);
+      const visualYOffset = structureVisualElevation(spec);
+      model.position.y += visualYOffset;
 
       const holder = new Group();
       holder.name = spec.name;
@@ -281,7 +309,7 @@ export function createInitialScenario(world: World): void {
       holder.position.set((wx0 + wx1) / 2, 0.006, (wz0 + wz1) / 2);
       holder.add(model);
       if (spec.unit || spec.building) {
-        addInteractionProxy(holder, spec, model);
+        addInteractionProxy(holder, spec, model, visualYOffset);
       }
       const entity = world
         .createTransformEntity(holder, { parent: root })
@@ -304,7 +332,10 @@ export function createInitialScenario(world: World): void {
         }
         if (spec.unit === "miner") {
           entity.addComponent(MinerState);
-          boardState.cargoVisualByUnit.set(entity.index, addCargoVisual(holder, model));
+          boardState.cargoVisualByUnit.set(
+            entity.index,
+            addCargoVisual(holder, model, visualYOffset),
+          );
           if (spec.asset === "craftMinerAnimated") {
             attachMinerAnimation(entity, model, gltf.animations);
           }

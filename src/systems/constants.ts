@@ -39,6 +39,9 @@ export const TABLE_Y_OFFSET = -0.08;
 export const TILE_PROXY_HEIGHT = 0.06;
 export const TILE_PROXY_Y_OFFSET = 0.03;
 export const TERRAIN_TILE_SCALE = 0.96;
+export const CRAFT_VISUAL_ELEVATION = TILE_SIZE * 0.90;
+export const ALIEN_DRAKE_VISUAL_ELEVATION = TILE_SIZE * 0.90;
+export const CRAFT_ELEVATION_RISE_SECONDS = 0.65;
 
 export const PATH_DIRECTIONS = [
   [0, -1],

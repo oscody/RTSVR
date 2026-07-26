@@ -10,6 +10,7 @@ import { CombatSystem } from "./systems/combat.js";
 import { AlienAnimationSystem } from "./systems/alienAnimation.js";
 import { CommandCenterAnimationSystem } from "./systems/commandCenterAnimation.js";
 import { CraftProductionSystem } from "./systems/craftProduction.js";
+import { CraftVisualRiseSystem } from "./systems/craftVisualRise.js";
 import { InteractionSystem } from "./systems/interaction.js";
 import { MiningSystem } from "./systems/mining.js";
 import { MatchResultSystem } from "./systems/matchResult.js";
@@ -107,6 +108,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(MinerAnimationSystem)
     .registerSystem(ConstructionSystem)
     .registerSystem(CraftProductionSystem)
+    .registerSystem(CraftVisualRiseSystem)
     .registerSystem(MatchResultSystem)
     .registerSystem(ScenarioResetSystem);
 });

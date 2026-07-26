@@ -13,7 +13,9 @@ import {
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
 import { canUnitAttack, getUnitMaxHealth } from "./combatRules.js";
+import { CRAFT_VISUAL_ELEVATION } from "./constants.ts";
 import type { CraftSpec } from "./craftCatalog.js";
+import { attachCraftVisualRise } from "./craftVisualRise.js";
 import { attachHealthBar } from "./healthBar.js";
 import { attachMinerAnimation } from "./minerAnimation.js";
 import { attachUnitAnimation } from "./unitAnimation.js";
@@ -49,6 +51,10 @@ export function createCraftEntity(
   const width = new Box3().setFromObject(model).getSize(new Vector3()).x;
   model.scale.setScalar((TILE_SIZE * 0.9) / width);
   seatModel(model);
+  const visualYOffset = craftVisualElevation(spec);
+  const seatedModelY = model.position.y;
+  const elevatedModelY = seatedModelY + visualYOffset;
+  model.position.y = elevatedModelY;
 
   const holder = new Group();
   craftSerial += 1;
@@ -58,16 +64,17 @@ export function createCraftEntity(
   holder.add(model);
 
   const size = new Box3().setFromObject(model).getSize(new Vector3());
+  const proxyHeight = Math.max(size.y + visualYOffset, TILE_SIZE * 0.8);
   const proxy = new Mesh(
     new BoxGeometry(
       TILE_SIZE * 0.82,
-      Math.max(size.y, TILE_SIZE * 0.8),
+      proxyHeight,
       TILE_SIZE * 0.82,
     ),
     interactionProxyMaterial,
   );
   proxy.name = `${holder.name}InteractionProxy`;
-  proxy.position.y = Math.max(size.y, TILE_SIZE * 0.8) / 2;
+  proxy.position.y = proxyHeight / 2;
   holder.add(proxy);
 
   const maxHealth = getUnitMaxHealth(spec.kind);
@@ -86,7 +93,7 @@ export function createCraftEntity(
     entity.addComponent(MinerState);
     boardState.cargoVisualByUnit.set(
       entity.index,
-      addMinerCargoVisual(holder, model),
+      addMinerCargoVisual(holder, model, visualYOffset),
     );
     if (spec.asset === "craftMinerAnimated") {
       attachMinerAnimation(entity, model, gltf.animations);
@@ -96,6 +103,10 @@ export function createCraftEntity(
     attachUnitAnimation(entity, model, gltf.animations);
   }
   attachHealthBar(holder);
+  if (visualYOffset > 0) {
+    model.position.y = seatedModelY;
+    attachCraftVisualRise(entity, model, elevatedModelY);
+  }
   return entity;
 }
 
@@ -103,7 +114,17 @@ export function resetCraftSerial(): void {
   craftSerial = 0;
 }
 
-function addMinerCargoVisual(holder: Group, model: Object3D): Object3D {
+function craftVisualElevation(spec: CraftSpec): number {
+  return spec.kind === "cargo" || spec.kind === "racer"
+    ? CRAFT_VISUAL_ELEVATION
+    : 0;
+}
+
+function addMinerCargoVisual(
+  holder: Group,
+  model: Object3D,
+  visualYOffset: number,
+): Object3D {
   const cargo = AssetManager.getGLTF("rockCrystals")?.scene;
   if (!cargo) throw new Error("rockCrystals not preloaded for miner cargo");
   const cargoWidth = new Box3().setFromObject(cargo).getSize(new Vector3()).x;
@@ -111,7 +132,7 @@ function addMinerCargoVisual(holder: Group, model: Object3D): Object3D {
   seatModel(cargo);
   const modelHeight = new Box3().setFromObject(model).getSize(new Vector3()).y;
   cargo.name = "MinerCargoVisual";
-  cargo.position.y = modelHeight + TILE_SIZE * 0.04;
+  cargo.position.y = visualYOffset + modelHeight + TILE_SIZE * 0.04;
   cargo.visible = false;
   holder.add(cargo);
   return cargo;
