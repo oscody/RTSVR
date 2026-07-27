@@ -72,8 +72,8 @@ test("Wave 2 is composed from a higher threat budget and difficulty multipliers"
   assert.ok(wave2Groups.some(({ enemy }) => enemy === "alienDrake"));
   assert.ok(wave2Groups.some(({ enemy }) => enemy === "alien"));
   assert.deepEqual(resolveWavePacing(wave2), {
-    maxActiveAliens: 4,
-    releaseIntervalSeconds: 6.8,
+    maxActiveAliens: 3,
+    releaseIntervalSeconds: 12.75,
   });
   assert.ok(wave2Spawns.every(({ healthMultiplier }) => healthMultiplier === 1.25));
   assert.ok(wave2Spawns.every(({ speedMultiplier }) => speedMultiplier === 1.1));
@@ -97,8 +97,8 @@ test("Wave 3 is a stronger budget wave", () => {
   assert.ok(wave3Groups.some(({ enemy }) => enemy === "alienDrake"));
   assert.ok(wave3Groups.some(({ enemy }) => enemy === "alien"));
   assert.deepEqual(resolveWavePacing(wave3), {
-    maxActiveAliens: 5,
-    releaseIntervalSeconds: 6,
+    maxActiveAliens: 3,
+    releaseIntervalSeconds: 11.25,
   });
   assert.ok(wave3Spawns.every(({ healthMultiplier }) => healthMultiplier === 1.45));
   assert.ok(wave3Spawns.every(({ speedMultiplier }) => speedMultiplier === 1.18));
@@ -134,7 +134,7 @@ test("Waves 4 through 6 keep increasing budget and difficulty", () => {
   assert.ok(wave6Groups.some(({ enemy }) => enemy === "alien"));
   assert.deepEqual(resolveWavePacing(wave6), {
     maxActiveAliens: 8,
-    releaseIntervalSeconds: 4.16,
+    releaseIntervalSeconds: 10.4,
   });
   assert.ok(wave6Spawns.every(({ healthMultiplier }) => healthMultiplier === 2.35));
   assert.ok(wave6Spawns.every(({ speedMultiplier }) => speedMultiplier === 1.42));

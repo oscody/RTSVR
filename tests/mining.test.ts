@@ -51,9 +51,9 @@ test("economy constants define the resource baseline", () => {
       startingCrystals: 0,
       defaultCapacity: 50,
       amountPerTrip: 10,
-      gatherTime: 1.1,
-      largeCapacity: 100,
-      smallCapacity: 50,
+      gatherTime: 5,
+      largeCapacity: 1000,
+      smallCapacity: 100,
     },
   );
 });
@@ -74,7 +74,7 @@ test("three mining cycles add crystals only during deposit", () => {
   completeCycle(state);
 
   assert.equal(state.crystals, 30);
-  assert.equal(state.nodeRemaining, 70);
+  assert.equal(state.nodeRemaining, 970);
   assert.equal(state.stage, "toResource");
 });
 
