@@ -39,6 +39,21 @@ export const TABLE_Y_OFFSET = -0.08;
 export const TILE_PROXY_HEIGHT = 0.06;
 export const TILE_PROXY_Y_OFFSET = 0.03;
 export const TERRAIN_TILE_SCALE = 0.96;
+
+// Continuous Martian ground (replaces the 576 terrain.glb tile clones).
+export const MARS_GROUND_COLOR = 0xe88463;
+export const MARS_GROUND_ROUGHNESS = 0.96;
+export const MARS_GROUND_METALNESS = 0.02;
+export const MARS_GROUND_Y_OFFSET = 0;
+export const MARS_RIM_COLOR = 0x5d3024;
+export const MARS_RIM_ROUGHNESS = 0.98;
+export const MARS_RIM_METALNESS = 0;
+export const MARS_RIM_THICKNESS = 0.12;
+
+// Command grid overlay — hidden until a unit is selected.
+export const GRID_OVERLAY_COLOR = 0x5d3024;
+export const GRID_OVERLAY_OPACITY = 0.5;
+export const GRID_OVERLAY_Y_OFFSET = 0.006;
 export const CRAFT_VISUAL_ELEVATION = TILE_SIZE * 0.90;
 export const ALIEN_DRAKE_VISUAL_ELEVATION = TILE_SIZE * 0.90;
 export const CRAFT_ELEVATION_RISE_SECONDS = 0.65;

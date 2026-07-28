@@ -54,13 +54,14 @@ test("hot animation systems reuse their live-controller sets", () => {
   }
 });
 
-test("board uses one ray target while preserving per-tile visuals", () => {
+test("board uses one ray target over a continuous ground surface", () => {
   const board = source("src/systems/board.ts");
   const interaction = source("src/systems/interaction.ts");
   const state = source("src/systems/state.ts");
 
   assert.equal(board.match(/\.addComponent\(RayInteractable\)/g)?.length, 1);
-  assert.match(board, /tileVisuals\.add\(tile\)/);
+  assert.match(board, /name = "BoardGround"/);
+  assert.doesNotMatch(board, /terrain\.scene\.clone/);
   assert.match(board, /\.addComponent\(BoardSurface\)/);
   assert.doesNotMatch(board, /\.addComponent\(BoardTile/);
   assert.match(board, /worldToGrid\(localHit\.x, localHit\.z\)/);

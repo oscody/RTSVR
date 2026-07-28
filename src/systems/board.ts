@@ -1,9 +1,12 @@
 import {
-  AssetManager,
   BoxGeometry,
+  BufferGeometry,
   Color,
   DirectionalLight,
+  Float32BufferAttribute,
   Group,
+  LineBasicMaterial,
+  LineSegments,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -34,24 +37,28 @@ import {
   BOARD_Y,
   BUILD_MARKER_OPACITY,
   BUILD_MARKER_COLOR,
+  GRID_OVERLAY_COLOR,
+  GRID_OVERLAY_OPACITY,
+  GRID_OVERLAY_Y_OFFSET,
   GRID_SIZE,
   HOVER_MARKER_COLOR,
   MARKER_OPACITY,
   MARKER_TILE_SCALE,
   MARKER_Y_OFFSET,
+  MARS_GROUND_COLOR,
+  MARS_GROUND_METALNESS,
+  MARS_GROUND_ROUGHNESS,
+  MARS_GROUND_Y_OFFSET,
+  MARS_RIM_COLOR,
+  MARS_RIM_METALNESS,
+  MARS_RIM_ROUGHNESS,
+  MARS_RIM_THICKNESS,
   ORDER_MARKER_COLOR,
   ORDER_MARKER_INNER_SCALE,
   ORDER_MARKER_OPACITY,
   ORDER_MARKER_OUTER_SCALE,
   ORDER_MARKER_Y_OFFSET,
   SELECTION_MARKER_COLOR,
-  TABLE_COLOR,
-  TABLE_EDGE_PADDING,
-  TABLE_METALNESS,
-  TABLE_ROUGHNESS,
-  TABLE_THICKNESS,
-  TABLE_Y_OFFSET,
-  TERRAIN_TILE_SCALE,
   TILE_SIZE,
   TILE_PROXY_HEIGHT,
   TILE_PROXY_Y_OFFSET,
@@ -102,42 +109,80 @@ export class BoardSystem extends createSystem({}) {
     sun.name = "BoardSun";
     this.world.createTransformEntity(sun, { parent: root });
 
-    const table = new Mesh(
+    // Dark Martian rim/slab beneath the coral top gives the board visible
+    // thickness and support (replaces the old rectangular BoardTable). Its top
+    // sits just below the playable ground so it never intercepts pointers or
+    // changes worldToGrid coordinates.
+    const rim = new Mesh(
       new BoxGeometry(
-        GRID_SIZE * TILE_SIZE + TABLE_EDGE_PADDING,
-        TABLE_THICKNESS,
-        GRID_SIZE * TILE_SIZE + TABLE_EDGE_PADDING,
+        GRID_SIZE * TILE_SIZE,
+        MARS_RIM_THICKNESS,
+        GRID_SIZE * TILE_SIZE,
       ),
       new MeshStandardMaterial({
-        color: TABLE_COLOR,
-        roughness: TABLE_ROUGHNESS,
-        metalness: TABLE_METALNESS,
+        color: MARS_RIM_COLOR,
+        roughness: MARS_RIM_ROUGHNESS,
+        metalness: MARS_RIM_METALNESS,
       }),
     );
-    table.name = "BoardTable";
-    table.position.y = TABLE_Y_OFFSET;
-    this.world.createTransformEntity(table, { parent: root });
+    rim.name = "BoardRim";
+    // Top face 2 mm below the coral ground to avoid coplanar z-fighting.
+    rim.position.y = MARS_GROUND_Y_OFFSET - 0.002 - MARS_RIM_THICKNESS / 2;
+    this.world.createTransformEntity(rim, { parent: root });
 
-    const terrain = AssetManager.getGLTF("terrain");
-    if (!terrain) throw new Error("terrain.glb not preloaded");
-    const tileVisuals = new Group();
-    tileVisuals.name = "BoardTileVisuals";
-    rootObject.add(tileVisuals);
+    // One continuous coral ground plane replaces the 576 terrain.glb clones.
+    const ground = new Mesh(
+      new PlaneGeometry(GRID_SIZE * TILE_SIZE, GRID_SIZE * TILE_SIZE),
+      new MeshStandardMaterial({
+        color: MARS_GROUND_COLOR,
+        roughness: MARS_GROUND_ROUGHNESS,
+        metalness: MARS_GROUND_METALNESS,
+      }),
+    );
+    ground.name = "BoardGround";
+    ground.rotateX(-Math.PI / 2);
+    ground.position.y = MARS_GROUND_Y_OFFSET;
+    this.world.createTransformEntity(ground, { parent: root });
+
+    // Terrain is coordinate data only now — seed every cell "open" so
+    // getTerrainAt/setTerrainAt keep working without per-tile entities.
     boardState.terrainByKey.clear();
     for (let y = 0; y < GRID_SIZE; y += 1) {
       for (let x = 0; x < GRID_SIZE; x += 1) {
-        const tile = terrain.scene.clone(true);
-        // The GLB's node carries a baked (2, 0, 1.5) pivot offset — re-center
-        // so the drawn tile and marker math agree.
-        tile.children.forEach((child) => child.position.set(0, 0, 0));
-        tile.name = `TileVisual_${x}_${y}`;
-        const [worldX, worldZ] = gridToWorld(x, y);
-        tile.position.set(worldX, 0, worldZ);
-        tile.scale.setScalar(TILE_SIZE * TERRAIN_TILE_SCALE);
-        tileVisuals.add(tile);
         boardState.terrainByKey.set(gridKey(x, y), "open");
       }
     }
+
+    // Command grid overlay — one LineSegments object (not 576 squares), hidden
+    // until a unit is selected. No RayInteractable: only BoardSurface handles
+    // ground interaction.
+    const half = (GRID_SIZE * TILE_SIZE) / 2;
+    const gridVertices: number[] = [];
+    for (let i = 0; i <= GRID_SIZE; i += 1) {
+      const pos = -half + i * TILE_SIZE;
+      gridVertices.push(-half, 0, pos, half, 0, pos); // line along X
+      gridVertices.push(pos, 0, -half, pos, 0, half); // line along Z
+    }
+    const gridGeometry = new BufferGeometry();
+    gridGeometry.setAttribute(
+      "position",
+      new Float32BufferAttribute(gridVertices, 3),
+    );
+    const gridOverlay = new LineSegments(
+      gridGeometry,
+      new LineBasicMaterial({
+        color: GRID_OVERLAY_COLOR,
+        transparent: true,
+        opacity: GRID_OVERLAY_OPACITY,
+        depthWrite: false,
+      }),
+    );
+    gridOverlay.name = "BoardCommandGrid";
+    gridOverlay.position.y = GRID_OVERLAY_Y_OFFSET;
+    gridOverlay.visible = false;
+    boardState.gridOverlay = this.world.createTransformEntity(gridOverlay, {
+      parent: root,
+    });
 
     // One invisible board-wide volume replaces 576 per-tile ray targets.
     const boardSurface = new Mesh(

@@ -25,11 +25,6 @@ import { UnitAnimationSystem } from "./systems/unitAnimation.js";
 import { WaveSystem } from "./systems/wave.js";
 
 const assets: AssetManifest = {
-  terrain: {
-    url: "/gltf/terrain.glb",
-    type: AssetType.GLTF,
-    priority: "critical",
-  },
   commandCenter: {
     url: "/gltf/command_center.glb",
     type: AssetType.GLTF,

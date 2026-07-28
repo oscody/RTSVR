@@ -286,6 +286,7 @@ export type DebugSettingKey =
 export const boardState = {
   boardRoot: null as Entity | null,
   boardSurface: null as Entity | null,
+  gridOverlay: null as Entity | null, // command grid, shown while units selected
   terrainByKey: new Map<string, BoardTerrain>(),
   hoverMarker: null as Entity | null,
   selectionMarker: null as Entity | null,

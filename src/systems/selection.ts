@@ -282,6 +282,10 @@ function setRingVisible(world: World, unit: Entity, visible: boolean): void {
 }
 
 function publishSelectionSummary(): void {
+  // Command grid is visible whenever the player has a unit selected — every
+  // selection mutator (toggle/clear/remove) funnels through here.
+  const grid = boardState.gridOverlay?.object3D;
+  if (grid) grid.visible = boardState.selectedUnits.size > 0;
   const selection = boardState.selection;
   if (!selection) return;
   const selected = getSelectedUnits();
