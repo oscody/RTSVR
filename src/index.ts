@@ -16,6 +16,7 @@ import { MiningSystem } from "./systems/mining.js";
 import { MatchResultSystem } from "./systems/matchResult.js";
 import { MovementSystem } from "./systems/movement.js";
 import { MinerAnimationSystem } from "./systems/minerAnimation.js";
+import { PerformanceSystem } from "./systems/performance.js";
 import { ScenarioResetSystem } from "./systems/scenarioReset.js";
 import { StructuresSystem } from "./systems/structures.js";
 import { TabletSystem } from "./systems/tablet.js";
@@ -95,6 +96,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
   world
     .registerSystem(BoardSystem)
     .registerSystem(StructuresSystem)
+    .registerSystem(PerformanceSystem)
     .registerSystem(TabletSystem)
     .registerSystem(InteractionSystem)
     .registerSystem(MovementSystem)

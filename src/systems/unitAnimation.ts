@@ -1,12 +1,13 @@
-import { createSystem, type Entity } from "@iwsdk/core";
 import {
   AnimationClip,
   AnimationMixer,
   LoopOnce,
   LoopRepeat,
+  createSystem,
   type AnimationAction,
+  type Entity,
   type Object3D,
-} from "three";
+} from "@iwsdk/core";
 import {
   ANIMATION_CROSS_FADE_SECONDS,
   UNIT_ATTACK_CLIPS,
@@ -142,18 +143,21 @@ function playAnimation(
 export class UnitAnimationSystem extends createSystem({
   units: { required: [Unit, UnitSelection, CombatState, Health] },
 }) {
+  private readonly liveAnimatedUnits = new Set<number>();
+
   update(delta: number): void {
-    const liveAnimatedUnits = new Set<number>();
+    const frameDelta = Math.max(0, delta);
+    this.liveAnimatedUnits.clear();
     for (const unit of this.queries.units.entities) {
       const controller = controllers.get(unit.index);
       if (!controller) continue;
-      liveAnimatedUnits.add(unit.index);
+      this.liveAnimatedUnits.add(unit.index);
       playAnimation(controller, desiredAnimation(unit, controller));
-      controller.mixer.update(Math.max(0, delta));
+      controller.mixer.update(frameDelta);
     }
 
     for (const [entityIndex, controller] of controllers) {
-      if (liveAnimatedUnits.has(entityIndex)) continue;
+      if (this.liveAnimatedUnits.has(entityIndex)) continue;
       controller.mixer.stopAllAction();
       controllers.delete(entityIndex);
     }

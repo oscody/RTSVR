@@ -43,6 +43,10 @@ interface TargetPath {
   path: GridPosition[];
 }
 
+function compareEntityIndex(left: Entity, right: Entity): number {
+  return left.index - right.index;
+}
+
 export class WaveSystem extends createSystem({
   sources: { required: [WaveSource, MatchState] },
   aliens: { required: [Enemy, WaveUnit, CombatState, Health] },
@@ -54,6 +58,7 @@ export class WaveSystem extends createSystem({
     timer: INITIAL_WAVE_DELAY_SECONDS,
     stage: "countdown",
   };
+  private readonly waitingReadyBuffer: Entity[] = [];
 
   update(delta: number): void {
     const source = this.queries.sources.entities.values().next().value as
@@ -236,14 +241,15 @@ export class WaveSystem extends createSystem({
   }
 
   private waitingReadyAliens(): Entity[] {
-    return Array.from(this.queries.aliens.entities)
-      .filter(
-        (alien) =>
-          (alien.getValue(Health, "current") ?? 0) > 0 &&
-          alien.getValue(WaveUnit, "stage") === "waiting" &&
-          (alien.getValue(WaveUnit, "releaseDelay") ?? 0) <= 0,
-      )
-      .sort((left, right) => left.index - right.index);
+    this.waitingReadyBuffer.length = 0;
+    for (const alien of this.queries.aliens.entities) {
+      if ((alien.getValue(Health, "current") ?? 0) <= 0) continue;
+      if (alien.getValue(WaveUnit, "stage") !== "waiting") continue;
+      if ((alien.getValue(WaveUnit, "releaseDelay") ?? 0) > 0) continue;
+      this.waitingReadyBuffer.push(alien);
+    }
+    this.waitingReadyBuffer.sort(compareEntityIndex);
+    return this.waitingReadyBuffer;
   }
 
   private activeLivingAlienCount(): number {
@@ -260,7 +266,9 @@ export class WaveSystem extends createSystem({
     waitingReady: readonly Entity[],
     count: number,
   ): void {
-    for (const alien of waitingReady.slice(0, Math.max(0, count))) {
+    const releaseCount = Math.min(waitingReady.length, Math.max(0, count));
+    for (let index = 0; index < releaseCount; index += 1) {
+      const alien = waitingReady[index];
       this.clearAlienTarget(alien, "released");
       alien.setValue(WaveUnit, "releaseDelay", 0);
       alien.setValue(WaveUnit, "repathTimer", 0);

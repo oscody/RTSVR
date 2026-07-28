@@ -19,6 +19,7 @@ import {
   GameState,
   GameStats,
   MatchState,
+  RuntimePerformance,
   SelectionState,
   WaveSource,
   boardState,
@@ -205,6 +206,12 @@ export class BoardSystem extends createSystem({}) {
     boardState.gameStats = this.world
       .createTransformEntity(statsObject, { parent: root })
       .addComponent(GameStats);
+
+    const performanceObject = new Object3D();
+    performanceObject.name = "RuntimePerformance";
+    boardState.runtimePerformance = this.world
+      .createTransformEntity(performanceObject, { parent: root })
+      .addComponent(RuntimePerformance);
 
     const waveSourceObject = new Object3D();
     waveSourceObject.name = "WaveSource";

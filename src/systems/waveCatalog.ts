@@ -111,7 +111,7 @@ export const WAVE_CATALOG: readonly WaveSpec[] = [
   {
     waveNumber: 3,
     maxActiveAliens: 2,
-    releaseIntervalSeconds: 20,
+    releaseIntervalSeconds: 15,
     threatBudget: {
       budget: 34,
       enemies: ["strongAlienMech", "alienDrake", "alien"],

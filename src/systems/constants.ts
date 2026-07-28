@@ -66,6 +66,7 @@ export const CRAFT_PRODUCTION_FOUNDATION_COLOR = 0x0e7490;
 export const CRAFT_PRODUCTION_FOUNDATION_OPACITY = 0.4;
 
 export const ANIMATION_CROSS_FADE_SECONDS = 0.12;
+export const PERFORMANCE_SAMPLE_SECONDS = 1;
 
 export const ALIEN_MOVE_CLIPS = ["Walk", "Fly"] as const;
 export const ALIEN_ATTACK_CLIPS = ["Energy_Slam", "Attack"] as const;

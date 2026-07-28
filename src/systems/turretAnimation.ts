@@ -1,11 +1,12 @@
-import { createSystem, type Entity } from "@iwsdk/core";
 import {
   AnimationClip,
   AnimationMixer,
   LoopOnce,
+  createSystem,
   type AnimationAction,
+  type Entity,
   type Object3D,
-} from "three";
+} from "@iwsdk/core";
 import { TURRET_ATTACK_SPEC } from "./combatRules.js";
 import { TURRET_FIRE_RECOIL_CLIP } from "./constants.ts";
 import {
@@ -71,14 +72,17 @@ function isFiringShot(
 export class TurretAnimationSystem extends createSystem({
   turrets: { required: [Building, CombatCapability, CombatState, Health] },
 }) {
+  private readonly liveAnimatedTurrets = new Set<number>();
+
   update(delta: number): void {
-    const liveAnimatedTurrets = new Set<number>();
+    const frameDelta = Math.max(0, delta);
+    this.liveAnimatedTurrets.clear();
     for (const turret of this.queries.turrets.entities) {
       if (turret.getValue(Building, "kind") !== "turret") continue;
 
       const controller = controllers.get(turret.index);
       if (!controller) continue;
-      liveAnimatedTurrets.add(turret.index);
+      this.liveAnimatedTurrets.add(turret.index);
 
       const attacking =
         (turret.getValue(Health, "current") ?? 0) > 0 &&
@@ -92,11 +96,11 @@ export class TurretAnimationSystem extends createSystem({
 
       controller.wasAttacking = attacking;
       controller.lastTimer = attacking ? timer : TURRET_ATTACK_SPEC.cadence;
-      controller.mixer.update(Math.max(0, delta));
+      controller.mixer.update(frameDelta);
     }
 
     for (const [entityIndex, controller] of controllers) {
-      if (liveAnimatedTurrets.has(entityIndex)) continue;
+      if (this.liveAnimatedTurrets.has(entityIndex)) continue;
       controller.mixer.stopAllAction();
       controllers.delete(entityIndex);
     }

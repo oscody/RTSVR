@@ -1,11 +1,12 @@
-import { createSystem, type Entity } from "@iwsdk/core";
 import {
   AnimationClip,
   AnimationMixer,
   LoopRepeat,
+  createSystem,
   type AnimationAction,
+  type Entity,
   type Object3D,
-} from "three";
+} from "@iwsdk/core";
 import {
   ALIEN_ATTACK_CLIPS,
   ALIEN_MOVE_CLIPS,
@@ -108,18 +109,22 @@ function playAnimation(
 export class AlienAnimationSystem extends createSystem({
   aliens: { required: [Enemy, WaveUnit, CombatState, Health] },
 }) {
+  private readonly liveAnimatedAliens = new Set<number>();
+
   update(delta: number): void {
-    const liveAnimatedAliens = new Set<number>();
+    const frameDelta = Math.max(0, delta);
+    this.liveAnimatedAliens.clear();
     for (const alien of this.queries.aliens.entities) {
       const controller = controllers.get(alien.index);
       if (!controller) continue;
-      liveAnimatedAliens.add(alien.index);
+      this.liveAnimatedAliens.add(alien.index);
+      if (alien.getValue(WaveUnit, "stage") === "waiting") continue;
       playAnimation(controller, desiredAnimation(alien));
-      controller.mixer.update(Math.max(0, delta));
+      controller.mixer.update(frameDelta);
     }
 
     for (const [entityIndex, controller] of controllers) {
-      if (liveAnimatedAliens.has(entityIndex)) continue;
+      if (this.liveAnimatedAliens.has(entityIndex)) continue;
       controller.mixer.stopAllAction();
       controllers.delete(entityIndex);
     }

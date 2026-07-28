@@ -1,12 +1,13 @@
-import { createSystem, type Entity } from "@iwsdk/core";
 import {
   AnimationClip,
   AnimationMixer,
   LoopOnce,
   LoopRepeat,
+  createSystem,
   type AnimationAction,
+  type Entity,
   type Object3D,
-} from "three";
+} from "@iwsdk/core";
 import {
   COMMAND_CENTER_DOOR_CLOSE_CLIP,
   COMMAND_CENTER_DOOR_HOLD_SECONDS,
@@ -142,23 +143,26 @@ function updateDoorSequence(
 export class CommandCenterAnimationSystem extends createSystem({
   commandCenters: { required: [Building, Health] },
 }) {
+  private readonly liveAnimatedCommandCenters = new Set<number>();
+
   update(delta: number): void {
-    const liveAnimatedCommandCenters = new Set<number>();
+    const frameDelta = Math.max(0, delta);
+    this.liveAnimatedCommandCenters.clear();
     for (const commandCenter of this.queries.commandCenters.entities) {
       if (commandCenter.getValue(Building, "kind") !== "command-center") continue;
 
       const controller = controllers.get(commandCenter.index);
       if (!controller) continue;
-      liveAnimatedCommandCenters.add(commandCenter.index);
+      this.liveAnimatedCommandCenters.add(commandCenter.index);
 
       if ((commandCenter.getValue(Health, "current") ?? 0) > 0) {
-        updateDoorSequence(controller, Math.max(0, delta));
-        controller.mixer.update(Math.max(0, delta));
+        updateDoorSequence(controller, frameDelta);
+        controller.mixer.update(frameDelta);
       }
     }
 
     for (const [entityIndex, controller] of controllers) {
-      if (liveAnimatedCommandCenters.has(entityIndex)) continue;
+      if (this.liveAnimatedCommandCenters.has(entityIndex)) continue;
       controller.mixer.stopAllAction();
       controllers.delete(entityIndex);
     }

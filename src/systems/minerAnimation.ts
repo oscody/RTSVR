@@ -1,11 +1,12 @@
-import { createSystem, type Entity } from "@iwsdk/core";
 import {
   AnimationClip,
   AnimationMixer,
   LoopRepeat,
+  createSystem,
   type AnimationAction,
+  type Entity,
   type Object3D,
-} from "three";
+} from "@iwsdk/core";
 import {
   ANIMATION_CROSS_FADE_SECONDS,
   MINER_IDLE_CLIP,
@@ -97,18 +98,21 @@ function playAnimation(
 export class MinerAnimationSystem extends createSystem({
   miners: { required: [Unit, MinerState, Health] },
 }) {
+  private readonly liveAnimatedMiners = new Set<number>();
+
   update(delta: number): void {
-    const liveAnimatedMiners = new Set<number>();
+    const frameDelta = Math.max(0, delta);
+    this.liveAnimatedMiners.clear();
     for (const miner of this.queries.miners.entities) {
       const controller = controllers.get(miner.index);
       if (!controller) continue;
-      liveAnimatedMiners.add(miner.index);
+      this.liveAnimatedMiners.add(miner.index);
       playAnimation(controller, desiredAnimation(miner));
-      controller.mixer.update(Math.max(0, delta));
+      controller.mixer.update(frameDelta);
     }
 
     for (const [entityIndex, controller] of controllers) {
-      if (liveAnimatedMiners.has(entityIndex)) continue;
+      if (this.liveAnimatedMiners.has(entityIndex)) continue;
       controller.mixer.stopAllAction();
       controllers.delete(entityIndex);
     }

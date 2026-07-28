@@ -78,6 +78,7 @@ import {
   GameStats,
   Health,
   MatchState,
+  RuntimePerformance,
   SelectionState,
   TabletState,
   Unit,
@@ -107,7 +108,20 @@ export class TabletSystem extends createSystem({
 }) {
   private document: UIKitDocument | null = null;
   private tabletEntity: Entity | null = null;
-  private lastSignature = "";
+  private lastAstronauts = Number.NaN;
+  private lastBuildingCount = Number.NaN;
+  private lastCountdown = Number.NaN;
+  private lastCrafts = Number.NaN;
+  private lastCrystals = Number.NaN;
+  private lastDebugRevision = Number.NaN;
+  private lastEnemyCount = Number.NaN;
+  private lastKills = Number.NaN;
+  private lastMined = Number.NaN;
+  private lastPerformanceRevision = Number.NaN;
+  private lastSelectionRevision = Number.NaN;
+  private lastTabletRevision = Number.NaN;
+  private lastWaveNumber = Number.NaN;
+  private lastWaveStage = "";
 
   init(): void {
     this.createTablet();
@@ -116,7 +130,7 @@ export class TabletSystem extends createSystem({
         this.tabletEntity = entity;
         this.document = PanelDocument.data.document[entity.index] as UIKitDocument;
         this.bind(this.document, entity);
-        this.lastSignature = "";
+        this.invalidateSnapshot();
       }),
     );
   }
@@ -126,24 +140,33 @@ export class TabletSystem extends createSystem({
     const document = this.document;
     if (!tablet || !document) return;
 
-    // Runs every frame, outside the memoized signature below, since the
-    // countdown timer changes continuously while wave stage is "countdown".
     const waveSource = boardState.waveSource;
     const waveStage = waveSource?.getValue(WaveSource, "stage") ?? "countdown";
     const waveNumber = waveSource?.getValue(WaveSource, "waveNumber") ?? 1;
-    this.setText("current-level", `${waveNumber}`);
     const countingDown = waveStage === "countdown";
-    element(document, "wave-banner")?.setProperties({
-      display: countingDown ? "flex" : "none",
-    });
+    if (waveNumber !== this.lastWaveNumber) {
+      this.lastWaveNumber = waveNumber;
+      this.setText("current-level", `${waveNumber}`);
+      this.setText("wave-banner-label", `Wave ${waveNumber} incoming in`);
+    }
+    if (waveStage !== this.lastWaveStage) {
+      this.lastWaveStage = waveStage;
+      element(document, "wave-banner")?.setProperties({
+        display: countingDown ? "flex" : "none",
+      });
+    }
     if (countingDown) {
       const waveTimer = waveSource?.getValue(WaveSource, "timer") ?? 0;
-      this.setText("wave-banner-label", `Wave ${waveNumber} incoming in`);
-      this.setText("wave-countdown", `${Math.max(0, Math.ceil(waveTimer))}`);
+      const countdown = Math.max(0, Math.ceil(waveTimer));
+      if (countdown !== this.lastCountdown) {
+        this.lastCountdown = countdown;
+        this.setText("wave-countdown", `${countdown}`);
+      }
     }
 
     const game = boardState.gameState;
     const stats = boardState.gameStats;
+    const performance = boardState.runtimePerformance;
     const crystals = game?.getValue(GameState, "crystals") ?? 0;
     const mined = stats?.getValue(GameStats, "crystalsMined") ?? 0;
     let astronauts = 0;
@@ -152,39 +175,57 @@ export class TabletSystem extends createSystem({
       if (unit.getValue(Unit, "kind") === "astronaut") astronauts += 1;
       else crafts += 1;
     }
-    const signature = [
-      tablet.getValue(TabletState, "revision") ?? 0,
-      crystals,
-      mined,
-      this.queries.buildings.entities.size,
-      astronauts,
-      crafts,
-      this.queries.enemies.entities.size,
-      stats?.getValue(GameStats, "enemiesKilled") ?? 0,
-      boardState.selection?.getValue(SelectionState, "revision") ?? 0,
-      boardState.debugSettings?.getValue(DebugSettings, "revision") ?? 0,
-      Array.from(this.queries.units.entities)
-        .sort((a, b) => a.index - b.index)
-        .map(
-          (unit) =>
-            `${unit.index},${unit.getValue(UnitSelection, "category")},${unit.getValue(UnitSelection, "selected")}`,
-        )
-        .join(";"),
-    ].join(":");
-    if (signature === this.lastSignature) return;
-    this.lastSignature = signature;
+    const tabletRevision = tablet.getValue(TabletState, "revision") ?? 0;
+    const buildingCount = this.queries.buildings.entities.size;
+    const enemyCount = this.queries.enemies.entities.size;
+    const kills = stats?.getValue(GameStats, "enemiesKilled") ?? 0;
+    const selectionRevision =
+      boardState.selection?.getValue(SelectionState, "revision") ?? 0;
+    const debugRevision =
+      boardState.debugSettings?.getValue(DebugSettings, "revision") ?? 0;
+    const performanceRevision =
+      performance?.getValue(RuntimePerformance, "revision") ?? 0;
+    if (
+      tabletRevision === this.lastTabletRevision &&
+      crystals === this.lastCrystals &&
+      mined === this.lastMined &&
+      buildingCount === this.lastBuildingCount &&
+      astronauts === this.lastAstronauts &&
+      crafts === this.lastCrafts &&
+      enemyCount === this.lastEnemyCount &&
+      kills === this.lastKills &&
+      selectionRevision === this.lastSelectionRevision &&
+      debugRevision === this.lastDebugRevision &&
+      performanceRevision === this.lastPerformanceRevision
+    ) {
+      return;
+    }
+    this.lastTabletRevision = tabletRevision;
+    this.lastCrystals = crystals;
+    this.lastMined = mined;
+    this.lastBuildingCount = buildingCount;
+    this.lastAstronauts = astronauts;
+    this.lastCrafts = crafts;
+    this.lastEnemyCount = enemyCount;
+    this.lastKills = kills;
+    this.lastSelectionRevision = selectionRevision;
+    this.lastDebugRevision = debugRevision;
+    this.lastPerformanceRevision = performanceRevision;
 
     this.setText("crystal-balance", `${crystals}`);
     this.setText("overview-crystals", `${crystals}`);
     this.setText("overview-mined", `${mined}`);
-    this.setText("overview-buildings", `${this.queries.buildings.entities.size}`);
+    this.setText("overview-buildings", `${buildingCount}`);
     this.setText("overview-crafts", `${crafts}`);
     this.setText("overview-units", `${crafts + astronauts}`);
     this.setText("overview-astronauts", `${astronauts}`);
-    this.setText("overview-enemies", `${this.queries.enemies.entities.size}`);
+    this.setText("overview-enemies", `${enemyCount}`);
+    this.setText("overview-kills", `${kills}`);
     this.setText(
-      "overview-kills",
-      `${stats?.getValue(GameStats, "enemiesKilled") ?? 0}`,
+      "settings-performance",
+      performanceRevision > 0
+        ? `FPS ${Math.round(performance?.getValue(RuntimePerformance, "fps") ?? 0)} | Avg ${(performance?.getValue(RuntimePerformance, "averageFrameMs") ?? 0).toFixed(1)} ms | Worst ${(performance?.getValue(RuntimePerformance, "worstFrameMs") ?? 0).toFixed(1)} ms | Moving ${performance?.getValue(RuntimePerformance, "movingEntities") ?? 0}`
+        : "FPS -- | Avg -- ms | Worst -- ms | Moving 0",
     );
     this.setText("tablet-status", tablet.getValue(TabletState, "status") ?? "");
     element(document, "tablet-status")?.setProperties({
@@ -240,6 +281,23 @@ export class TabletSystem extends createSystem({
     this.applyCraftPage(tablet, craftKind);
     this.applyUnitPage(tablet);
     this.applySettingsView();
+  }
+
+  private invalidateSnapshot(): void {
+    this.lastAstronauts = Number.NaN;
+    this.lastBuildingCount = Number.NaN;
+    this.lastCountdown = Number.NaN;
+    this.lastCrafts = Number.NaN;
+    this.lastCrystals = Number.NaN;
+    this.lastDebugRevision = Number.NaN;
+    this.lastEnemyCount = Number.NaN;
+    this.lastKills = Number.NaN;
+    this.lastMined = Number.NaN;
+    this.lastPerformanceRevision = Number.NaN;
+    this.lastSelectionRevision = Number.NaN;
+    this.lastTabletRevision = Number.NaN;
+    this.lastWaveNumber = Number.NaN;
+    this.lastWaveStage = "";
   }
 
   private createTablet(): void {

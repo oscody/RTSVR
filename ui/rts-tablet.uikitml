@@ -209,7 +209,7 @@
   .view {
     flex-direction: column;
     width: 548px;
-    height: 300px;
+    height: 274px;
     margin-top: 8px;
   }
 
@@ -657,12 +657,26 @@
     color: #1d3442;
   }
 
-  .settings-hint {
+  .performance-strip {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
     width: 548px;
-    height: 18px;
-    color: #607482;
-    font-size: 11px;
+    height: 22px;
     margin-top: 4px;
+    background-color: #eaf2f5;
+    border-width: 1px;
+    border-color: #afbec8;
+    border-radius: 5px;
+  }
+
+  .performance-text {
+    width: 532px;
+    height: 17px;
+    color: #365466;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
   }
 </style>
 <Panel class="tablet">
@@ -692,6 +706,9 @@
     <button id="tab-crafts" class="tab"><RocketIcon class="tab-icon"></RocketIcon><span>Crafts</span></button>
     <button id="tab-units" class="tab"><UsersIcon class="tab-icon"></UsersIcon><span>Units</span></button>
     <button id="tab-settings" class="tab"><SlidersHorizontalIcon class="tab-icon"></SlidersHorizontalIcon><span>Settings</span></button>
+  </div>
+  <div class="performance-strip">
+    <span id="settings-performance" class="performance-text">FPS -- | Avg -- ms | Worst -- ms | Moving 0</span>
   </div>
   <div id="overview-view" class="view">
     <span class="section-title">Economy and forces</span>
@@ -777,7 +794,6 @@
         <div class="settings-row"><span class="settings-label">Turret Power</span><div class="settings-controls"><button id="setting-turretAttackDamage-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-turretAttackDamage-value" class="settings-value">18</span><button id="setting-turretAttackDamage-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
       </div>
     </div>
-    <span class="settings-hint">Changes apply immediately and persist through Restart this session.</span>
   </div>
   <span id="tablet-status" class="status">Select an astronaut to build</span>
 </Panel>

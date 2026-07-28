@@ -40,6 +40,18 @@ test("selection membership adds and removes the same unit", () => {
   assert.deepEqual([...selected], [1, 3]);
 });
 
+test("twenty consecutive unit selections update membership reliably", () => {
+  const selected = new Set<object>();
+  const units = Array.from({ length: 20 }, () => ({}));
+
+  for (const unit of units) {
+    assert.equal(toggleSelectionMembership(selected, unit), true);
+  }
+
+  assert.equal(selected.size, 20);
+  for (const unit of units) assert.equal(selected.has(unit), true);
+});
+
 test("group orders allocate distinct valid destinations near the target", () => {
   const blocked = new Set(["5,5", "5,4"]);
   const assignments = assignGroupDestinations({

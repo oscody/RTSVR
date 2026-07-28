@@ -129,6 +129,14 @@ export const GameStats = createComponent("GameStats", {
   revision: { type: Types.Int32, default: 0 },
 });
 
+export const RuntimePerformance = createComponent("RuntimePerformance", {
+  fps: { type: Types.Float32, default: 0 },
+  averageFrameMs: { type: Types.Float32, default: 0 },
+  worstFrameMs: { type: Types.Float32, default: 0 },
+  movingEntities: { type: Types.Int16, default: 0 },
+  revision: { type: Types.Int32, default: 0 },
+});
+
 export const Building = createComponent("Building", {
   kind: { type: Types.String, default: "unknown" },
   x: { type: Types.Int16, default: -1 },
@@ -285,6 +293,7 @@ export const boardState = {
   selection: null as Entity | null, // carries the SelectionState singleton
   gameState: null as Entity | null,
   gameStats: null as Entity | null,
+  runtimePerformance: null as Entity | null,
   waveSource: null as Entity | null,
   matchResultPanel: null as Entity | null,
   tablet: null as Entity | null,
