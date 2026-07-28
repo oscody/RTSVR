@@ -54,6 +54,23 @@ test("hot animation systems reuse their live-controller sets", () => {
   }
 });
 
+test("board uses one ray target while preserving per-tile visuals", () => {
+  const board = source("src/systems/board.ts");
+  const interaction = source("src/systems/interaction.ts");
+  const state = source("src/systems/state.ts");
+
+  assert.equal(board.match(/\.addComponent\(RayInteractable\)/g)?.length, 1);
+  assert.match(board, /tileVisuals\.add\(tile\)/);
+  assert.match(board, /\.addComponent\(BoardSurface\)/);
+  assert.doesNotMatch(board, /\.addComponent\(BoardTile/);
+  assert.match(board, /worldToGrid\(localHit\.x, localHit\.z\)/);
+  assert.match(
+    interaction,
+    /pressedBoard: \{ required: \[BoardSurface, Pressed\] \}/,
+  );
+  assert.match(state, /terrainByKey: new Map<string, BoardTerrain>\(\)/);
+});
+
 test("tablet exposes live headset performance diagnostics", () => {
   const markup = source("ui/rts-tablet.uikitml");
   const tablet = source("src/systems/tablet.ts");

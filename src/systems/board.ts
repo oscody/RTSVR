@@ -9,12 +9,13 @@ import {
   MeshStandardMaterial,
   PlaneGeometry,
   RayInteractable,
+  Vector3,
   createSystem,
 } from "@iwsdk/core";
 import { Object3D, RingGeometry } from "@iwsdk/core";
 import {
   BoardMarker,
-  BoardTile,
+  BoardSurface,
   DebugSettings,
   GameState,
   GameStats,
@@ -117,35 +118,64 @@ export class BoardSystem extends createSystem({}) {
     table.position.y = TABLE_Y_OFFSET;
     this.world.createTransformEntity(table, { parent: root });
 
-    // The terrain.glb tile is a zero-thickness plane; give each tile a thin
-    // invisible box so the ray BVH has a volume to hit.
-    const proxyGeometry = new BoxGeometry(1, TILE_PROXY_HEIGHT, 1);
-    const proxyMaterial = new MeshBasicMaterial({
-      colorWrite: false,
-      depthWrite: false,
-    });
+    const terrain = AssetManager.getGLTF("terrain");
+    if (!terrain) throw new Error("terrain.glb not preloaded");
+    const tileVisuals = new Group();
+    tileVisuals.name = "BoardTileVisuals";
+    rootObject.add(tileVisuals);
+    boardState.terrainByKey.clear();
     for (let y = 0; y < GRID_SIZE; y += 1) {
       for (let x = 0; x < GRID_SIZE; x += 1) {
-        const gltf = AssetManager.getGLTF("terrain");
-        if (!gltf) throw new Error("terrain.glb not preloaded");
-        const tile = gltf.scene;
+        const tile = terrain.scene.clone(true);
         // The GLB's node carries a baked (2, 0, 1.5) pivot offset — re-center
-        // so the drawn tile, raycast proxy, and marker math all agree.
+        // so the drawn tile and marker math agree.
         tile.children.forEach((child) => child.position.set(0, 0, 0));
-        tile.name = `Tile_${x}_${y}`;
+        tile.name = `TileVisual_${x}_${y}`;
         const [worldX, worldZ] = gridToWorld(x, y);
         tile.position.set(worldX, 0, worldZ);
         tile.scale.setScalar(TILE_SIZE * TERRAIN_TILE_SCALE);
-        const proxy = new Mesh(proxyGeometry, proxyMaterial);
-        proxy.position.y = TILE_PROXY_Y_OFFSET;
-        tile.add(proxy);
-        const tileEntity = this.world
-          .createTransformEntity(tile, { parent: root })
-          .addComponent(BoardTile, { x, y })
-          .addComponent(RayInteractable);
-        boardState.tileByKey.set(gridKey(x, y), tileEntity);
+        tileVisuals.add(tile);
+        boardState.terrainByKey.set(gridKey(x, y), "open");
       }
     }
+
+    // One invisible board-wide volume replaces 576 per-tile ray targets.
+    const boardSurface = new Mesh(
+      new BoxGeometry(
+        GRID_SIZE * TILE_SIZE,
+        TILE_PROXY_HEIGHT,
+        GRID_SIZE * TILE_SIZE,
+      ),
+      new MeshBasicMaterial({
+        colorWrite: false,
+        depthWrite: false,
+      }),
+    );
+    boardSurface.name = "BoardInteractionSurface";
+    boardSurface.position.y = TILE_PROXY_Y_OFFSET;
+    const localHit = new Vector3();
+    const updatePointerTile = (event: { point: Vector3 }): void => {
+      localHit.copy(event.point);
+      rootObject.worldToLocal(localHit);
+      const [x, y] = worldToGrid(localHit.x, localHit.z);
+      boardState.pointerTile =
+        x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE ? { x, y } : null;
+    };
+    const clearPointerTile = (): void => {
+      boardState.pointerTile = null;
+    };
+    boardSurface.addEventListener("pointermove", updatePointerTile);
+    boardSurface.addEventListener("pointerdown", updatePointerTile);
+    boardSurface.addEventListener("pointerleave", clearPointerTile);
+    this.cleanupFuncs.push(() => {
+      boardSurface.removeEventListener("pointermove", updatePointerTile);
+      boardSurface.removeEventListener("pointerdown", updatePointerTile);
+      boardSurface.removeEventListener("pointerleave", clearPointerTile);
+    });
+    boardState.boardSurface = this.world
+      .createTransformEntity(boardSurface, { parent: root })
+      .addComponent(BoardSurface)
+      .addComponent(RayInteractable);
 
     const hoverMesh = makeMarker(HOVER_MARKER_COLOR);
     hoverMesh.name = "BoardHoverMarker";

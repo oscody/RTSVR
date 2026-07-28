@@ -18,14 +18,13 @@ import { currentBuildingMaxHealth } from "./debugStatOverrides.js";
 import { attachHealthBar } from "./healthBar.js";
 import { attachTurretAnimation } from "./turretAnimation.js";
 import {
-  BoardTile,
   Building,
   CombatCapability,
   CombatState,
   Health,
   ScenarioObject,
   boardState,
-  gridKey,
+  setTerrainAt,
 } from "./state.js";
 
 const interactionProxyMaterial = new MeshBasicMaterial({
@@ -39,11 +38,7 @@ export function stampBuildingFootprint(
   widthTiles: number,
 ): void {
   for (const { x, y } of footprintCells(anchorX, anchorY, widthTiles)) {
-    boardState.tileByKey.get(gridKey(x, y))?.setValue(
-      BoardTile,
-      "terrain",
-      "blocked",
-    );
+    setTerrainAt(x, y, "blocked");
   }
 }
 

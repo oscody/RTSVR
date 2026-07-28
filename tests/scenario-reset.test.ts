@@ -104,7 +104,7 @@ test("restart clears transient state and rebuilds the initial scenario", () => {
   assert.match(source, /resourceByKey\.clear\(\)/);
   assert.match(source, /cargoVisualByUnit\.clear\(\)/);
   assert.match(source, /pathByUnit\.clear\(\)/);
-  assert.match(source, /setValue\(BoardTile, "terrain", "open"\)/);
+  assert.match(source, /resetBoardTerrain\(\)/);
   assert.match(source, /"spawnedWaveNumber"/);
   assert.match(source, /"releaseTimer"/);
   assert.match(source, /"releasedAlienCount"/);

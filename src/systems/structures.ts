@@ -37,7 +37,7 @@ import { attachMinerAnimation } from "./minerAnimation.js";
 import { attachTurretAnimation } from "./turretAnimation.js";
 import { attachUnitAnimation } from "./unitAnimation.js";
 import {
-  BoardTile,
+  type BoardTerrain,
   Building,
   CombatCapability,
   CombatState,
@@ -51,6 +51,7 @@ import {
   UnitSelection,
   WaveUnit,
   boardState,
+  setTerrainAt,
   gridKey,
 } from "./state.js";
 
@@ -71,7 +72,7 @@ interface StructureSpec {
   /** building category shown by the live unit roster */
   unitCategory?: string;
   /** stamps the tiles under the footprint: "crystal" (minable) | "blocked" */
-  terrain?: string;
+  terrain?: BoardTerrain;
   /** finite crystal deposit configuration */
   resource?: { kind: "small" | "large"; capacity: number };
   /** friendly building category used by construction and production */
@@ -159,13 +160,13 @@ const STRUCTURES: StructureSpec[] = [
 // origins (building-r's base sits at y -1) in one step.
 // Mark the board tiles under a structure's footprint (widthTiles square,
 // centered on the grid span's midpoint) so mining/pathing can read them.
-function stampTerrain(spec: StructureSpec, terrain: string): void {
+function stampTerrain(spec: StructureSpec, terrain: BoardTerrain): void {
   const w = spec.widthTiles;
   const startX = Math.round((spec.gridX[0] + spec.gridX[1]) / 2 - (w - 1) / 2);
   const startY = Math.round((spec.gridY[0] + spec.gridY[1]) / 2 - (w - 1) / 2);
   for (let y = startY; y < startY + w; y += 1) {
     for (let x = startX; x < startX + w; x += 1) {
-      boardState.tileByKey.get(gridKey(x, y))?.setValue(BoardTile, "terrain", terrain);
+      setTerrainAt(x, y, terrain);
     }
   }
 }

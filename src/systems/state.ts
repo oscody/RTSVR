@@ -13,14 +13,14 @@ import {
 } from "./economyConstants.js";
 import { ALIEN_MOVE_SPEED, INITIAL_WAVE_DELAY_SECONDS } from "./waveRules.js";
 
-export const BoardTile = createComponent("BoardTile", {
-  x: { type: Types.Int16, default: 0 },
-  y: { type: Types.Int16, default: 0 },
-  // "open" | "crystal" (minable) | "blocked" (rocks, buildings — not walkable)
-  terrain: { type: Types.String, default: "open" },
-});
+export const BoardSurface = createComponent("BoardSurface", {});
 
 export const gridKey = (x: number, y: number): string => `${x},${y}`;
+export type BoardTerrain = "open" | "crystal" | "blocked";
+export interface BoardCoordinate {
+  x: number;
+  y: number;
+}
 
 export const BoardMarker = createComponent("BoardMarker", {
   kind: { type: Types.String, default: "hover" },
@@ -285,7 +285,8 @@ export type DebugSettingKey =
 
 export const boardState = {
   boardRoot: null as Entity | null,
-  tileByKey: new Map<string, Entity>(),
+  boardSurface: null as Entity | null,
+  terrainByKey: new Map<string, BoardTerrain>(),
   hoverMarker: null as Entity | null,
   selectionMarker: null as Entity | null,
   orderMarker: null as Entity | null,
@@ -298,8 +299,9 @@ export const boardState = {
   matchResultPanel: null as Entity | null,
   tablet: null as Entity | null,
   commandCenter: null as Entity | null,
-  hoveredTile: null as Entity | null,
-  selectedTile: null as Entity | null,
+  pointerTile: null as BoardCoordinate | null,
+  hoveredTile: null as BoardCoordinate | null,
+  selectedTile: null as BoardCoordinate | null,
   selectedUnit: null as Entity | null,
   selectedUnits: new Set<Entity>(),
   selectionRingByUnit: new Map<number, Entity>(),
@@ -311,3 +313,24 @@ export const boardState = {
   pathByUnit: new Map<number, { x: number; y: number }[]>(),
   debugSettings: null as Entity | null,
 };
+
+export function getTerrainAt(x: number, y: number): BoardTerrain | null {
+  return boardState.terrainByKey.get(gridKey(x, y)) ?? null;
+}
+
+export function setTerrainAt(
+  x: number,
+  y: number,
+  terrain: BoardTerrain,
+): boolean {
+  const key = gridKey(x, y);
+  if (!boardState.terrainByKey.has(key)) return false;
+  boardState.terrainByKey.set(key, terrain);
+  return true;
+}
+
+export function resetBoardTerrain(): void {
+  for (const key of boardState.terrainByKey.keys()) {
+    boardState.terrainByKey.set(key, "open");
+  }
+}

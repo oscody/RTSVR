@@ -16,7 +16,6 @@ import type {
 } from "./miningRules.js";
 import { findApproachTile } from "./navigation.js";
 import {
-  BoardTile,
   DebugSettings,
   Enemy,
   GameState,
@@ -26,7 +25,8 @@ import {
   ResourceNode,
   Unit,
   boardState,
-  gridKey,
+  getTerrainAt,
+  setTerrainAt,
 } from "./state.js";
 
 export class MiningSystem extends createSystem({
@@ -190,9 +190,8 @@ export class MiningSystem extends createSystem({
       from: { x: fromX, y: fromY },
       gridSize: GRID_SIZE,
       canStandAt: (x, y) => {
-        const tile = boardState.tileByKey.get(gridKey(x, y));
         return (
-          tile?.getValue(BoardTile, "terrain") === "open" &&
+          getTerrainAt(x, y) === "open" &&
           !this.isOccupied(x, y, miner)
         );
       },
@@ -263,6 +262,6 @@ export class MiningSystem extends createSystem({
     if (node.object3D) node.object3D.visible = false;
     const x = node.getValue(ResourceNode, "x") ?? -1;
     const y = node.getValue(ResourceNode, "y") ?? -1;
-    boardState.tileByKey.get(gridKey(x, y))?.setValue(BoardTile, "terrain", "open");
+    setTerrainAt(x, y, "open");
   }
 }

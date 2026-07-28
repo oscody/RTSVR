@@ -14,7 +14,6 @@ import {
   isScenarioRestartRequested,
 } from "./scenarioResetRules.js";
 import {
-  BoardTile,
   DebugSettings,
   GameState,
   GameStats,
@@ -25,6 +24,7 @@ import {
   TabletState,
   WaveSource,
   boardState,
+  resetBoardTerrain,
 } from "./state.js";
 import { createInitialScenario } from "./structures.js";
 import { INITIAL_WAVE_DELAY_SECONDS } from "./waveRules.js";
@@ -83,11 +83,10 @@ export class ScenarioResetSystem extends createSystem({
     boardState.selectedTurret = null;
     boardState.selectedTile = null;
     boardState.hoveredTile = null;
+    boardState.pointerTile = null;
     resetCraftSerial();
 
-    for (const tile of boardState.tileByKey.values()) {
-      tile.setValue(BoardTile, "terrain", "open");
-    }
+    resetBoardTerrain();
     this.hideBoardMarkers();
     this.resetSingletons(source);
     createInitialScenario(this.world);

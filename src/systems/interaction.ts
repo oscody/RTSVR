@@ -37,7 +37,7 @@ import {
 } from "./selection.js";
 import { assignGroupDestinations } from "./selectionRules.js";
 import {
-  BoardTile,
+  BoardSurface,
   Building,
   CombatCapability,
   CombatState,
@@ -49,7 +49,9 @@ import {
   TabletState,
   Unit,
   boardState,
+  getTerrainAt,
   gridKey,
+  setTerrainAt,
 } from "./state.js";
 
 function markerToLocal(markerEntity: Entity | null, x: number, z: number): void {
@@ -64,15 +66,15 @@ function hideMarker(markerEntity: Entity | null): void {
   if (marker) marker.visible = false;
 }
 
-function moveMarker(markerEntity: Entity | null, tile: Entity | null): void {
+function moveMarker(
+  markerEntity: Entity | null,
+  tile: { x: number; y: number } | null,
+): void {
   if (!tile) {
     hideMarker(markerEntity);
     return;
   }
-  const [worldX, worldZ] = gridToWorld(
-    tile.getValue(BoardTile, "x") ?? 0,
-    tile.getValue(BoardTile, "y") ?? 0,
-  );
+  const [worldX, worldZ] = gridToWorld(tile.x, tile.y);
   markerToLocal(markerEntity, worldX, worldZ);
 }
 
@@ -86,8 +88,8 @@ function setOrderMarker(tileX: number, tileY: number, color: number): void {
 }
 
 export class InteractionSystem extends createSystem({
-  hoveredTiles: { required: [BoardTile, Hovered] },
-  pressedTiles: { required: [BoardTile, Pressed] },
+  hoveredBoard: { required: [BoardSurface, Hovered] },
+  pressedBoard: { required: [BoardSurface, Pressed] },
   pressedUnits: { required: [Unit, Pressed] },
   pressedEnemies: { required: [Enemy, Pressed] },
   pressedBuildings: { required: [Building, Pressed] },
@@ -96,16 +98,13 @@ export class InteractionSystem extends createSystem({
 }) {
   init(): void {
     this.cleanupFuncs.push(
-      this.queries.hoveredTiles.subscribe("qualify", (entity) => {
-        boardState.hoveredTile = entity;
-        this.updateHoverMarker(entity);
+      this.queries.hoveredBoard.subscribe("qualify", () => {
+        this.syncHoveredBoardTile();
       }),
-      this.queries.hoveredTiles.subscribe("disqualify", (entity) => {
-        if (boardState.hoveredTile === entity) {
-          boardState.hoveredTile = null;
-          moveMarker(boardState.hoverMarker, null);
-          hideMarker(boardState.buildMarker);
-        }
+      this.queries.hoveredBoard.subscribe("disqualify", () => {
+        boardState.hoveredTile = null;
+        moveMarker(boardState.hoverMarker, null);
+        hideMarker(boardState.buildMarker);
       }),
       // Board and roster clicks share the same toggle semantics so a unit can
       // be added to or removed from a group from either surface.
@@ -215,9 +214,10 @@ export class InteractionSystem extends createSystem({
       }),
       // Click a tile: open -> move there. Terrain features and occupied tiles
       // are unavailable destinations, so approach from the nearest open tile.
-      this.queries.pressedTiles.subscribe("qualify", (entity) => {
-        const tx = entity.getValue(BoardTile, "x") ?? -1;
-        const ty = entity.getValue(BoardTile, "y") ?? -1;
+      this.queries.pressedBoard.subscribe("qualify", () => {
+        const pointerTile = boardState.pointerTile;
+        if (!pointerTile) return;
+        const { x: tx, y: ty } = pointerTile;
         if (this.isCraftPlacementActive()) {
           this.placeCraft(tx, ty);
           return;
@@ -253,7 +253,7 @@ export class InteractionSystem extends createSystem({
             return;
           }
 
-          const blocked = entity.getValue(BoardTile, "terrain") !== "open";
+          const blocked = getTerrainAt(tx, ty) !== "open";
           const selectedSet = new Set(units);
           const occupied = this.isOccupiedExcept(tx, ty, selectedSet);
           const assigned = this.issueGroupOrder(units, tx, ty);
@@ -265,10 +265,34 @@ export class InteractionSystem extends createSystem({
           if (assigned > 0) this.clearCommandSelection();
           return;
         }
-        boardState.selectedTile = entity;
-        moveMarker(boardState.selectionMarker, entity);
+        boardState.selectedTile = { x: tx, y: ty };
+        moveMarker(boardState.selectionMarker, boardState.selectedTile);
       }),
     );
+  }
+
+  update(): void {
+    if (this.queries.hoveredBoard.entities.size > 0) {
+      this.syncHoveredBoardTile();
+    }
+  }
+
+  private syncHoveredBoardTile(): void {
+    const tile = boardState.pointerTile;
+    if (!tile) {
+      boardState.hoveredTile = null;
+      moveMarker(boardState.hoverMarker, null);
+      hideMarker(boardState.buildMarker);
+      return;
+    }
+    if (
+      boardState.hoveredTile?.x === tile.x &&
+      boardState.hoveredTile.y === tile.y
+    ) {
+      return;
+    }
+    boardState.hoveredTile = { x: tile.x, y: tile.y };
+    this.updateHoverMarker(tile.x, tile.y);
   }
 
   private issueOrder(unit: Entity, x: number, y: number): void {
@@ -299,9 +323,7 @@ export class InteractionSystem extends createSystem({
       target: { x: targetX, y: targetY },
       gridSize: GRID_SIZE,
       canStandAt: (x, y) =>
-        boardState.tileByKey
-          .get(gridKey(x, y))
-          ?.getValue(BoardTile, "terrain") === "open" &&
+        getTerrainAt(x, y) === "open" &&
         !this.isOccupiedExcept(x, y, moving),
     });
     for (const assignment of assignments) {
@@ -426,9 +448,8 @@ export class InteractionSystem extends createSystem({
       from: { x: fromX, y: fromY },
       gridSize: GRID_SIZE,
       canStandAt: (x, y) => {
-        const tile = boardState.tileByKey.get(gridKey(x, y));
         return (
-          tile?.getValue(BoardTile, "terrain") === "open" &&
+          getTerrainAt(x, y) === "open" &&
           !this.isOccupied(x, y, unit)
         );
       },
@@ -512,9 +533,7 @@ export class InteractionSystem extends createSystem({
       "revision",
       (gameState.getValue(GameState, "revision") ?? 0) + 1,
     );
-    boardState.tileByKey
-      .get(gridKey(tx, ty))
-      ?.setValue(BoardTile, "terrain", "blocked");
+    setTerrainAt(tx, ty, "blocked");
     createCraftProductionSite(
       this.world,
       root,
@@ -534,10 +553,7 @@ export class InteractionSystem extends createSystem({
 
   private isCraftTileAvailable(tx: number, ty: number): boolean {
     return (
-      boardState.tileByKey.get(gridKey(tx, ty))?.getValue(
-        BoardTile,
-        "terrain",
-      ) === "open" && !this.isOccupied(tx, ty, null)
+      getTerrainAt(tx, ty) === "open" && !this.isOccupied(tx, ty, null)
     );
   }
 
@@ -636,15 +652,15 @@ export class InteractionSystem extends createSystem({
     tablet.setValue(TabletState, "buildPlacementActive", false);
   }
 
-  private updateHoverMarker(tile: Entity): void {
+  private updateHoverMarker(tx: number, ty: number): void {
     if (this.isCraftPlacementActive()) {
-      this.updateCraftPlacementHover(tile);
+      this.updateCraftPlacementHover(tx, ty);
       return;
     }
     const unit = boardState.selectedUnit;
     if (!unit || !this.isBuildPlacementActive(unit)) {
       hideMarker(boardState.buildMarker);
-      moveMarker(boardState.hoverMarker, tile);
+      moveMarker(boardState.hoverMarker, { x: tx, y: ty });
       return;
     }
     hideMarker(boardState.hoverMarker);
@@ -654,8 +670,6 @@ export class InteractionSystem extends createSystem({
     );
     const marker = boardState.buildMarker?.object3D as Mesh | undefined;
     if (!spec || !marker) return;
-    const tx = tile.getValue(BoardTile, "x") ?? -1;
-    const ty = tile.getValue(BoardTile, "y") ?? -1;
     const cells = footprintCells(tx, ty, spec.widthTiles);
     const path = this.findConstructionPath(unit, spec, tx, ty, cells);
     const validation = validateBuildOrder({
@@ -677,13 +691,11 @@ export class InteractionSystem extends createSystem({
     marker.visible = true;
   }
 
-  private updateCraftPlacementHover(tile: Entity): void {
+  private updateCraftPlacementHover(tx: number, ty: number): void {
     hideMarker(boardState.hoverMarker);
     const marker = boardState.buildMarker?.object3D as Mesh | undefined;
     const tablet = boardState.tablet;
     if (!marker || !tablet) return;
-    const tx = tile.getValue(BoardTile, "x") ?? -1;
-    const ty = tile.getValue(BoardTile, "y") ?? -1;
     const source = tablet.getValue(TabletState, "spawnBuilding") as Entity | null;
     const validation = validateCraftPurchase({
       spec: getCraftSpec(
@@ -706,9 +718,8 @@ export class InteractionSystem extends createSystem({
     return (
       cells.length > 0 &&
       cells.every(({ x, y }) => {
-        const tile = boardState.tileByKey.get(gridKey(x, y));
         return (
-          tile?.getValue(BoardTile, "terrain") === "open" &&
+          getTerrainAt(x, y) === "open" &&
           !this.isOccupied(x, y, null)
         );
       })
@@ -727,10 +738,9 @@ export class InteractionSystem extends createSystem({
     const [fromX, fromY] = worldToGrid(holder.position.x, holder.position.z);
     const footprintKeys = new Set(cells.map(({ x, y }) => gridKey(x, y)));
     const canStandAt = (x: number, y: number) => {
-      const tile = boardState.tileByKey.get(gridKey(x, y));
       return (
         !footprintKeys.has(gridKey(x, y)) &&
-        tile?.getValue(BoardTile, "terrain") === "open" &&
+        getTerrainAt(x, y) === "open" &&
         !this.isOccupied(x, y, astronaut)
       );
     };

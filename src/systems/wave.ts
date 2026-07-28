@@ -5,7 +5,6 @@ import { footprintApproaches } from "./constructionRules.js";
 import { findGridPath, type GridPosition } from "./navigation.js";
 import { createEnemyEntity } from "./structures.js";
 import {
-  BoardTile,
   Building,
   CombatState,
   DebugSettings,
@@ -16,7 +15,7 @@ import {
   WaveSource,
   WaveUnit,
   boardState,
-  gridKey,
+  getTerrainAt,
 } from "./state.js";
 import {
   ALIEN_MOVE_SPEED,
@@ -363,17 +362,11 @@ export class WaveSystem extends createSystem({
   }
 
   private canStandAt(x: number, y: number, exclude: Entity): boolean {
-    const terrain = boardState.tileByKey
-      .get(gridKey(x, y))
-      ?.getValue(BoardTile, "terrain");
-    return terrain === "open" && !this.isOccupied(x, y, exclude);
+    return getTerrainAt(x, y) === "open" && !this.isOccupied(x, y, exclude);
   }
 
   private canSpawnAlienAt(x: number, y: number): boolean {
-    const terrain = boardState.tileByKey
-      .get(gridKey(x, y))
-      ?.getValue(BoardTile, "terrain");
-    return terrain === "open" && !this.isOccupied(x, y);
+    return getTerrainAt(x, y) === "open" && !this.isOccupied(x, y);
   }
 
   private isOccupied(x: number, y: number, exclude?: Entity): boolean {

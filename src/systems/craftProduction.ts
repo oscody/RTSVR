@@ -32,12 +32,11 @@ import {
   updateCraftProductionAnimation,
 } from "./craftProductionAnimation.js";
 import {
-  BoardTile,
   CraftProductionSite,
   ScenarioObject,
   TabletState,
   boardState,
-  gridKey,
+  setTerrainAt,
 } from "./state.js";
 
 export function createCraftProductionSite(
@@ -162,9 +161,7 @@ export class CraftProductionSystem extends createSystem({
     const y = site.getValue(CraftProductionSite, "y") ?? -1;
     const sourceKind =
       site.getValue(CraftProductionSite, "sourceKind") ?? "command-center";
-    boardState.tileByKey
-      .get(gridKey(x, y))
-      ?.setValue(BoardTile, "terrain", "open");
+    setTerrainAt(x, y, "open");
     detachCraftProductionAnimation(site);
     site.dispose();
     createCraftEntity(

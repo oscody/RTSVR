@@ -25,7 +25,6 @@ import { detachTurretAnimation } from "./turretAnimation.js";
 import { detachUnitAnimation } from "./unitAnimation.js";
 import {
   Building,
-  BoardTile,
   CombatCapability,
   CombatState,
   ConstructionSite,
@@ -41,7 +40,7 @@ import {
   WaveSource,
   WaveUnit,
   boardState,
-  gridKey,
+  setTerrainAt,
 } from "./state.js";
 import {
   INITIAL_WAVE_DELAY_SECONDS,
@@ -260,9 +259,7 @@ export class CombatSystem extends createSystem({
       const y = target.getValue(Building, "y") ?? -1;
       const width = target.getValue(Building, "widthTiles") ?? 1;
       for (const cell of footprintCells(x, y, width)) {
-        boardState.tileByKey
-          .get(gridKey(cell.x, cell.y))
-          ?.setValue(BoardTile, "terrain", "open");
+        setTerrainAt(cell.x, cell.y, "open");
       }
       if (kind === "command-center") {
         detachCommandCenterAnimation(target);
@@ -298,9 +295,7 @@ export class CombatSystem extends createSystem({
     const y = site.getValue(ConstructionSite, "y") ?? -1;
     const width = site.getValue(ConstructionSite, "widthTiles") ?? 1;
     for (const cell of footprintCells(x, y, width)) {
-      boardState.tileByKey
-        .get(gridKey(cell.x, cell.y))
-        ?.setValue(BoardTile, "terrain", "open");
+      setTerrainAt(cell.x, cell.y, "open");
     }
     site.dispose();
   }
