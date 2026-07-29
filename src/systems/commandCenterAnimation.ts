@@ -161,8 +161,9 @@ export class CommandCenterAnimationSystem extends createSystem({
       }
     }
 
-    for (const [entityIndex, controller] of controllers) {
+    for (const entityIndex of controllers.keys()) {
       if (this.liveAnimatedCommandCenters.has(entityIndex)) continue;
+      const controller = controllers.get(entityIndex)!;
       controller.mixer.stopAllAction();
       controllers.delete(entityIndex);
     }

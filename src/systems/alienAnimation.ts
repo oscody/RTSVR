@@ -123,8 +123,9 @@ export class AlienAnimationSystem extends createSystem({
       controller.mixer.update(frameDelta);
     }
 
-    for (const [entityIndex, controller] of controllers) {
+    for (const entityIndex of controllers.keys()) {
       if (this.liveAnimatedAliens.has(entityIndex)) continue;
+      const controller = controllers.get(entityIndex)!;
       controller.mixer.stopAllAction();
       controllers.delete(entityIndex);
     }

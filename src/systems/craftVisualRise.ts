@@ -32,7 +32,8 @@ export function clearCraftVisualRise(): void {
 
 export class CraftVisualRiseSystem extends createSystem({}) {
   update(delta: number): void {
-    for (const [entityIndex, controller] of controllers) {
+    for (const entityIndex of controllers.keys()) {
+      const controller = controllers.get(entityIndex)!;
       if (!controller.model.parent) {
         controllers.delete(entityIndex);
         continue;

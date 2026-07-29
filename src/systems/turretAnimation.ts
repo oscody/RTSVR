@@ -99,8 +99,9 @@ export class TurretAnimationSystem extends createSystem({
       controller.mixer.update(frameDelta);
     }
 
-    for (const [entityIndex, controller] of controllers) {
+    for (const entityIndex of controllers.keys()) {
       if (this.liveAnimatedTurrets.has(entityIndex)) continue;
+      const controller = controllers.get(entityIndex)!;
       controller.mixer.stopAllAction();
       controllers.delete(entityIndex);
     }

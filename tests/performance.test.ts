@@ -51,6 +51,10 @@ test("hot animation systems reuse their live-controller sets", () => {
       code,
       /update\(delta: number\): void \{[\s\S]*?const liveAnimated\w+ = new Set/,
     );
+    assert.doesNotMatch(
+      code,
+      /for \(const \[entityIndex, controller\] of controllers\)/,
+    );
   }
 });
 
