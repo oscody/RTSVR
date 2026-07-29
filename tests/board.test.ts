@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { GRID_SIZE, TILE_SIZE } from "../src/systems/constants.ts";
+import {
+  createMartianTerrainOutline,
+  terrainOutlineContainsBoard,
+  terrainOutlineContainsPoint,
+} from "../src/systems/martianTerrain.ts";
 
 const ROOT = new URL("../", import.meta.url);
 
@@ -27,18 +33,25 @@ test("board no longer clones 576 terrain tiles", () => {
   );
 });
 
-test("board renders one continuous coral ground plane", () => {
+test("board renders one continuous irregular coral ground", () => {
   assert.ok(board.includes('name = "BoardGround"'));
   assert.ok(board.includes("MARS_GROUND_COLOR"));
   assert.ok(
-    board.includes("PlaneGeometry(GRID_SIZE * TILE_SIZE, GRID_SIZE * TILE_SIZE)"),
-    "ground plane must span the full board, derived from constants",
+    board.includes(
+      "createTerrainTopGeometry(terrainOutline, MARS_GROUND_Y_OFFSET)",
+    ),
+    "ground must use the Rocket-style terrain outline",
   );
 });
 
-test("board adds one Martian rim and no rectangular table", () => {
+test("board adds an outline-following capped rim and no rectangular table", () => {
   assert.ok(board.includes('name = "BoardRim"'));
   assert.ok(board.includes("MARS_RIM_COLOR"));
+  assert.ok(board.includes("createTerrainRimGeometry("));
+  assert.ok(
+    board.includes("bottomCenterIndex"),
+    "rim geometry must cap the underside",
+  );
   assert.ok(
     !board.includes('name = "BoardTable"'),
     "the old table mesh must be removed",
@@ -47,6 +60,21 @@ test("board adds one Martian rim and no rectangular table", () => {
     !board.includes("TABLE_COLOR"),
     "table material constants must be gone from board",
   );
+});
+
+test("irregular terrain contains the playable square and scales with it", () => {
+  for (const gridSize of [GRID_SIZE, 32]) {
+    const boardSize = gridSize * TILE_SIZE;
+    const half = boardSize / 2;
+    const outline = createMartianTerrainOutline(boardSize);
+
+    assert.equal(terrainOutlineContainsBoard(outline, boardSize), true);
+    assert.equal(terrainOutlineContainsPoint(outline, 0, 0), true);
+    assert.ok(outline.some(([x]) => x < -half));
+    assert.ok(outline.some(([x]) => x > half));
+    assert.ok(outline.some(([, z]) => z < -half));
+    assert.ok(outline.some(([, z]) => z > half));
+  }
 });
 
 test("board creates exactly one command grid overlay, hidden by default", () => {

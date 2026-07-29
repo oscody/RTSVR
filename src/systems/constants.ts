@@ -30,21 +30,15 @@ export const BOARD_BACKGROUND_COLOR = 0xb8d8f1;
 export const BOARD_SUN_COLOR = 0xffffff;
 export const BOARD_SUN_INTENSITY = 2.4;
 export const BOARD_SUN_POSITION = [2.5, 4, 3] as const;
-export const TABLE_EDGE_PADDING = 0.45;
-export const TABLE_THICKNESS = 0.12;
-export const TABLE_COLOR = 0x5a4a36;
-export const TABLE_ROUGHNESS = 0.8;
-export const TABLE_METALNESS = 0.05;
-export const TABLE_Y_OFFSET = -0.08;
 export const TILE_PROXY_HEIGHT = 0.06;
 export const TILE_PROXY_Y_OFFSET = 0.03;
-export const TERRAIN_TILE_SCALE = 0.96;
 
 // Continuous Martian ground (replaces the 576 terrain.glb tile clones).
 export const MARS_GROUND_COLOR = 0xe88463;
 export const MARS_GROUND_ROUGHNESS = 0.96;
 export const MARS_GROUND_METALNESS = 0.02;
 export const MARS_GROUND_Y_OFFSET = 0;
+export const MARS_OUTLINE_SCALE_PER_BOARD_UNIT = 2.32;
 export const MARS_RIM_COLOR = 0x5d3024;
 export const MARS_RIM_ROUGHNESS = 0.98;
 export const MARS_RIM_METALNESS = 0;

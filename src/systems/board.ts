@@ -3,6 +3,7 @@ import {
   BufferGeometry,
   Color,
   DirectionalLight,
+  DoubleSide,
   Float32BufferAttribute,
   Group,
   LineBasicMaterial,
@@ -63,6 +64,11 @@ import {
   TILE_PROXY_HEIGHT,
   TILE_PROXY_Y_OFFSET,
 } from "./constants.ts";
+import {
+  createMartianTerrainOutline,
+  terrainOutlineContainsBoard,
+  type TerrainOutlinePoint,
+} from "./martianTerrain.ts";
 export { BOARD_Y, GRID_SIZE, TILE_SIZE } from "./constants.ts";
 
 export function gridToWorld(x: number, y: number): [number, number] {
@@ -94,6 +100,69 @@ function makeMarker(color: number): Mesh {
   return marker;
 }
 
+function createTerrainTopGeometry(
+  outline: readonly TerrainOutlinePoint[],
+  y: number,
+): BufferGeometry {
+  const positions = [0, y, 0];
+  for (const [x, z] of outline) positions.push(x, y, z);
+
+  const indices: number[] = [];
+  for (let current = 1; current <= outline.length; current += 1) {
+    const next = current === outline.length ? 1 : current + 1;
+    indices.push(0, next, current);
+  }
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function createTerrainRimGeometry(
+  outline: readonly TerrainOutlinePoint[],
+  topY: number,
+  bottomY: number,
+): BufferGeometry {
+  const positions: number[] = [];
+  const indices: number[] = [];
+
+  for (const [x, z] of outline) {
+    positions.push(x, topY, z, x, bottomY, z);
+  }
+
+  for (let current = 0; current < outline.length; current += 1) {
+    const next = current === outline.length - 1 ? 0 : current + 1;
+    const topCurrent = current * 2;
+    const bottomCurrent = topCurrent + 1;
+    const topNext = next * 2;
+    const bottomNext = topNext + 1;
+    indices.push(
+      topCurrent,
+      bottomCurrent,
+      topNext,
+      topNext,
+      bottomCurrent,
+      bottomNext,
+    );
+  }
+
+  // Cap the underside so the floating board never appears hollow from below.
+  const bottomCenterIndex = positions.length / 3;
+  positions.push(0, bottomY, 0);
+  for (let current = 0; current < outline.length; current += 1) {
+    const next = current === outline.length - 1 ? 0 : current + 1;
+    indices.push(bottomCenterIndex, current * 2 + 1, next * 2 + 1);
+  }
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 export class BoardSystem extends createSystem({}) {
   init(): void {
     this.world.scene.background = new Color(BOARD_BACKGROUND_COLOR);
@@ -109,39 +178,43 @@ export class BoardSystem extends createSystem({}) {
     sun.name = "BoardSun";
     this.world.createTransformEntity(sun, { parent: root });
 
-    // Dark Martian rim/slab beneath the coral top gives the board visible
-    // thickness and support (replaces the old rectangular BoardTable). Its top
-    // sits just below the playable ground so it never intercepts pointers or
-    // changes worldToGrid coordinates.
+    const playableBoardSize = GRID_SIZE * TILE_SIZE;
+    const terrainOutline = createMartianTerrainOutline(playableBoardSize);
+    if (!terrainOutlineContainsBoard(terrainOutline, playableBoardSize)) {
+      throw new Error(
+        "Martian terrain outline does not contain the playable board",
+      );
+    }
+
+    // The dark side wall follows the irregular terrain edge and includes a
+    // bottom cap. It is visual only; BoardSurface remains the square play area.
     const rim = new Mesh(
-      new BoxGeometry(
-        GRID_SIZE * TILE_SIZE,
-        MARS_RIM_THICKNESS,
-        GRID_SIZE * TILE_SIZE,
+      createTerrainRimGeometry(
+        terrainOutline,
+        MARS_GROUND_Y_OFFSET,
+        MARS_GROUND_Y_OFFSET - MARS_RIM_THICKNESS,
       ),
       new MeshStandardMaterial({
         color: MARS_RIM_COLOR,
         roughness: MARS_RIM_ROUGHNESS,
         metalness: MARS_RIM_METALNESS,
+        side: DoubleSide,
       }),
     );
     rim.name = "BoardRim";
-    // Top face 2 mm below the coral ground to avoid coplanar z-fighting.
-    rim.position.y = MARS_GROUND_Y_OFFSET - 0.002 - MARS_RIM_THICKNESS / 2;
     this.world.createTransformEntity(rim, { parent: root });
 
-    // One continuous coral ground plane replaces the 576 terrain.glb clones.
+    // One irregular coral surface surrounds the square 24x24 play area.
     const ground = new Mesh(
-      new PlaneGeometry(GRID_SIZE * TILE_SIZE, GRID_SIZE * TILE_SIZE),
+      createTerrainTopGeometry(terrainOutline, MARS_GROUND_Y_OFFSET),
       new MeshStandardMaterial({
         color: MARS_GROUND_COLOR,
         roughness: MARS_GROUND_ROUGHNESS,
         metalness: MARS_GROUND_METALNESS,
+        side: DoubleSide,
       }),
     );
     ground.name = "BoardGround";
-    ground.rotateX(-Math.PI / 2);
-    ground.position.y = MARS_GROUND_Y_OFFSET;
     this.world.createTransformEntity(ground, { parent: root });
 
     // Terrain is coordinate data only now — seed every cell "open" so
