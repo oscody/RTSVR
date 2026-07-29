@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { GRID_SIZE, TILE_SIZE } from "../src/systems/constants.ts";
 import {
+  GRID_SIZE,
+  MARS_DUST_SEGMENTS,
+  MARS_GROUND_COLOR,
+  MARS_RIM_THICKNESS_PER_BOARD_UNIT,
+  TILE_SIZE,
+} from "../src/systems/constants.ts";
+import {
+  createMartianDustPatches,
   createMartianTerrainOutline,
+  martianDustPatchPoint,
   terrainOutlineContainsBoard,
   terrainOutlineContainsPoint,
 } from "../src/systems/martianTerrain.ts";
@@ -33,9 +41,10 @@ test("board no longer clones 576 terrain tiles", () => {
   );
 });
 
-test("board renders one continuous irregular coral ground", () => {
+test("board renders one continuous irregular dark Martian ground", () => {
   assert.ok(board.includes('name = "BoardGround"'));
   assert.ok(board.includes("MARS_GROUND_COLOR"));
+  assert.equal(MARS_GROUND_COLOR, 0xa85d43);
   assert.ok(
     board.includes(
       "createTerrainTopGeometry(terrainOutline, MARS_GROUND_Y_OFFSET)",
@@ -75,6 +84,52 @@ test("irregular terrain contains the playable square and scales with it", () => 
     assert.ok(outline.some(([, z]) => z < -half));
     assert.ok(outline.some(([, z]) => z > half));
   }
+});
+
+test("board combines three scalable dust patches below the command grid", () => {
+  for (const gridSize of [GRID_SIZE, 32]) {
+    const boardSize = gridSize * TILE_SIZE;
+    const outline = createMartianTerrainOutline(boardSize);
+    const patches = createMartianDustPatches(boardSize);
+    assert.equal(patches.length, 3);
+
+    for (const patch of patches) {
+      for (let segment = 0; segment < MARS_DUST_SEGMENTS; segment += 1) {
+        const angle = (segment / MARS_DUST_SEGMENTS) * Math.PI * 2;
+        const [x, z] = martianDustPatchPoint(patch, angle);
+        assert.equal(terrainOutlineContainsPoint(outline, x, z), true);
+      }
+    }
+  }
+
+  assert.ok(board.includes('name = "BoardDustPatches"'));
+  assert.ok(board.includes("createDustPatchGeometry("));
+  assert.ok(board.includes("rootObject.add(dustPatches)"));
+  assert.ok(board.includes("dustPatches.renderOrder = 1"));
+  assert.ok(board.includes("gridOverlay.renderOrder = 2"));
+});
+
+test("board keeps terrain colors independent from gameplay lighting", () => {
+  assert.ok(index.includes("defaultLighting: true"));
+  assert.equal(board.includes("new HemisphereLight("), false);
+  assert.equal(board.includes("new DirectionalLight("), false);
+  assert.ok(
+    board.includes(`new MeshBasicMaterial({
+        color: MARS_RIM_COLOR,`),
+  );
+  assert.ok(
+    board.includes(`new MeshBasicMaterial({
+        color: MARS_GROUND_COLOR,`),
+  );
+  assert.equal(board.includes("new MeshStandardMaterial("), false);
+  assert.ok(
+    board.includes(
+      "playableBoardSize * MARS_RIM_THICKNESS_PER_BOARD_UNIT",
+    ),
+  );
+  const rimThickness =
+    GRID_SIZE * TILE_SIZE * MARS_RIM_THICKNESS_PER_BOARD_UNIT;
+  assert.ok(Math.abs(rimThickness - 0.601344) < 1e-9);
 });
 
 test("board creates exactly one command grid overlay, hidden by default", () => {

@@ -27,22 +27,19 @@ export const ATTACK_RANGE_RING_SEGMENTS = 48;
 export const ATTACK_RANGE_RING_Y_OFFSET = 0.026;
 
 export const BOARD_BACKGROUND_COLOR = 0xb8d8f1;
-export const BOARD_SUN_COLOR = 0xffffff;
-export const BOARD_SUN_INTENSITY = 2.4;
-export const BOARD_SUN_POSITION = [2.5, 4, 3] as const;
 export const TILE_PROXY_HEIGHT = 0.06;
 export const TILE_PROXY_Y_OFFSET = 0.03;
 
 // Continuous Martian ground (replaces the 576 terrain.glb tile clones).
-export const MARS_GROUND_COLOR = 0xe88463;
-export const MARS_GROUND_ROUGHNESS = 0.96;
-export const MARS_GROUND_METALNESS = 0.02;
+export const MARS_GROUND_COLOR = 0xa85d43;
 export const MARS_GROUND_Y_OFFSET = 0;
 export const MARS_OUTLINE_SCALE_PER_BOARD_UNIT = 2.32;
+export const MARS_DUST_COLOR = 0xc27759;
+export const MARS_DUST_OPACITY = 0.36;
+export const MARS_DUST_Y_OFFSET = 0.003;
+export const MARS_DUST_SEGMENTS = 28;
 export const MARS_RIM_COLOR = 0x5d3024;
-export const MARS_RIM_ROUGHNESS = 0.98;
-export const MARS_RIM_METALNESS = 0;
-export const MARS_RIM_THICKNESS = 0.12;
+export const MARS_RIM_THICKNESS_PER_BOARD_UNIT = 0.1392;
 
 // Command grid overlay — hidden until a unit is selected.
 export const GRID_OVERLAY_COLOR = 0x5d3024;

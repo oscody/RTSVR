@@ -2,7 +2,6 @@ import {
   BoxGeometry,
   BufferGeometry,
   Color,
-  DirectionalLight,
   DoubleSide,
   Float32BufferAttribute,
   Group,
@@ -10,7 +9,6 @@ import {
   LineSegments,
   Mesh,
   MeshBasicMaterial,
-  MeshStandardMaterial,
   PlaneGeometry,
   RayInteractable,
   Vector3,
@@ -32,9 +30,6 @@ import {
 } from "./state.js";
 import {
   BOARD_BACKGROUND_COLOR,
-  BOARD_SUN_COLOR,
-  BOARD_SUN_INTENSITY,
-  BOARD_SUN_POSITION,
   BOARD_Y,
   BUILD_MARKER_OPACITY,
   BUILD_MARKER_COLOR,
@@ -46,14 +41,14 @@ import {
   MARKER_OPACITY,
   MARKER_TILE_SCALE,
   MARKER_Y_OFFSET,
+  MARS_DUST_COLOR,
+  MARS_DUST_OPACITY,
+  MARS_DUST_SEGMENTS,
+  MARS_DUST_Y_OFFSET,
   MARS_GROUND_COLOR,
-  MARS_GROUND_METALNESS,
-  MARS_GROUND_ROUGHNESS,
   MARS_GROUND_Y_OFFSET,
   MARS_RIM_COLOR,
-  MARS_RIM_METALNESS,
-  MARS_RIM_ROUGHNESS,
-  MARS_RIM_THICKNESS,
+  MARS_RIM_THICKNESS_PER_BOARD_UNIT,
   ORDER_MARKER_COLOR,
   ORDER_MARKER_INNER_SCALE,
   ORDER_MARKER_OPACITY,
@@ -65,8 +60,11 @@ import {
   TILE_PROXY_Y_OFFSET,
 } from "./constants.ts";
 import {
+  createMartianDustPatches,
   createMartianTerrainOutline,
+  martianDustPatchPoint,
   terrainOutlineContainsBoard,
+  type MartianDustPatch,
   type TerrainOutlinePoint,
 } from "./martianTerrain.ts";
 export { BOARD_Y, GRID_SIZE, TILE_SIZE } from "./constants.ts";
@@ -163,6 +161,36 @@ function createTerrainRimGeometry(
   return geometry;
 }
 
+function createDustPatchGeometry(
+  patches: readonly MartianDustPatch[],
+  y: number,
+  segments: number,
+): BufferGeometry {
+  const positions: number[] = [];
+  const indices: number[] = [];
+
+  for (const patch of patches) {
+    const centerIndex = positions.length / 3;
+    positions.push(patch.x, y, patch.z);
+    for (let segment = 0; segment < segments; segment += 1) {
+      const angle = (segment / segments) * Math.PI * 2;
+      const [x, z] = martianDustPatchPoint(patch, angle);
+      positions.push(x, y, z);
+    }
+    for (let segment = 0; segment < segments; segment += 1) {
+      const current = centerIndex + 1 + segment;
+      const next = centerIndex + 1 + ((segment + 1) % segments);
+      indices.push(centerIndex, next, current);
+    }
+  }
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 export class BoardSystem extends createSystem({}) {
   init(): void {
     this.world.scene.background = new Color(BOARD_BACKGROUND_COLOR);
@@ -173,12 +201,9 @@ export class BoardSystem extends createSystem({}) {
     const root = this.world.createTransformEntity(rootObject);
     boardState.boardRoot = root;
 
-    const sun = new DirectionalLight(BOARD_SUN_COLOR, BOARD_SUN_INTENSITY);
-    sun.position.set(...BOARD_SUN_POSITION);
-    sun.name = "BoardSun";
-    this.world.createTransformEntity(sun, { parent: root });
-
     const playableBoardSize = GRID_SIZE * TILE_SIZE;
+    const rimThickness =
+      playableBoardSize * MARS_RIM_THICKNESS_PER_BOARD_UNIT;
     const terrainOutline = createMartianTerrainOutline(playableBoardSize);
     if (!terrainOutlineContainsBoard(terrainOutline, playableBoardSize)) {
       throw new Error(
@@ -192,30 +217,46 @@ export class BoardSystem extends createSystem({}) {
       createTerrainRimGeometry(
         terrainOutline,
         MARS_GROUND_Y_OFFSET,
-        MARS_GROUND_Y_OFFSET - MARS_RIM_THICKNESS,
+        MARS_GROUND_Y_OFFSET - rimThickness,
       ),
-      new MeshStandardMaterial({
+      new MeshBasicMaterial({
         color: MARS_RIM_COLOR,
-        roughness: MARS_RIM_ROUGHNESS,
-        metalness: MARS_RIM_METALNESS,
         side: DoubleSide,
       }),
     );
     rim.name = "BoardRim";
     this.world.createTransformEntity(rim, { parent: root });
 
-    // One irregular coral surface surrounds the square 24x24 play area.
+    // One irregular dark Martian surface surrounds the square 24x24 play area.
     const ground = new Mesh(
       createTerrainTopGeometry(terrainOutline, MARS_GROUND_Y_OFFSET),
-      new MeshStandardMaterial({
+      new MeshBasicMaterial({
         color: MARS_GROUND_COLOR,
-        roughness: MARS_GROUND_ROUGHNESS,
-        metalness: MARS_GROUND_METALNESS,
         side: DoubleSide,
       }),
     );
     ground.name = "BoardGround";
     this.world.createTransformEntity(ground, { parent: root });
+
+    // Three Rocket-style ellipses are combined into one visual mesh. They sit
+    // above the ground, below the command grid, and carry no interaction.
+    const dustPatches = new Mesh(
+      createDustPatchGeometry(
+        createMartianDustPatches(playableBoardSize),
+        MARS_DUST_Y_OFFSET,
+        MARS_DUST_SEGMENTS,
+      ),
+      new MeshBasicMaterial({
+        color: MARS_DUST_COLOR,
+        transparent: true,
+        opacity: MARS_DUST_OPACITY,
+        depthWrite: false,
+        side: DoubleSide,
+      }),
+    );
+    dustPatches.name = "BoardDustPatches";
+    dustPatches.renderOrder = 1;
+    rootObject.add(dustPatches);
 
     // Terrain is coordinate data only now — seed every cell "open" so
     // getTerrainAt/setTerrainAt keep working without per-tile entities.
@@ -252,6 +293,7 @@ export class BoardSystem extends createSystem({}) {
     );
     gridOverlay.name = "BoardCommandGrid";
     gridOverlay.position.y = GRID_OVERLAY_Y_OFFSET;
+    gridOverlay.renderOrder = 2;
     gridOverlay.visible = false;
     boardState.gridOverlay = this.world.createTransformEntity(gridOverlay, {
       parent: root,
