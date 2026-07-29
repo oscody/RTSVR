@@ -10,16 +10,16 @@ export interface CraftSpec {
 }
 
 export const CRAFT_CATALOG: readonly CraftSpec[] = [
-  {
-    kind: "cargo",
-    label: "Cargo Craft",
-    asset: "craftCargoA",
-    glb: "/gltf/craft/craft_cargoA.glb",
-    image: "/images/craft_cargoA.png",
-    cost: 50,
-    duration: 5,
-    locked: false,
-  },
+  // {
+  //   kind: "cargo",
+  //   label: "Cargo Craft",
+  //   asset: "craftCargoA",
+  //   glb: "/gltf/craft/craft_cargoA.glb",
+  //   image: "/images/craft_cargoA.png",
+  //   cost: 50,
+  //   duration: 5,
+  //   locked: false,
+  // },
   {
     kind: "miner",
     label: "Mining Craft",
@@ -40,18 +40,40 @@ export const CRAFT_CATALOG: readonly CraftSpec[] = [
     duration: 8,
     locked: false,
   },
-  {
-    kind: "rover",
-    label: "Rover",
-    asset: "rover",
-    glb: "/gltf/craft/rover.glb",
-    image: "/images/rover.png",
-    cost: 40,
-    duration: 4,
-    locked: false,
-  },
+  // {
+  //   kind: "rover",
+  //   label: "Rover",
+  //   asset: "rover",
+  //   glb: "/gltf/craft/rover.glb",
+  //   image: "/images/rover.png",
+  //   cost: 40,
+  //   duration: 4,
+  //   locked: false,
+  // },
+];
+
+export const ASTRONAUT_PRODUCTION_SPEC: CraftSpec = {
+  kind: "astronaut",
+  label: "Astronaut",
+  asset: "astronautAAnimated",
+  glb: "/gltf/astronautA_A.glb",
+  image: "/images/astronautA.png",
+  cost: 35,
+  duration: 4,
+  locked: false,
+};
+
+export const PRODUCTION_UNIT_CATALOG: readonly CraftSpec[] = [
+  ASTRONAUT_PRODUCTION_SPEC,
 ];
 
 export function getCraftSpec(kind: string): CraftSpec | undefined {
   return CRAFT_CATALOG.find((spec) => spec.kind === kind);
+}
+
+export function getProductionSpec(kind: string): CraftSpec | undefined {
+  return (
+    getCraftSpec(kind) ??
+    PRODUCTION_UNIT_CATALOG.find((spec) => spec.kind === kind)
+  );
 }

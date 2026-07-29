@@ -19,7 +19,7 @@ import {
   PROGRESS_BACKGROUND_COLOR,
   PROGRESS_FILL_COLOR,
 } from "./constants.ts";
-import { getCraftSpec, type CraftSpec } from "./craftCatalog.js";
+import { getProductionSpec, type CraftSpec } from "./craftCatalog.js";
 import { createCraftEntity } from "./craftFactory.js";
 import {
   advanceCraftProduction,
@@ -152,7 +152,7 @@ export class CraftProductionSystem extends createSystem({
   }
 
   private completeCraft(site: Entity): void {
-    const spec = getCraftSpec(
+    const spec = getProductionSpec(
       site.getValue(CraftProductionSite, "kind") ?? "none",
     );
     const root = boardState.boardRoot;

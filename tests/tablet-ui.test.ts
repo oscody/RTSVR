@@ -28,6 +28,20 @@ test("build and craft catalogs require an explicit produce command", () => {
   assert.match(source, /id="craft-produce"/);
 });
 
+test("build view exposes astronaut production and hides removed buildings", () => {
+  const source = readFileSync(
+    new URL("../ui/rts-tablet.uikitml", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /id="build-astronaut"/);
+  for (const kind of ["hangar", "factory", "relay", "shield", "lab"]) {
+    assert.match(
+      source,
+      new RegExp(`id="build-${kind}"[^>]*style="display: none;"`),
+    );
+  }
+});
+
 test("wave banner exposes dynamic wave countdown text", () => {
   const source = readFileSync(
     new URL("../ui/rts-tablet.uikitml", import.meta.url),

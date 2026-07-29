@@ -24,6 +24,7 @@ import {
   CombatState,
   CombatCapability,
   Health,
+  ConstructionState,
   MinerState,
   ScenarioObject,
   Unit,
@@ -100,7 +101,10 @@ export function createCraftEntity(
       attachMinerAnimation(entity, model, gltf.animations);
     }
   }
-  if (spec.asset === "craftRacer") {
+  if (spec.kind === "astronaut") {
+    entity.addComponent(ConstructionState);
+  }
+  if (spec.asset === "astronautAAnimated" || spec.asset === "craftRacer") {
     attachUnitAnimation(entity, model, gltf.animations);
   }
   attachHealthBar(holder);

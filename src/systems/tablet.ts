@@ -13,7 +13,12 @@ import {
   createSystem,
 } from "@iwsdk/core";
 import { BUILDING_CATALOG, getBuildingSpec } from "./buildingCatalog.js";
-import { CRAFT_CATALOG, getCraftSpec } from "./craftCatalog.js";
+import {
+  ASTRONAUT_PRODUCTION_SPEC,
+  CRAFT_CATALOG,
+  getCraftSpec,
+  getProductionSpec,
+} from "./craftCatalog.js";
 import { validateCraftPurchase } from "./craftRules.js";
 import { validateBuildOrder } from "./constructionRules.js";
 import {
@@ -245,18 +250,31 @@ export class TabletSystem extends createSystem({
     this.applySelectedCard(
       tablet.getValue(TabletState, "selectedBuildingKind") ?? "none",
     );
-    const building = getBuildingSpec(
-      tablet.getValue(TabletState, "selectedBuildingKind") ?? "none",
+    const selectedBuildingKind =
+      tablet.getValue(TabletState, "selectedBuildingKind") ?? "none";
+    const building = getBuildingSpec(selectedBuildingKind);
+    const buildUnit = getProductionSpec(
+      tablet.getValue(TabletState, "selectedCraftKind") ?? "none",
     );
+    const buildingUnitSelected =
+      tablet.getValue(TabletState, "view") === "build" &&
+      buildUnit?.kind === ASTRONAUT_PRODUCTION_SPEC.kind &&
+      selectedBuildingKind === "none";
+    const placingBuildUnit =
+      tablet.getValue(TabletState, "craftPlacementActive") ?? false;
     const placingBuilding =
       tablet.getValue(TabletState, "buildPlacementActive") ?? false;
     this.setText(
       "build-action-label",
-      building
-        ? placingBuilding
-          ? `Choose tile for ${building.label}`
-          : `Produce ${building.label} - ${building.cost}`
-        : "Choose a building",
+      buildingUnitSelected && buildUnit
+        ? placingBuildUnit
+          ? `Choose tile for ${buildUnit.label}`
+          : `Produce ${buildUnit.label} - ${buildUnit.cost}`
+        : building
+          ? placingBuilding
+            ? `Choose tile for ${building.label}`
+            : `Produce ${building.label} - ${building.cost}`
+          : "Choose a building",
     );
     const source = tablet.getValue(TabletState, "spawnBuilding") as Entity | null;
     const sourceKind = source?.getValue(Building, "kind") ?? null;
@@ -397,11 +415,13 @@ export class TabletSystem extends createSystem({
         tablet.setValue(TabletState, "view", "build");
         tablet.setValue(TabletState, "buildPlacementActive", false);
         tablet.setValue(TabletState, "craftPlacementActive", false);
+        tablet.setValue(TabletState, "selectedCraftKind", "none");
         this.hidePlacementMarker();
         tablet.setValue(TabletState, "selectedBuildingKind", spec.kind);
         this.touch(tablet, `${spec.label}: ${spec.cost} crystals`);
       });
     }
+    on("build-astronaut", () => this.selectBuildUnit(tablet));
     for (let slot = 0; slot < 4; slot += 1) {
       on(`craft-card-${slot}`, () => {
         const page = tablet.getValue(TabletState, "craftPage") ?? 0;
@@ -433,7 +453,7 @@ export class TabletSystem extends createSystem({
       tablet.setValue(TabletState, "astronautIndex", -1);
       this.touch(tablet, "Unit selection cleared");
     });
-    on("build-produce", () => this.produceSelectedBuilding(tablet));
+    on("build-produce", () => this.produceSelectedBuildItem(tablet));
     on("craft-produce", () => this.produceSelectedCraft(tablet));
   }
 
@@ -529,6 +549,18 @@ export class TabletSystem extends createSystem({
         borderWidth: spec.kind === kind ? 3 : 1,
       });
     }
+    const selectedCraftKind =
+      this.tabletEntity?.getValue(TabletState, "selectedCraftKind") ?? "none";
+    element(this.document!, "build-astronaut")?.setProperties({
+      borderColor:
+        selectedCraftKind === ASTRONAUT_PRODUCTION_SPEC.kind && kind === "none"
+          ? TABLET_SELECTED_CRAFT_BORDER
+          : TABLET_CARD_BORDER,
+      borderWidth:
+        selectedCraftKind === ASTRONAUT_PRODUCTION_SPEC.kind && kind === "none"
+          ? 3
+          : 1,
+    });
   }
 
   private applyCraftPage(tablet: Entity, selectedKind: string): void {
@@ -800,7 +832,7 @@ export class TabletSystem extends createSystem({
   private produceSelectedCraft(tablet: Entity): void {
     const source = tablet.getValue(TabletState, "spawnBuilding") as Entity | null;
     const game = boardState.gameState;
-    const spec = getCraftSpec(
+    const spec = getProductionSpec(
       tablet.getValue(TabletState, "selectedCraftKind") ?? "none",
     );
     const validation = validateCraftPurchase({
@@ -825,6 +857,37 @@ export class TabletSystem extends createSystem({
     tablet.setValue(TabletState, "astronautIndex", -1);
     clearUnitSelections();
     this.touch(tablet, `Choose an open tile for ${spec.label}`);
+  }
+
+  private selectBuildUnit(tablet: Entity): void {
+    const commandCenter = boardState.commandCenter;
+    if (commandCenter) {
+      tablet.setValue(TabletState, "spawnBuilding", commandCenter);
+      tablet.setValue(TabletState, "spawnBuildingIndex", commandCenter.index);
+    }
+    tablet.setValue(TabletState, "view", "build");
+    tablet.setValue(TabletState, "selectedBuildingKind", "none");
+    tablet.setValue(TabletState, "selectedCraftKind", ASTRONAUT_PRODUCTION_SPEC.kind);
+    tablet.setValue(TabletState, "selectedCraftCost", ASTRONAUT_PRODUCTION_SPEC.cost);
+    tablet.setValue(TabletState, "buildPlacementActive", false);
+    tablet.setValue(TabletState, "craftPlacementActive", false);
+    this.hidePlacementMarker();
+    this.touch(
+      tablet,
+      `${ASTRONAUT_PRODUCTION_SPEC.label}: ${ASTRONAUT_PRODUCTION_SPEC.cost} crystals`,
+    );
+  }
+
+  private produceSelectedBuildItem(tablet: Entity): void {
+    if (
+      (tablet.getValue(TabletState, "selectedCraftKind") ?? "none") ===
+        ASTRONAUT_PRODUCTION_SPEC.kind &&
+      (tablet.getValue(TabletState, "selectedBuildingKind") ?? "none") === "none"
+    ) {
+      this.produceSelectedCraft(tablet);
+      return;
+    }
+    this.produceSelectedBuilding(tablet);
   }
 
   private produceSelectedBuilding(tablet: Entity): void {

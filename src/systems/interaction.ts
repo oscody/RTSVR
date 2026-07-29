@@ -10,7 +10,7 @@ import { GRID_SIZE, gridToWorld, worldToGrid } from "./board.js";
 import { stampBuildingFootprint } from "./buildingFactory.js";
 import { getBuildingSpec, type BuildingSpec } from "./buildingCatalog.js";
 import { createConstructionSite } from "./construction.js";
-import { getCraftSpec } from "./craftCatalog.js";
+import { getProductionSpec } from "./craftCatalog.js";
 import { createCraftProductionSite } from "./craftProduction.js";
 import { validateCraftPurchase } from "./craftRules.js";
 import {
@@ -497,7 +497,8 @@ export class InteractionSystem extends createSystem({
     const tablet = boardState.tablet;
     return Boolean(
       tablet &&
-        tablet.getValue(TabletState, "view") === "crafts" &&
+        (tablet.getValue(TabletState, "view") === "crafts" ||
+          tablet.getValue(TabletState, "view") === "build") &&
         tablet.getValue(TabletState, "craftPlacementActive") &&
         tablet.getValue(TabletState, "selectedCraftKind") !== "none",
     );
@@ -509,7 +510,7 @@ export class InteractionSystem extends createSystem({
     const root = boardState.boardRoot;
     if (!tablet || !gameState || !root) return;
     const source = tablet.getValue(TabletState, "spawnBuilding") as Entity | null;
-    const spec = getCraftSpec(
+    const spec = getProductionSpec(
       tablet.getValue(TabletState, "selectedCraftKind") ?? "none",
     );
     const validation = validateCraftPurchase({
@@ -698,7 +699,7 @@ export class InteractionSystem extends createSystem({
     if (!marker || !tablet) return;
     const source = tablet.getValue(TabletState, "spawnBuilding") as Entity | null;
     const validation = validateCraftPurchase({
-      spec: getCraftSpec(
+      spec: getProductionSpec(
         tablet.getValue(TabletState, "selectedCraftKind") ?? "none",
       ),
       crystals: boardState.gameState?.getValue(GameState, "crystals") ?? 0,
