@@ -1,5 +1,6 @@
 import { createSystem } from "@iwsdk/core";
 import { PERFORMANCE_SAMPLE_SECONDS } from "./constants.ts";
+import { flushFrameProfile } from "./frameProfiler.js";
 import { resolvePerformanceSample } from "./performanceRules.js";
 import {
   Enemy,
@@ -68,6 +69,8 @@ export class PerformanceSystem extends createSystem({
       "revision",
       (diagnostics.getValue(RuntimePerformance, "revision") ?? 0) + 1,
     );
+
+    flushFrameProfile();
 
     this.elapsedSeconds = 0;
     this.frameCount = 0;

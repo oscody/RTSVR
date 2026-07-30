@@ -658,11 +658,11 @@
   }
 
   .performance-strip {
-    flex-direction: row;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     width: 548px;
-    height: 22px;
+    height: 116px;
     margin-top: 4px;
     background-color: #eaf2f5;
     border-width: 1px;
@@ -672,9 +672,18 @@
 
   .performance-text {
     width: 532px;
-    height: 17px;
+    height: 15px;
     color: #365466;
     font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .performance-profile-text {
+    width: 532px;
+    height: 96px;
+    color: #4d6878;
+    font-size: 10px;
     font-weight: 700;
     text-align: center;
   }
@@ -709,6 +718,7 @@
   </div>
   <div class="performance-strip">
     <span id="settings-performance" class="performance-text">FPS -- | Avg -- ms | Worst -- ms | Moving 0</span>
+    <span id="settings-frame-profile" class="performance-profile-text">Wave -- | Spawn -- | Alien -- | Combat -- | Tablet --</span>
   </div>
   <div id="overview-view" class="view">
     <span class="section-title">Economy and forces</span>

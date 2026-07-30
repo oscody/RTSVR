@@ -8,6 +8,7 @@ import { BoardSystem } from "./systems/board.js";
 import { ConstructionSystem } from "./systems/construction.js";
 import { CombatSystem } from "./systems/combat.js";
 import { CombatEffectsSystem } from "./systems/combatEffects.js";
+import { installFrameProfiler } from "./systems/frameProfiler.js";
 import { AlienAnimationSystem } from "./systems/alienAnimation.js";
 import { CommandCenterAnimationSystem } from "./systems/commandCenterAnimation.js";
 import { CraftProductionSystem } from "./systems/craftProduction.js";
@@ -110,4 +111,5 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(CraftVisualRiseSystem)
     .registerSystem(MatchResultSystem)
     .registerSystem(ScenarioResetSystem);
+  installFrameProfiler(world);
 });
