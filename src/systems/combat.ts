@@ -215,11 +215,10 @@ export class CombatSystem extends createSystem({
     attacker.setValue(CombatState, "timer", this.cycle.timer);
     if (hits === 0) return;
 
-    // Visual-only combat feedback for friendly attackers (turret / astronaut /
-    // racer). Damage below stays range/cadence-based; bolts stop at the body.
-    if (!attacker.hasComponent(Enemy)) {
-      emitAttackVfx(attacker, target);
-    }
+    // Visual-only combat feedback: friendly attackers fire bolts/lasers that
+    // stop at the body; aliens play a melee energy burst. Damage below stays
+    // range/cadence-based (the profile is chosen per attacker in combatEffects).
+    emitAttackVfx(attacker, target);
 
     const targetType = this.targetType(target);
     resolveDamageInto(this.damage, current, spec.damage, hits, targetType);

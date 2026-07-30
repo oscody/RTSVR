@@ -1,8 +1,6 @@
 import {
-  AdditiveBlending,
   Mesh,
   MeshBasicMaterial,
-  Quaternion,
   SphereGeometry,
   Vector3,
   createSystem,
@@ -12,6 +10,7 @@ import {
 } from "@iwsdk/core";
 import {
   ALIEN_DRAKE_VISUAL_ELEVATION,
+  COMBAT_VFX_ALIEN_BURST_COLOR,
   COMBAT_VFX_ASTRONAUT_BOLT_COLOR,
   COMBAT_VFX_ASTRONAUT_MUZZLE_COLOR,
   COMBAT_VFX_BOLT_ARRIVAL_EPSILON,
@@ -20,6 +19,7 @@ import {
   COMBAT_VFX_BOLT_RADIUS,
   COMBAT_VFX_BOLT_SPEED,
   COMBAT_VFX_DOUBLE_SPACING,
+  COMBAT_VFX_DRAKE_BURST_COLOR,
   COMBAT_VFX_FLASH_POOL_SIZE,
   COMBAT_VFX_FLASH_RADIUS,
   COMBAT_VFX_IMPACT_COLOR,
@@ -27,6 +27,9 @@ import {
   COMBAT_VFX_LASER_LENGTH,
   COMBAT_VFX_LASER_SPEED,
   COMBAT_VFX_LASER_THICKNESS,
+  COMBAT_VFX_MECH_BURST_COLOR,
+  COMBAT_VFX_MELEE_BURST_SECONDS,
+  COMBAT_VFX_MELEE_STRIKE_SECONDS,
   COMBAT_VFX_MUZZLE_COLOR,
   COMBAT_VFX_MUZZLE_FLASH_SECONDS,
   COMBAT_VFX_MUZZLE_FORWARD,
@@ -39,7 +42,7 @@ import {
 import { Building, Enemy, Unit, boardState } from "./state.js";
 
 type BoltShape = "plasma" | "laser";
-type EmitterMode = "nodes" | "single" | "double";
+type EmitterMode = "nodes" | "single" | "double" | "melee";
 
 interface ShotProfile {
   boltColor: number;
@@ -50,9 +53,11 @@ interface ShotProfile {
   emitter: EmitterMode;
 }
 
-// Racer = round blue plasma from its two cannon nodes; AstronautA = one thin
-// green laser; turret = twin parallel orange lasers.
-const SHOT_PROFILES: Record<"racer" | "astronaut" | "turret", ShotProfile> = {
+// Friendly ranged shots + alien melee bursts. Racer = round blue plasma from
+// its two cannon nodes; AstronautA = one thin green laser; turret = twin
+// orange lasers. Aliens use "melee": a strike flash on the attacker + an impact
+// burst on the target, colored per kind (no traveling bolt).
+const SHOT_PROFILES: Record<string, ShotProfile> = {
   racer: {
     boltColor: COMBAT_VFX_BOLT_COLOR,
     muzzleColor: COMBAT_VFX_MUZZLE_COLOR,
@@ -76,6 +81,30 @@ const SHOT_PROFILES: Record<"racer" | "astronaut" | "turret", ShotProfile> = {
     shape: "laser",
     speed: COMBAT_VFX_LASER_SPEED,
     emitter: "double",
+  },
+  alien: {
+    boltColor: COMBAT_VFX_ALIEN_BURST_COLOR,
+    muzzleColor: COMBAT_VFX_ALIEN_BURST_COLOR,
+    impactColor: COMBAT_VFX_ALIEN_BURST_COLOR,
+    shape: "plasma",
+    speed: 0,
+    emitter: "melee",
+  },
+  alienDrake: {
+    boltColor: COMBAT_VFX_DRAKE_BURST_COLOR,
+    muzzleColor: COMBAT_VFX_DRAKE_BURST_COLOR,
+    impactColor: COMBAT_VFX_DRAKE_BURST_COLOR,
+    shape: "plasma",
+    speed: 0,
+    emitter: "melee",
+  },
+  strongAlienMech: {
+    boltColor: COMBAT_VFX_MECH_BURST_COLOR,
+    muzzleColor: COMBAT_VFX_MECH_BURST_COLOR,
+    impactColor: COMBAT_VFX_MECH_BURST_COLOR,
+    shape: "plasma",
+    speed: 0,
+    emitter: "melee",
   },
 };
 
@@ -112,7 +141,6 @@ const tmpMuzzle = new Vector3();
 const tmpTarget = new Vector3();
 const tmpDir = new Vector3();
 const tmpPerp = new Vector3();
-const tmpOrient = new Quaternion();
 const Z_AXIS = new Vector3(0, 0, 1);
 
 function ensurePool(): boolean {
@@ -153,11 +181,12 @@ function ensurePool(): boolean {
 
   const flashGeometry = new SphereGeometry(COMBAT_VFX_FLASH_RADIUS, 8, 8);
   for (let index = 0; index < COMBAT_VFX_FLASH_POOL_SIZE; index += 1) {
+    // Normal blending (not additive) so colored bursts keep their hue over the
+    // bright board; transparent for the opacity fade. toneMapped:false = vivid.
     const material = new MeshBasicMaterial({
       color: COMBAT_VFX_MUZZLE_COLOR,
       transparent: true,
       opacity: 0,
-      blending: AdditiveBlending,
       depthWrite: false,
       toneMapped: false,
     });
@@ -185,12 +214,13 @@ function toRootLocal(worldPoint: Vector3): void {
   if (rootObject) rootObject.worldToLocal(worldPoint);
 }
 
-// Extra Y to raise the aim point for floating enemies. The drake's model is
-// lifted ALIEN_DRAKE_VISUAL_ELEVATION above its ground anchor in structures.ts.
-function targetVisualElevation(target: Entity): number {
+// Extra Y to raise a point to the entity's rendered body. The drake's model is
+// lifted ALIEN_DRAKE_VISUAL_ELEVATION above its ground anchor in structures.ts;
+// used for both aim points (targets) and strike points (attackers).
+function entityVisualElevation(entity: Entity): number {
   if (
-    target.hasComponent(Enemy) &&
-    target.getValue(Enemy, "kind") === "alienDrake"
+    entity.hasComponent(Enemy) &&
+    entity.getValue(Enemy, "kind") === "alienDrake"
   ) {
     return ALIEN_DRAKE_VISUAL_ELEVATION;
   }
@@ -198,6 +228,10 @@ function targetVisualElevation(target: Entity): number {
 }
 
 function shotProfile(attacker: Entity): ShotProfile {
+  if (attacker.hasComponent(Enemy)) {
+    const kind = attacker.getValue(Enemy, "kind") ?? "alien";
+    return SHOT_PROFILES[kind] ?? SHOT_PROFILES.alien;
+  }
   if (
     attacker.hasComponent(Building) &&
     attacker.getValue(Building, "kind") === "turret"
@@ -298,10 +332,29 @@ export function emitAttackVfx(attacker: Entity, target: Entity): void {
   // its ground anchor) are hit on the body, not under it.
   targetObject.getWorldPosition(tmpTarget);
   toRootLocal(tmpTarget);
-  tmpTarget.y += COMBAT_VFX_TARGET_BODY_Y + targetVisualElevation(target);
+  tmpTarget.y += COMBAT_VFX_TARGET_BODY_Y + entityVisualElevation(target);
   const toX = tmpTarget.x;
   const toY = tmpTarget.y;
   const toZ = tmpTarget.z;
+
+  // Alien melee: no bolt — a strike flash at the attacker's reach + an impact
+  // burst on the target body.
+  if (profile.emitter === "melee") {
+    holder.getWorldPosition(tmpMuzzle);
+    toRootLocal(tmpMuzzle);
+    tmpDir.set(toX - tmpMuzzle.x, 0, toZ - tmpMuzzle.z);
+    if (tmpDir.lengthSq() > 1e-6) tmpDir.normalize();
+    spawnFlash(
+      tmpMuzzle.x + tmpDir.x * COMBAT_VFX_MUZZLE_FORWARD,
+      tmpMuzzle.y + COMBAT_VFX_MUZZLE_UP + entityVisualElevation(attacker),
+      tmpMuzzle.z + tmpDir.z * COMBAT_VFX_MUZZLE_FORWARD,
+      profile.muzzleColor,
+      COMBAT_VFX_MELEE_STRIKE_SECONDS,
+      0.7,
+    );
+    spawnFlash(toX, toY, toZ, profile.impactColor, COMBAT_VFX_MELEE_BURST_SECONDS, 1.4);
+    return;
+  }
 
   // Racer: fire from each named cannon node (paired plasma).
   if (profile.emitter === "nodes") {

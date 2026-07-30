@@ -134,6 +134,14 @@ export const COMBAT_VFX_ASTRONAUT_MUZZLE_COLOR = 0xd6ffe6;
 export const COMBAT_VFX_TURRET_BOLT_COLOR = 0xff7a3c;
 export const COMBAT_VFX_TURRET_MUZZLE_COLOR = 0xffd9b0;
 
+// Alien melee attack bursts (Energy_Slam etc.) — no traveling bolt; a strike
+// flash on the attacker + an impact burst on the target, colored per kind.
+export const COMBAT_VFX_ALIEN_BURST_COLOR = 0xa855f7; // purple energy
+export const COMBAT_VFX_DRAKE_BURST_COLOR = 0xff2d55; // crimson
+export const COMBAT_VFX_MECH_BURST_COLOR = 0xffe14d; // electric yellow
+export const COMBAT_VFX_MELEE_STRIKE_SECONDS = 0.1;
+export const COMBAT_VFX_MELEE_BURST_SECONDS = 0.2;
+
 export const TABLET_STATUS_ERROR_COLOR = "#b42318";
 export const TABLET_STATUS_SUCCESS_COLOR = "#176b55";
 export const TABLET_STATUS_INFO_COLOR = "#365466";
