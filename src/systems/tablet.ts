@@ -62,6 +62,7 @@ import {
   TABLET_UNIT_BACKGROUND,
   TABLET_Y_OFFSET,
 } from "./constants.ts";
+import { getFrameProfileHud } from "./frameProfiler.js";
 import {
   clearUnitSelections,
   getSingleSelectedUnit,
@@ -227,11 +228,16 @@ export class TabletSystem extends createSystem({
     this.setText("overview-astronauts", `${astronauts}`);
     this.setText("overview-enemies", `${enemyCount}`);
     this.setText("overview-kills", `${kills}`);
+    const profilerHud = getFrameProfileHud();
     this.setText(
       "settings-performance",
       performanceRevision > 0
         ? `FPS ${Math.round(performance?.getValue(RuntimePerformance, "fps") ?? 0)} | Avg ${(performance?.getValue(RuntimePerformance, "averageFrameMs") ?? 0).toFixed(1)} ms | Worst ${(performance?.getValue(RuntimePerformance, "worstFrameMs") ?? 0).toFixed(1)} ms | Moving ${performance?.getValue(RuntimePerformance, "movingEntities") ?? 0}`
         : "FPS -- | Avg -- ms | Worst -- ms | Moving 0",
+    );
+    this.setText(
+      "settings-frame-profile",
+      profilerHud || "Wave -- | Spawn -- | Alien -- | Combat -- | Tablet --",
     );
     this.setText("tablet-status", tablet.getValue(TabletState, "status") ?? "");
     element(document, "tablet-status")?.setProperties({

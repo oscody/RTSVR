@@ -81,6 +81,7 @@ test("tablet exposes live headset performance diagnostics", () => {
   const tablet = source("src/systems/tablet.ts");
 
   assert.match(markup, /id="settings-performance"/);
+  assert.match(markup, /id="settings-frame-profile"/);
   const performanceIndex = markup.indexOf('id="settings-performance"');
   for (const view of ["overview", "build", "crafts", "units", "settings"]) {
     assert.ok(
