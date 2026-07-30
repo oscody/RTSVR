@@ -1,7 +1,6 @@
 import {
   BoxGeometry,
   BufferGeometry,
-  Color,
   DoubleSide,
   Float32BufferAttribute,
   Group,
@@ -29,7 +28,6 @@ import {
   gridKey,
 } from "./state.js";
 import {
-  BOARD_BACKGROUND_COLOR,
   BOARD_Y,
   BUILD_MARKER_OPACITY,
   BUILD_MARKER_COLOR,
@@ -193,8 +191,6 @@ function createDustPatchGeometry(
 
 export class BoardSystem extends createSystem({}) {
   init(): void {
-    this.world.scene.background = new Color(BOARD_BACKGROUND_COLOR);
-
     const rootObject = new Group();
     rootObject.name = "BoardRoot";
     rootObject.position.set(0, BOARD_Y, 0);

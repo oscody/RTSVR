@@ -27,6 +27,53 @@ export const ATTACK_RANGE_RING_SEGMENTS = 48;
 export const ATTACK_RANGE_RING_Y_OFFSET = 0.026;
 
 export const BOARD_BACKGROUND_COLOR = 0xb8d8f1;
+
+// Procedural sky dome (DomeGradient on the level root) — a Martian dusk/space
+// backdrop replacing the flat blue. Colors are RGBA 0..1 (Types.Color):
+// sky = zenith, equator = horizon glow, ground = below.
+// Deep-space look: near-black with a faint blue so stars pop.
+export const SKY_DOME_SKY: [number, number, number, number] = [0.006, 0.008, 0.02, 1];
+export const SKY_DOME_EQUATOR: [number, number, number, number] = [0.02, 0.025, 0.05, 1];
+export const SKY_DOME_GROUND: [number, number, number, number] = [0.004, 0.004, 0.012, 1];
+export const SKY_DOME_INTENSITY = 1.0;
+// Flat dark fallback set on scene.background in case the level root isn't ready
+// for DomeGradient; the dome overrides it when it applies.
+export const SKY_FALLBACK_COLOR = 0x02020a;
+
+// Procedural starfield (THREE.Points on a large sphere) for the space backdrop.
+export const STARFIELD_COUNT = 1400;
+export const STARFIELD_RADIUS = 42;
+export const STARFIELD_SIZE = 2; // pixels (sizeAttenuation off = crisp stars)
+export const STARFIELD_COLOR = 0xffffff;
+
+// Meteor shower cycle (cosmetic): a set batch of rocks appears floating high
+// above the map, then all fall onto random OPEN (non-blocked) tiles, rest on the
+// ground, disappear together, and the cycle restarts after a gap.
+export const METEOR_POOL_SIZE = 6; // rocks per batch
+export const METEOR_SIZE_TILES = 1.3;
+export const METEOR_FLOAT_HEIGHT = 4.5; // board-local Y the batch hovers at (in view)
+export const METEOR_FLOAT_SECONDS = 2.5; // hover time before the drop starts
+export const METEOR_FLOAT_BOB = 0.22; // gentle hover bob amplitude
+export const METEOR_STAGGER_SECONDS = 5.0; // delay between each rock's drop
+export const METEOR_FALL_SPEED = 0.9; // initial units/sec (slow, graceful fall)
+export const METEOR_FALL_ACCEL = 1.0; // units/sec^2 (gentle gravity)
+export const METEOR_SPIN_RATE = 2.6; // rad/sec tumble
+export const METEOR_ARRIVAL_EPSILON = 0.06;
+// A landed batch rests on the ground this long, then all disappear together.
+export const METEOR_REST_SECONDS = 10;
+export const METEOR_REST_Y_OFFSET = TILE_SIZE * 0.35;
+export const METEOR_CYCLE_GAP_SECONDS = 3; // pause between shower cycles
+export const METEOR_TRAIL_LENGTH = 1.8;
+export const METEOR_TRAIL_THICKNESS = 0.05;
+export const METEOR_TRAIL_COLOR = 0xff7a2c; // hot orange (additive, pops on dark space)
+export const METEOR_IMPACT_COLOR = 0xffcf8f;
+export const METEOR_IMPACT_FLASH_SECONDS = 0.4;
+export const METEOR_IMPACT_FLASH_RADIUS = TILE_SIZE * 0.55;
+// Directional "sun" — warm key light low on the horizon for directional shading.
+export const SUN_COLOR = 0xffe9c7;
+export const SUN_INTENSITY = 1.3;
+export const SUN_POSITION: [number, number, number] = [8, 4, 6];
+
 export const TILE_PROXY_HEIGHT = 0.06;
 export const TILE_PROXY_Y_OFFSET = 0.03;
 

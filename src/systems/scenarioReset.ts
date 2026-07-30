@@ -6,6 +6,7 @@ import { clearCraftProductionAnimations } from "./craftProductionAnimation.js";
 import { clearCraftVisualRise } from "./craftVisualRise.js";
 import { resetCraftSerial } from "./craftFactory.js";
 import { STARTING_CRYSTALS } from "./economyConstants.js";
+import { clearMeteors } from "./meteorSystem.js";
 import { clearMinerAnimations } from "./minerAnimation.js";
 import { clearUnitSelections, updateCommandGridVisibility } from "./selection.js";
 import { clearTurretAnimations } from "./turretAnimation.js";
@@ -54,6 +55,7 @@ export class ScenarioResetSystem extends createSystem({
   private resetScenario(source: Entity): void {
     clearUnitSelections();
     clearCombatEffects();
+    clearMeteors();
     clearAlienAnimations();
     clearCommandCenterAnimations();
     clearCraftProductionAnimations();

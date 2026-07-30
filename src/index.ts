@@ -13,12 +13,14 @@ import { CommandCenterAnimationSystem } from "./systems/commandCenterAnimation.j
 import { CraftProductionSystem } from "./systems/craftProduction.js";
 import { CraftVisualRiseSystem } from "./systems/craftVisualRise.js";
 import { InteractionSystem } from "./systems/interaction.js";
+import { MeteorSystem } from "./systems/meteorSystem.js";
 import { MiningSystem } from "./systems/mining.js";
 import { MatchResultSystem } from "./systems/matchResult.js";
 import { MovementSystem } from "./systems/movement.js";
 import { MinerAnimationSystem } from "./systems/minerAnimation.js";
 import { PerformanceSystem } from "./systems/performance.js";
 import { ScenarioResetSystem } from "./systems/scenarioReset.js";
+import { SkySystem } from "./systems/skySystem.js";
 import { StructuresSystem } from "./systems/structures.js";
 import { TabletSystem } from "./systems/tablet.js";
 import { TurretAnimationSystem } from "./systems/turretAnimation.js";
@@ -91,6 +93,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
 }).then((world) => {
   world
     .registerSystem(BoardSystem)
+    .registerSystem(SkySystem)
     .registerSystem(StructuresSystem)
     .registerSystem(PerformanceSystem)
     .registerSystem(TabletSystem)
@@ -108,6 +111,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(ConstructionSystem)
     .registerSystem(CraftProductionSystem)
     .registerSystem(CraftVisualRiseSystem)
+    .registerSystem(MeteorSystem)
     .registerSystem(MatchResultSystem)
     .registerSystem(ScenarioResetSystem);
 });
