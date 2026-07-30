@@ -17,6 +17,7 @@ import {
   currentUnitAttackSpec,
 } from "./debugStatOverrides.js";
 import { detachAlienAnimation } from "./alienAnimation.js";
+import { emitAttackVfx } from "./combatEffects.js";
 import { detachCommandCenterAnimation } from "./commandCenterAnimation.js";
 import { updateHealthBar } from "./healthBar.js";
 import { detachMinerAnimation } from "./minerAnimation.js";
@@ -213,6 +214,12 @@ export class CombatSystem extends createSystem({
     const hits = advanceAttackCycle(this.cycle, delta, true);
     attacker.setValue(CombatState, "timer", this.cycle.timer);
     if (hits === 0) return;
+
+    // Visual-only combat feedback for friendly attackers (turret / astronaut /
+    // racer). Damage below stays range/cadence-based; bolts stop at the body.
+    if (!attacker.hasComponent(Enemy)) {
+      emitAttackVfx(attacker, target);
+    }
 
     const targetType = this.targetType(target);
     resolveDamageInto(this.damage, current, spec.damage, hits, targetType);

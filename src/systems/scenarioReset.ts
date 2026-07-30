@@ -1,5 +1,6 @@
 import { RayInteractable, createSystem, type Entity } from "@iwsdk/core";
 import { clearAlienAnimations } from "./alienAnimation.js";
+import { clearCombatEffects } from "./combatEffects.js";
 import { clearCommandCenterAnimations } from "./commandCenterAnimation.js";
 import { clearCraftProductionAnimations } from "./craftProductionAnimation.js";
 import { clearCraftVisualRise } from "./craftVisualRise.js";
@@ -52,6 +53,7 @@ export class ScenarioResetSystem extends createSystem({
 
   private resetScenario(source: Entity): void {
     clearUnitSelections();
+    clearCombatEffects();
     clearAlienAnimations();
     clearCommandCenterAnimations();
     clearCraftProductionAnimations();

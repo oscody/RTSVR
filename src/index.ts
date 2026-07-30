@@ -7,6 +7,7 @@ import {
 import { BoardSystem } from "./systems/board.js";
 import { ConstructionSystem } from "./systems/construction.js";
 import { CombatSystem } from "./systems/combat.js";
+import { CombatEffectsSystem } from "./systems/combatEffects.js";
 import { AlienAnimationSystem } from "./systems/alienAnimation.js";
 import { CommandCenterAnimationSystem } from "./systems/commandCenterAnimation.js";
 import { CraftProductionSystem } from "./systems/craftProduction.js";
@@ -97,6 +98,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(MovementSystem)
     .registerSystem(WaveSystem)
     .registerSystem(CombatSystem)
+    .registerSystem(CombatEffectsSystem)
     .registerSystem(AlienAnimationSystem)
     .registerSystem(CommandCenterAnimationSystem)
     .registerSystem(TurretAnimationSystem)

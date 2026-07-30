@@ -97,6 +97,43 @@ export const COMMAND_CENTER_DOOR_HOLD_SECONDS = 0.25;
 export const CRAFT_SPAWN_CONSTRUCTION_CLIP = "Spawn_Construction";
 export const TURRET_FIRE_RECOIL_CLIP = "Fire_Recoil";
 
+// Pooled combat VFX (see combatEffects.ts). Damage stays range/cadence-based;
+// these are visual-only. Bolts fly muzzle -> target body and stop there, so
+// they never bypass the enemy body.
+export const COMBAT_VFX_BOLT_POOL_SIZE = 16;
+export const COMBAT_VFX_FLASH_POOL_SIZE = 16;
+export const COMBAT_VFX_BOLT_SPEED = 1.6; // world units / second
+export const COMBAT_VFX_BOLT_RADIUS = TILE_SIZE * 0.09;
+export const COMBAT_VFX_BOLT_ARRIVAL_EPSILON = 0.01;
+export const COMBAT_VFX_BOLT_COLOR = 0x4fc3ff;
+export const COMBAT_VFX_MUZZLE_COLOR = 0xbfe9ff;
+export const COMBAT_VFX_IMPACT_COLOR = 0x9fdcff;
+export const COMBAT_VFX_FLASH_RADIUS = TILE_SIZE * 0.14;
+export const COMBAT_VFX_MUZZLE_FLASH_SECONDS = 0.09;
+export const COMBAT_VFX_IMPACT_FLASH_SECONDS = 0.16;
+// Raise the aim point from the target's ground anchor to roughly body centre.
+export const COMBAT_VFX_TARGET_BODY_Y = TILE_SIZE * 0.6;
+// Fallback muzzle for attackers with no named cannon node (turret, astronaut).
+export const COMBAT_VFX_MUZZLE_UP = TILE_SIZE * 0.7;
+export const COMBAT_VFX_MUZZLE_FORWARD = TILE_SIZE * 0.45;
+// Named cannon-tip nodes inside the CraftRacer GLB (paired plasma cannons).
+export const RACER_CANNON_MUZZLE_NODES = [
+  "StrafeFire_MuzzleFlash_L",
+  "StrafeFire_MuzzleFlash_R",
+] as const;
+
+// Per-attacker shot styles. Racer = round blue plasma (paired cannons);
+// AstronautA = single thin green laser; turret = twin parallel orange lasers.
+// Lasers are a stretched+oriented bolt and travel faster than plasma.
+export const COMBAT_VFX_LASER_SPEED = 3.4; // world units / second
+export const COMBAT_VFX_LASER_LENGTH = COMBAT_VFX_BOLT_RADIUS * 6;
+export const COMBAT_VFX_LASER_THICKNESS = COMBAT_VFX_BOLT_RADIUS * 0.5;
+export const COMBAT_VFX_DOUBLE_SPACING = TILE_SIZE * 0.13; // twin-laser gap
+export const COMBAT_VFX_ASTRONAUT_BOLT_COLOR = 0x66ff99;
+export const COMBAT_VFX_ASTRONAUT_MUZZLE_COLOR = 0xd6ffe6;
+export const COMBAT_VFX_TURRET_BOLT_COLOR = 0xff7a3c;
+export const COMBAT_VFX_TURRET_MUZZLE_COLOR = 0xffd9b0;
+
 export const TABLET_STATUS_ERROR_COLOR = "#b42318";
 export const TABLET_STATUS_SUCCESS_COLOR = "#176b55";
 export const TABLET_STATUS_INFO_COLOR = "#365466";

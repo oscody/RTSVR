@@ -106,7 +106,13 @@ function desiredAnimation(
   controller: UnitAnimationController,
 ): UnitAnimationState {
   if ((entity.getValue(Health, "current") ?? 0) <= 0) return "idle";
-  if (entity.getValue(CombatState, "stage") === "attacking") return "shoot";
+  if (entity.getValue(CombatState, "stage") === "attacking") {
+    // CraftRacer no longer plays the baked StrafeFire clip (its bolts flew a
+    // fixed distance and bypassed the enemy body). It keeps hovering while the
+    // pooled combat VFX fire bolts that stop at the target. Other units (e.g.
+    // AstronautA) still play their Shoot clip.
+    return entity.getValue(Unit, "kind") === "racer" ? "idle" : "shoot";
+  }
   if (entity.hasComponent(ConstructionState)) {
     const constructionStage =
       entity.getValue(ConstructionState, "stage") ?? "idle";

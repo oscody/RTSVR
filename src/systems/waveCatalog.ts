@@ -86,8 +86,8 @@ export const WAVE_CATALOG: readonly WaveSpec[] = [
     maxActiveAliens: 1,
     releaseIntervalSeconds: 20,
     groups: [
-      { enemy: "alien", count: 1, edges: ["north", "east", "south"], minSpacingTiles: 3 },
-      { enemy: "alienDrake", count: 7, edges: ["south"], minSpacingTiles: 3 },
+      { enemy: "alien", count: 7, edges: ["north", "east", "south"], minSpacingTiles: 3 },
+      { enemy: "alienDrake", count: 3, edges: ["south"], minSpacingTiles: 3 },
       { enemy: "strongAlienMech", count: 1, edges: ["south"], minSpacingTiles: 3 },
     ],
   },
