@@ -7,7 +7,7 @@ import { clearCraftVisualRise } from "./craftVisualRise.js";
 import { resetCraftSerial } from "./craftFactory.js";
 import { STARTING_CRYSTALS } from "./economyConstants.js";
 import { clearMinerAnimations } from "./minerAnimation.js";
-import { clearUnitSelections } from "./selection.js";
+import { clearUnitSelections, updateCommandGridVisibility } from "./selection.js";
 import { clearTurretAnimations } from "./turretAnimation.js";
 import { clearUnitAnimations } from "./unitAnimation.js";
 import {
@@ -204,6 +204,7 @@ export class ScenarioResetSystem extends createSystem({
       "revision",
       (tablet.getValue(TabletState, "revision") ?? 0) + 1,
     );
+    updateCommandGridVisibility();
     const panel = boardState.matchResultPanel;
     if (panel?.object3D) panel.object3D.visible = false;
     panel?.setValue(MatchResultPanel, "visible", false);

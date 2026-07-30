@@ -20,6 +20,7 @@ import {
   BoardMarker,
   DebugSettings,
   SelectionState,
+  TabletState,
   Unit,
   UnitSelection,
   boardState,
@@ -94,6 +95,21 @@ export function clearUnitSelections(): void {
   publishSelectionSummary();
 }
 
+export function updateCommandGridVisibility(): void {
+  const grid = boardState.gridOverlay?.object3D;
+  if (!grid) return;
+  const tablet = boardState.tablet;
+  const placementActive = Boolean(
+    tablet &&
+      ((tablet.getValue(TabletState, "buildPlacementActive") ?? false) ||
+        (tablet.getValue(TabletState, "craftPlacementActive") ?? false)),
+  );
+  grid.visible =
+    boardState.selectedUnits.size > 0 ||
+    Boolean(boardState.selectedTurret) ||
+    placementActive;
+}
+
 export function removeUnitFromSelection(unit: Entity): void {
   if (!boardState.selectedUnits.delete(unit)) return;
   unit.setValue(UnitSelection, "selected", false);
@@ -130,6 +146,7 @@ export function toggleTurretRangeRing(world: World, turret: Entity): boolean {
   if (boardState.selectedTurret === turret) {
     hideTurretRangeRing(turret);
     boardState.selectedTurret = null;
+    updateCommandGridVisibility();
     return false;
   }
   if (boardState.selectedTurret) {
@@ -137,6 +154,7 @@ export function toggleTurretRangeRing(world: World, turret: Entity): boolean {
   }
   boardState.selectedTurret = turret;
   showTurretRangeRing(world, turret);
+  updateCommandGridVisibility();
   return true;
 }
 
@@ -282,10 +300,9 @@ function setRingVisible(world: World, unit: Entity, visible: boolean): void {
 }
 
 function publishSelectionSummary(): void {
-  // Command grid is visible whenever the player has a unit selected — every
-  // selection mutator (toggle/clear/remove) funnels through here.
-  const grid = boardState.gridOverlay?.object3D;
-  if (grid) grid.visible = boardState.selectedUnits.size > 0;
+  // Command grid is visible whenever the player is choosing a board tile or
+  // has a commandable/range-readable entity selected.
+  updateCommandGridVisibility();
   const selection = boardState.selection;
   if (!selection) return;
   const selected = getSelectedUnits();

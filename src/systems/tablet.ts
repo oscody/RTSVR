@@ -68,6 +68,7 @@ import {
   refreshTurretRangeRingGeometry,
   refreshUnitAttackRangeRingGeometry,
   toggleUnitSelection,
+  updateCommandGridVisibility,
 } from "./selection.js";
 import {
   countRosterKinds,
@@ -465,6 +466,7 @@ export class TabletSystem extends createSystem({
     tablet.setValue(TabletState, "craftPage", next);
     tablet.setValue(TabletState, "craftPlacementActive", false);
     this.hidePlacementMarker();
+    updateCommandGridVisibility();
     this.touch(tablet, `Craft catalog page ${next + 1} of ${pageCount}`);
   }
 
@@ -490,6 +492,7 @@ export class TabletSystem extends createSystem({
     tablet.setValue(TabletState, "buildPlacementActive", false);
     tablet.setValue(TabletState, "craftPlacementActive", false);
     this.hidePlacementMarker();
+    updateCommandGridVisibility();
     this.touch(tablet, status);
   }
 
@@ -856,6 +859,7 @@ export class TabletSystem extends createSystem({
     tablet.setValue(TabletState, "astronaut", null);
     tablet.setValue(TabletState, "astronautIndex", -1);
     clearUnitSelections();
+    updateCommandGridVisibility();
     this.touch(tablet, `Choose an open tile for ${spec.label}`);
   }
 
@@ -872,6 +876,7 @@ export class TabletSystem extends createSystem({
     tablet.setValue(TabletState, "buildPlacementActive", false);
     tablet.setValue(TabletState, "craftPlacementActive", false);
     this.hidePlacementMarker();
+    updateCommandGridVisibility();
     this.touch(
       tablet,
       `${ASTRONAUT_PRODUCTION_SPEC.label}: ${ASTRONAUT_PRODUCTION_SPEC.cost} crystals`,
@@ -920,6 +925,7 @@ export class TabletSystem extends createSystem({
 
     tablet.setValue(TabletState, "buildPlacementActive", true);
     tablet.setValue(TabletState, "craftPlacementActive", false);
+    updateCommandGridVisibility();
     this.touch(tablet, `Choose a build tile for ${spec.label}`);
   }
 

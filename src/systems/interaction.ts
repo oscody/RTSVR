@@ -34,6 +34,7 @@ import {
   getSingleSelectedUnit,
   toggleTurretRangeRing,
   toggleUnitSelection,
+  updateCommandGridVisibility,
 } from "./selection.js";
 import { assignGroupDestinations } from "./selectionRules.js";
 import {
@@ -205,6 +206,7 @@ export class InteractionSystem extends createSystem({
         tablet.setValue(TabletState, "buildPlacementActive", false);
         tablet.setValue(TabletState, "craftPlacementActive", false);
         tablet.setValue(TabletState, "view", "crafts");
+        updateCommandGridVisibility();
         this.setTabletStatus(
           kind === "turret"
             ? "Turret cannot produce crafts"
@@ -545,6 +547,7 @@ export class InteractionSystem extends createSystem({
     );
     tablet.setValue(TabletState, "craftPlacementActive", false);
     hideMarker(boardState.buildMarker);
+    updateCommandGridVisibility();
     setOrderMarker(tx, ty, VALID_PLACEMENT_MARKER_COLOR);
     this.setTabletStatus(
       `${spec.label} production started (${spec.duration}s)`,
@@ -625,6 +628,7 @@ export class InteractionSystem extends createSystem({
     astronaut.setValue(ConstructionState, "site", site);
     tablet.setValue(TabletState, "buildPlacementActive", false);
     hideMarker(boardState.buildMarker);
+    updateCommandGridVisibility();
 
     const remaining = [...path];
     const next = remaining.shift();
@@ -651,6 +655,8 @@ export class InteractionSystem extends createSystem({
     tablet.setValue(TabletState, "astronaut", null);
     tablet.setValue(TabletState, "astronautIndex", -1);
     tablet.setValue(TabletState, "buildPlacementActive", false);
+    tablet.setValue(TabletState, "craftPlacementActive", false);
+    updateCommandGridVisibility();
   }
 
   private updateHoverMarker(tx: number, ty: number): void {

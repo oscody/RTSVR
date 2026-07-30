@@ -154,7 +154,7 @@ test("BoardSurface is the only ground RayInteractable", () => {
   assert.ok(board.includes('name = "BoardInteractionSurface"'));
 });
 
-test("grid visibility follows unit selection", () => {
+test("grid visibility follows selection and placement modes", () => {
   assert.ok(
     selection.includes("boardState.gridOverlay"),
     "selection must control the grid overlay",
@@ -162,6 +162,15 @@ test("grid visibility follows unit selection", () => {
   assert.ok(
     selection.includes("boardState.selectedUnits.size > 0"),
     "grid is shown while any unit is selected",
+  );
+  assert.ok(
+    selection.includes("Boolean(boardState.selectedTurret)"),
+    "grid is shown while a turret is selected",
+  );
+  assert.ok(
+    selection.includes("buildPlacementActive") &&
+      selection.includes("craftPlacementActive"),
+    "grid is shown while build or craft placement is active",
   );
 });
 
