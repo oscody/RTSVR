@@ -79,9 +79,28 @@ test("board uses one ray target over a continuous ground surface", () => {
 test("tablet exposes live headset performance diagnostics", () => {
   const markup = source("ui/rts-tablet.uikitml");
   const tablet = source("src/systems/tablet.ts");
+  const frameProfiler = source("src/systems/frameProfiler.ts");
 
   assert.match(markup, /id="settings-performance"/);
   assert.match(markup, /id="settings-frame-profile"/);
+  assert.match(frameProfiler, /"prepareWaveIncrementally", "WaveSystem\.prepare", "Prep"/);
+  assert.match(frameProfiler, /"createPreparedAlien", waveBuildDescriptor/);
+  assert.match(
+    frameProfiler,
+    /PREPARATION_ROW = \["Prep", "PAlien", "PDrake", "PMech", "Spawn"\]/,
+  );
+  assert.match(
+    frameProfiler,
+    /CORE_ROW = \["Wave", "Path", "Tablet", "Input", "PanelUI"\]/,
+  );
+  assert.match(
+    frameProfiler,
+    /"findNearestTargetPath", "WaveSystem\.pathfind", "Path"/,
+  );
+  assert.match(frameProfiler, /remaining\.slice\(i, i \+ HUD_PER_LINE\)/);
+  for (const label of ["PAlien", "PDrake", "PMech"]) {
+    assert.match(frameProfiler, new RegExp(`short: "${label}"`));
+  }
   const performanceIndex = markup.indexOf('id="settings-performance"');
   for (const view of ["overview", "build", "crafts", "units", "settings"]) {
     assert.ok(
@@ -91,4 +110,44 @@ test("tablet exposes live headset performance diagnostics", () => {
   }
   assert.match(tablet, /RuntimePerformance/);
   assert.match(tablet, /movingEntities/);
+});
+
+test("waves prepare incrementally while reserves stay cheap", () => {
+  const constants = source("src/systems/constants.ts");
+  const structures = source("src/systems/structures.ts");
+  const wave = source("src/systems/wave.ts");
+  const enemyFactory = structures.slice(
+    structures.indexOf("export function createEnemyEntity"),
+    structures.indexOf("export function createInitialScenario"),
+  );
+
+  assert.match(constants, /WAVE_PREP_PER_FRAME = 1/);
+  assert.match(wave, /this\.prepareWaveIncrementally\(source\)/);
+  assert.match(wave, /this\.spawnCursor \+ WAVE_PREP_PER_FRAME/);
+  assert.match(wave, /this\.createPreparedAlien\(this\.pendingSpawns/);
+  assert.match(wave, /slowestBuildAsset = spawn\.asset/);
+  assert.match(wave, /slowestBuildName = spawn\.name/);
+  assert.match(wave, /alien\.object3D\.visible = true/);
+  assert.match(wave, /alien\.addComponent\(RayInteractable\)/);
+
+  assert.match(enemyFactory, /holder\.visible = false/);
+  assert.doesNotMatch(enemyFactory, /\.addComponent\(RayInteractable\)/);
+  assert.equal(enemyFactory.match(/setFromObject\(model\)/g)?.length, 1);
+});
+
+test("alien pathfinding is bounded, shared, and follows cached routes", () => {
+  const constants = source("src/systems/constants.ts");
+  const navigation = source("src/systems/navigation.ts");
+  const wave = source("src/systems/wave.ts");
+
+  assert.match(constants, /ALIEN_PATHFINDS_PER_FRAME = 1/);
+  assert.match(navigation, /class ReusableGridPathfinder/);
+  assert.match(navigation, /goalByCell: Int32Array/);
+  assert.match(wave, /private readonly routeByAlien = new Map<number, AlienRoute>/);
+  assert.match(wave, /this\.rebuildNavigationOccupancy\(\)/);
+  assert.match(wave, /pathfindsRemaining = ALIEN_PATHFINDS_PER_FRAME/);
+  assert.match(wave, /if \(pathfindsRemaining <= 0\) continue/);
+  assert.match(wave, /this\.resumeCachedRoute\(alien, currentTarget\)/);
+  assert.match(wave, /this\.pathfinder\.findPathToAny/);
+  assert.doesNotMatch(wave, /findPathToTarget/);
 });

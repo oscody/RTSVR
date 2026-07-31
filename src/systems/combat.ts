@@ -1,6 +1,7 @@
 import { Entity, RayInteractable, createSystem } from "@iwsdk/core";
 import {
   advanceAttackCycle,
+  canFriendlyTargetWaveStage,
   getEnemyAttackSpec,
   isWithinAttackRange,
   resolveDamageInto,
@@ -457,6 +458,9 @@ export class CombatSystem extends createSystem({
       !target?.object3D ||
       !target.hasComponent(Enemy) ||
       !target.hasComponent(Health) ||
+      !canFriendlyTargetWaveStage(
+        target.getValue(WaveUnit, "stage") ?? "waiting",
+      ) ||
       (target.getValue(Health, "current") ?? 0) <= 0
     ) {
       return false;
@@ -475,7 +479,13 @@ export class CombatSystem extends createSystem({
     let nearest: Entity | null = null;
     let nearestDistance = Number.POSITIVE_INFINITY;
     for (const enemy of this.queries.enemyTargets.entities) {
-      if (!enemy.object3D || (enemy.getValue(Health, "current") ?? 0) <= 0) {
+      if (
+        !enemy.object3D ||
+        !canFriendlyTargetWaveStage(
+          enemy.getValue(WaveUnit, "stage") ?? "waiting",
+        ) ||
+        (enemy.getValue(Health, "current") ?? 0) <= 0
+      ) {
         continue;
       }
       const distance = attacker.object3D.position.distanceTo(

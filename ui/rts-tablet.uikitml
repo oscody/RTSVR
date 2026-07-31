@@ -718,7 +718,8 @@
   </div>
   <div class="performance-strip">
     <span id="settings-performance" class="performance-text">FPS -- | Avg -- ms | Worst -- ms | Moving 0</span>
-    <span id="settings-frame-profile" class="performance-profile-text">Wave -- | Spawn -- | Alien -- | Combat -- | Tablet --</span>
+    <span id="settings-frame-profile" class="performance-profile-text">Prep -- | PAlien -- | PDrake -- | PMech -- | Spawn --
+Wave -- | Tablet -- | Input -- | PanelUI --</span>
   </div>
   <div id="overview-view" class="view">
     <span class="section-title">Economy and forces</span>

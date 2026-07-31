@@ -8,8 +8,10 @@ import { WaveSystem } from "./wave.js";
 // tick to refresh the HUD text, which the tablet's Settings tab shows via
 // getFrameProfileHud(). Flip FRAME_PROFILER_ENABLED off to disable.
 const FRAME_PROFILER_ENABLED = true;
-// Every system, 6 per line, in the tablet's dedicated (taller) frame-profile row.
+// General systems use 6 per line after the two fixed diagnostic rows.
 const HUD_PER_LINE = 6;
+const PREPARATION_ROW = ["Prep", "PAlien", "PDrake", "PMech", "Spawn"] as const;
+const CORE_ROW = ["Wave", "Path", "Tablet", "Input", "PanelUI"] as const;
 
 interface ProfSlot {
   label: string;
@@ -65,6 +67,45 @@ function wrapMethod(system: any, method: string, label: string, short: string): 
   };
 }
 
+interface MethodProfileDescriptor {
+  label: string;
+  short: string;
+}
+
+// Profile one method into different slots based on its arguments. Wave enemy
+// construction uses this to reveal which model type caused a preparation hitch.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function wrapMethodByArgument(
+  system: any,
+  method: string,
+  describe: (args: unknown[]) => MethodProfileDescriptor,
+): void {
+  if (!system || typeof system[method] !== "function") return;
+  const original = system[method].bind(system);
+  system[method] = (...args: unknown[]) => {
+    const descriptor = describe(args);
+    const slot = slotFor(descriptor.label, descriptor.short);
+    const start = performance.now();
+    const result = original(...args);
+    record(slot, performance.now() - start);
+    return result;
+  };
+}
+
+function waveBuildDescriptor(args: unknown[]): MethodProfileDescriptor {
+  const enemy = (args[0] as { enemy?: string } | undefined)?.enemy;
+  switch (enemy) {
+    case "alien":
+      return { label: "WaveSystem.build.alien", short: "PAlien" };
+    case "alienDrake":
+      return { label: "WaveSystem.build.alienDrake", short: "PDrake" };
+    case "strongAlienMech":
+      return { label: "WaveSystem.build.strongAlienMech", short: "PMech" };
+    default:
+      return { label: "WaveSystem.build.unknown", short: "PUnknown" };
+  }
+}
+
 /**
  * Rebuild the compact worst-frame-ms-per-system HUD line and reset the
  * accumulators. Called by PerformanceSystem on its sample tick so the tablet
@@ -72,18 +113,29 @@ function wrapMethod(system: any, method: string, label: string, short: string): 
  */
 export function flushFrameProfile(): void {
   if (!installed || slots.length === 0) return;
-  // Runs at 1 Hz (PerformanceSystem sample tick), so allocation here is fine.
-  // Every system's worst-frame ms, chunked HUD_PER_LINE per line.
-  const parts: string[] = [];
+  const partsByShort = new Map<string, string>();
   for (const slot of slots) {
-    parts.push(`${slot.short} ${slot.maxMs.toFixed(1)}`);
+    partsByShort.set(slot.short, `${slot.short} ${slot.maxMs.toFixed(1)}`);
     slot.frames = 0;
     slot.totalMs = 0;
     slot.maxMs = 0;
   }
-  const lines: string[] = [];
-  for (let i = 0; i < parts.length; i += HUD_PER_LINE) {
-    lines.push(parts.slice(i, i + HUD_PER_LINE).join(" | "));
+
+  const priorityShorts = new Set<string>([...PREPARATION_ROW, ...CORE_ROW]);
+  const lines = [
+    PREPARATION_ROW.map((short) => partsByShort.get(short)).filter(
+      (part): part is string => part !== undefined,
+    ).join(" | "),
+    CORE_ROW.map((short) => partsByShort.get(short)).filter(
+      (part): part is string => part !== undefined,
+    ).join(" | "),
+  ].filter((line) => line.length > 0);
+  const remaining = slots
+    .filter((slot) => !priorityShorts.has(slot.short))
+    .map((slot) => partsByShort.get(slot.short))
+    .filter((part): part is string => part !== undefined);
+  for (let i = 0; i < remaining.length; i += HUD_PER_LINE) {
+    lines.push(remaining.slice(i, i + HUD_PER_LINE).join(" | "));
   }
   hudLine = lines.join("\n");
 }
@@ -100,16 +152,26 @@ function shortName(className: string): string {
 }
 
 /**
- * Wrap EVERY registered system's update() (plus WaveSystem's private spawn, so
- * the wave-spawn spike shows separately) to record per-frame cost. Call once
- * after all game systems are registered. No-op when disabled or if called twice.
+ * Wrap EVERY registered system's update() plus WaveSystem's preparation and
+ * spawn methods. Nested wave timings separate countdown work from activation
+ * and identify the enemy model responsible for construction spikes.
  */
 export function installFrameProfiler(world: World): void {
   if (!FRAME_PROFILER_ENABLED || installed) return;
   installed = true;
+  slotFor("WaveSystem.prepare", "Prep");
+  slotFor("WaveSystem.build.alien", "PAlien");
+  slotFor("WaveSystem.build.alienDrake", "PDrake");
+  slotFor("WaveSystem.build.strongAlienMech", "PMech");
+  slotFor("WaveSystem.spawn", "Spawn");
+  slotFor("WaveSystem.pathfind", "Path");
   for (const system of world.getSystems()) {
     const name = system.constructor.name;
     wrapUpdate(system, name, shortName(name));
   }
-  wrapMethod(world.getSystem(WaveSystem), "spawnWaveIfNeeded", "WaveSystem.spawn", "Spawn");
+  const wave = world.getSystem(WaveSystem);
+  wrapMethod(wave, "prepareWaveIncrementally", "WaveSystem.prepare", "Prep");
+  wrapMethodByArgument(wave, "createPreparedAlien", waveBuildDescriptor);
+  wrapMethod(wave, "spawnWaveIfNeeded", "WaveSystem.spawn", "Spawn");
+  wrapMethod(wave, "findNearestTargetPath", "WaveSystem.pathfind", "Path");
 }

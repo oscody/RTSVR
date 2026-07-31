@@ -8,6 +8,7 @@ import {
   UNIT_ATTACK_SPECS,
   UNIT_MAX_HEALTH,
   advanceAttackCycle,
+  canFriendlyTargetWaveStage,
   canUnitAttack,
   getEnemyAttackSpec,
   getEnemyMaxHealth,
@@ -50,6 +51,13 @@ test("friendly units auto-acquire unless constructing", () => {
   assert.equal(shouldAutoAcquireUnitTarget(false, false), true);
   assert.equal(shouldAutoAcquireUnitTarget(true, false), true);
   assert.equal(shouldAutoAcquireUnitTarget(false, true), false);
+});
+
+test("friendly combat ignores hidden waiting-wave reserves", () => {
+  assert.equal(canFriendlyTargetWaveStage("waiting"), false);
+  assert.equal(canFriendlyTargetWaveStage("released"), true);
+  assert.equal(canFriendlyTargetWaveStage("marching"), true);
+  assert.equal(canFriendlyTargetWaveStage("attacking"), true);
 });
 
 test("debug settings catalog exposes combat health and attack power knobs", () => {

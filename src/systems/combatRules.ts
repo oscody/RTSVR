@@ -61,6 +61,10 @@ export function shouldAutoAcquireUnitTarget(
   return !constructionActive;
 }
 
+export function canFriendlyTargetWaveStage(stage: string): boolean {
+  return stage !== "waiting";
+}
+
 export function getUnitMaxHealth(kind: string): number {
   return UNIT_MAX_HEALTH[kind] ?? 100;
 }

@@ -237,7 +237,8 @@ export class TabletSystem extends createSystem({
     );
     this.setText(
       "settings-frame-profile",
-      profilerHud || "Wave -- | Spawn -- | Alien -- | Combat -- | Tablet --",
+      profilerHud ||
+        "Prep -- | PAlien -- | PDrake -- | PMech -- | Spawn --\nWave -- | Tablet -- | Input -- | PanelUI --",
     );
     this.setText("tablet-status", tablet.getValue(TabletState, "status") ?? "");
     element(document, "tablet-status")?.setProperties({

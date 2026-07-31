@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { findApproachTile, findGridPath } from "../src/systems/navigation.ts";
+import {
+  ReusableGridPathfinder,
+  findApproachTile,
+  findGridPath,
+} from "../src/systems/navigation.ts";
 
 test("approaches the facing edge of a blocked 3x3 building", () => {
   const blocked = new Set<string>();
@@ -74,4 +78,42 @@ test("BFS returns null when every route is sealed", () => {
   });
 
   assert.equal(path, null);
+});
+
+test("reusable BFS chooses the nearest reachable target in one search", () => {
+  const pathfinder = new ReusableGridPathfinder(5);
+  const goals = new Int32Array(25);
+  goals.fill(-1);
+  goals[4] = 40;
+  goals[10] = 20;
+
+  const found = pathfinder.findPathToAny(0, 0, goals, () => true);
+
+  assert.equal(found, true);
+  assert.equal(pathfinder.goalValue, 20);
+  assert.equal(pathfinder.pathLength, 2);
+  assert.deepEqual(Array.from(pathfinder.path.slice(0, 2)), [5, 10]);
+});
+
+test("reusable BFS clears prior search state without allocating new buffers", () => {
+  const pathfinder = new ReusableGridPathfinder(5);
+  const goals = new Int32Array(25);
+  goals.fill(-1);
+  goals[10] = 20;
+  assert.equal(pathfinder.findPathToAny(0, 0, goals, () => true), true);
+  const pathBuffer = pathfinder.path;
+
+  goals.fill(-1);
+  goals[4] = 40;
+  assert.equal(
+    pathfinder.findPathToAny(0, 0, goals, (x, y) => x !== 2 || y !== 0),
+    true,
+  );
+
+  assert.equal(pathfinder.path, pathBuffer);
+  assert.equal(pathfinder.goalValue, 40);
+  assert.deepEqual(
+    Array.from(pathfinder.path.slice(0, pathfinder.pathLength)),
+    [1, 6, 7, 8, 3, 4],
+  );
 });

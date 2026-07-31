@@ -171,8 +171,10 @@ function stampTerrain(spec: StructureSpec, terrain: BoardTerrain): void {
   }
 }
 
-function seatModel(model: Object3D): void {
-  const box = new Box3().setFromObject(model);
+function seatModel(
+  model: Object3D,
+  box: Box3 = new Box3().setFromObject(model),
+): void {
   model.position.x -= (box.min.x + box.max.x) / 2;
   model.position.z -= (box.min.z + box.max.z) / 2;
   model.position.y -= box.min.y;
@@ -203,8 +205,10 @@ function addInteractionProxy(
   spec: InteractionProxySpec,
   model: Object3D,
   visualYOffset = 0,
+  measuredSize?: Vector3,
 ): void {
-  const size = new Box3().setFromObject(model).getSize(new Vector3());
+  const size =
+    measuredSize ?? new Box3().setFromObject(model).getSize(new Vector3());
   const footprint = spec.widthTiles * TILE_SIZE * 0.82;
   const height = Math.max(size.y + visualYOffset, TILE_SIZE * 0.8);
   const proxy = new Mesh(
@@ -242,22 +246,36 @@ export function createEnemyEntity(
   const gltf = AssetManager.getGLTF(spec.asset);
   if (!gltf) throw new Error(`${spec.asset} not preloaded`);
   const model = gltf.scene;
-  const width = new Box3().setFromObject(model).getSize(new Vector3()).x;
+  const modelBox = new Box3().setFromObject(model);
+  const modelSize = modelBox.getSize(new Vector3());
+  const width = modelSize.x;
   const scale = (spec.widthTiles * TILE_SIZE) / width;
+  const previousScale = model.scale.x || 1;
+  const scaleRatio = scale / previousScale;
   model.scale.setScalar(scale);
-  seatModel(model);
+  modelBox.min
+    .sub(model.position)
+    .multiplyScalar(scaleRatio)
+    .add(model.position);
+  modelBox.max
+    .sub(model.position)
+    .multiplyScalar(scaleRatio)
+    .add(model.position);
+  modelSize.multiplyScalar(scaleRatio);
+  seatModel(model, modelBox);
   const visualYOffset = enemyVisualElevation(spec);
   model.position.y += visualYOffset;
 
   const holder = new Group();
   holder.name = spec.name;
+  holder.visible = false;
   if (spec.yawDeg !== undefined) {
     holder.rotation.y = (spec.yawDeg * Math.PI) / 180;
   }
   const [worldX, worldZ] = gridToWorld(spec.x, spec.y);
   holder.position.set(worldX, 0.006, worldZ);
   holder.add(model);
-  addInteractionProxy(holder, spec, model, visualYOffset);
+  addInteractionProxy(holder, spec, model, visualYOffset, modelSize);
 
   const maxHealth = currentEnemyMaxHealth(
     spec.kind,
@@ -269,8 +287,7 @@ export function createEnemyEntity(
     .addComponent(Enemy, { kind: spec.kind })
     .addComponent(Health, { current: maxHealth, max: maxHealth })
     .addComponent(CombatState)
-    .addComponent(WaveUnit)
-    .addComponent(RayInteractable);
+    .addComponent(WaveUnit);
 
   if (
     spec.asset === "alienWalkingSlam" ||

@@ -5,6 +5,15 @@ export const BOARD_Y = 0.78;
 export const UNIT_MOVE_SPEED = 0.35;
 export const UNIT_ARRIVAL_EPSILON = 0.005;
 
+// How many aliens the WaveSystem creates per frame while amortizing the next
+// wave's build across the between-wave countdown (spawn spike -> spread out).
+// Fixed count (not a time budget) for predictability; 30s countdown ~= 2160
+// frames at 72fps, so even a large wave finishes well within it.
+export const WAVE_PREP_PER_FRAME = 1;
+// Bound expensive route creation so simultaneous alien releases cannot put
+// several full-board searches on the same Quest frame.
+export const ALIEN_PATHFINDS_PER_FRAME = 1;
+
 export const ORDER_MARKER_COLOR = 0xffbd59;
 export const BLOCKED_MARKER_COLOR = 0xff5050;
 export const VALID_PLACEMENT_MARKER_COLOR = 0x22c55e;
