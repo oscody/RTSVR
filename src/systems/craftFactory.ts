@@ -1,7 +1,6 @@
 import {
   AssetManager,
   Box3,
-  BoxGeometry,
   Group,
   Mesh,
   MeshBasicMaterial,
@@ -18,6 +17,7 @@ import type { CraftSpec } from "./craftCatalog.js";
 import { attachCraftVisualRise } from "./craftVisualRise.js";
 import { currentUnitMaxHealth } from "./debugStatOverrides.js";
 import { attachHealthBar } from "./healthBar.js";
+import { UNIT_BOX_GEOMETRY } from "./sharedGeometry.js";
 import { attachMinerAnimation } from "./minerAnimation.js";
 import { attachUnitAnimation } from "./unitAnimation.js";
 import {
@@ -68,16 +68,11 @@ export function createCraftEntity(
 
   const size = new Box3().setFromObject(model).getSize(new Vector3());
   const proxyHeight = Math.max(size.y + visualYOffset, TILE_SIZE * 0.8);
-  const proxy = new Mesh(
-    new BoxGeometry(
-      TILE_SIZE * 0.82,
-      proxyHeight,
-      TILE_SIZE * 0.82,
-    ),
-    interactionProxyMaterial,
-  );
+  const proxy = new Mesh(UNIT_BOX_GEOMETRY, interactionProxyMaterial);
   proxy.name = `${holder.name}InteractionProxy`;
+  proxy.scale.set(TILE_SIZE * 0.82, proxyHeight, TILE_SIZE * 0.82);
   proxy.position.y = proxyHeight / 2;
+  proxy.userData.drawCat = "proxy"; // draw-call profiler category
   holder.add(proxy);
 
   const maxHealth = currentUnitMaxHealth(spec.kind);

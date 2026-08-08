@@ -305,6 +305,14 @@ export class WaveSystem extends createSystem({
     alien.setValue(WaveUnit, "stage", "waiting");
     alien.setValue(WaveUnit, "releaseDelay", spawn.releaseDelaySeconds);
     alien.setValue(WaveUnit, "speedMultiplier", spawn.speedMultiplier);
+    // `visible = false` keeps a reserve out of the render pass, but
+    // Object3D.updateMatrixWorld recurses into invisible subtrees regardless
+    // (three.core.js), so ~79 nodes per waiting alien still cost a matrix
+    // recompose every frame. Detaching removes that cost entirely. `position`
+    // is local and survives removeFromParent, so isOccupied() still reserves
+    // the spawn tile, and scenarioReset disposes by ECS query rather than by
+    // scene traversal — neither depends on the holder being attached.
+    alien.object3D?.removeFromParent();
     const buildMs = performance.now() - buildStart;
     if (buildMs > this.slowestBuildMs) {
       this.slowestBuildMs = buildMs;
@@ -403,9 +411,16 @@ export class WaveSystem extends createSystem({
     count: number,
   ): void {
     const releaseCount = Math.min(waitingReady.length, Math.max(0, count));
+    const boardRoot = boardState.boardRoot?.object3D;
     for (let index = 0; index < releaseCount; index += 1) {
       const alien = waitingReady[index];
-      if (alien.object3D) alien.object3D.visible = true;
+      if (alien.object3D) {
+        // Re-attach: reserves are detached from the board root while waiting.
+        if (boardRoot && alien.object3D.parent !== boardRoot) {
+          boardRoot.add(alien.object3D);
+        }
+        alien.object3D.visible = true;
+      }
       if (!alien.hasComponent(RayInteractable)) {
         alien.addComponent(RayInteractable);
       }

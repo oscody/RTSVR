@@ -662,7 +662,7 @@
     align-items: center;
     justify-content: center;
     width: 548px;
-    height: 168px;
+    height: 176px;
     margin-top: 4px;
     background-color: #eaf2f5;
     border-width: 1px;
@@ -679,11 +679,15 @@
     text-align: center;
   }
 
+  /* One span per profiler row (frameProfiler.ts builds them). UIKit ignores
+     "\n" inside a text element, so a single span word-wraps the whole block and
+     splits labels mid-row; separate spans are what actually forces line breaks.
+     The font is sized so each row fits on one line at this width. */
   .performance-profile-text {
     width: 532px;
-    height: 148px;
+    height: 13px;
     color: #4d6878;
-    font-size: 10px;
+    font-size: 8px;
     font-weight: 700;
     text-align: center;
   }
@@ -718,8 +722,20 @@
   </div>
   <div class="performance-strip">
     <span id="settings-performance" class="performance-text">FPS -- | Avg -- ms | Worst -- ms | Moving 0</span>
-    <span id="settings-frame-profile" class="performance-profile-text">Prep -- | PAlien -- | PDrake -- | PMech -- | Spawn --
-Wave -- | Tablet -- | Input -- | PanelUI --</span>
+    <span id="settings-frame-profile-1" class="performance-profile-text">Calls -- | Tris -- | Objs -- | Mesh -- | Geom -- | Prog -- | Prof --</span>
+    <span id="settings-frame-profile-2" class="performance-profile-text">Draw --</span>
+    <span id="settings-frame-profile-3" class="performance-profile-text">TotalMeshes -- | Frame -- | Update -- | Render -- | Other --</span>
+    <span id="settings-frame-profile-4" class="performance-profile-text">Prep -- | PAlien -- | PDrake -- | PMech -- | Spawn -- | Wave --</span>
+    <span id="settings-frame-profile-5" class="performance-profile-text">Path -- | Tablet -- | Input -- | PanelUI -- | ScreenSpaceUI --</span>
+    <span id="settings-frame-profile-6" class="performance-profile-text">CanvasPointer -- | Grab -- | Transform -- | Visibility -- | Environment --</span>
+    <span id="settings-frame-profile-7" class="performance-profile-text">Movement -- | Combat -- | CombatEffects --</span>
+    <span id="settings-frame-profile-8" class="performance-profile-text">AlienAnim -- | CommandCenterAnim -- | TurretAnim --</span>
+    <span id="settings-frame-profile-9" class="performance-profile-text">UnitAnim -- | Mining -- | MinerAnim --</span>
+    <span id="settings-frame-profile-10" class="performance-profile-text">Construction -- | CraftProduction -- | CraftVisualRise --</span>
+    <span id="settings-frame-profile-11" class="performance-profile-text">Level -- | Audio -- | Follow -- | Board -- | Sky -- | Structures --</span>
+    <span id="settings-frame-profile-12" class="performance-profile-text">Performance -- | Interaction -- | Meteor -- | MatchResult -- | ScenarioReset --</span>
+    <span id="settings-frame-profile-13" class="performance-profile-text"></span>
+    <span id="settings-frame-profile-14" class="performance-profile-text"></span>
   </div>
   <div id="overview-view" class="view">
     <span class="section-title">Economy and forces</span>

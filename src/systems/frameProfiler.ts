@@ -8,10 +8,32 @@ import { WaveSystem } from "./wave.js";
 // tick to refresh the HUD text, which the tablet's Settings tab shows via
 // getFrameProfileHud(). Flip FRAME_PROFILER_ENABLED off to disable.
 const FRAME_PROFILER_ENABLED = true;
-// General systems use 6 per line after the two fixed diagnostic rows.
+// Any system not named in HUD_ROWS falls back to this many per line.
 const HUD_PER_LINE = 6;
-const PREPARATION_ROW = ["Prep", "PAlien", "PDrake", "PMech", "Spawn"] as const;
-const CORE_ROW = ["Wave", "Path", "Tablet", "Input", "PanelUI"] as const;
+// Fixed HUD rows, in display order. Systems are grouped by what they do so a
+// line can be scanned as a unit; the previous layout packed them 6-at-a-time in
+// registration order and let the tablet word-wrap mid-row, which split labels
+// across lines and made the block unreadable on device.
+const PREPARATION_ROW = ["Prep", "PAlien", "PDrake", "PMech", "Spawn", "Wave"] as const;
+const CORE_ROW = ["Path", "Tablet", "Input", "PanelUI", "ScreenSpaceUI"] as const;
+const POINTER_ROW = ["CanvasPointer", "Grab", "Transform", "Visibility", "Environment"] as const;
+const SIM_ROW = ["Movement", "Combat", "CombatEffects"] as const;
+const BATTLE_ANIM_ROW = ["AlienAnim", "CommandCenterAnim", "TurretAnim"] as const;
+const UNIT_ROW = ["UnitAnim", "Mining", "MinerAnim"] as const;
+const PRODUCTION_ROW = ["Construction", "CraftProduction", "CraftVisualRise"] as const;
+const WORLD_ROW = ["Level", "Audio", "Follow", "Board", "Sky", "Structures"] as const;
+const SESSION_ROW = ["Performance", "Interaction", "Meteor", "MatchResult", "ScenarioReset"] as const;
+const HUD_ROWS: readonly (readonly string[])[] = [
+  PREPARATION_ROW,
+  CORE_ROW,
+  POINTER_ROW,
+  SIM_ROW,
+  BATTLE_ANIM_ROW,
+  UNIT_ROW,
+  PRODUCTION_ROW,
+  WORLD_ROW,
+  SESSION_ROW,
+];
 // Whole-frame decomposition. The per-system rows only cover system.update();
 // the actual frame also spends time in renderer.render() and in
 // compositor/GPU-wait/GC that no system wraps. Frame = Update + Render + Other,
@@ -60,6 +82,10 @@ let installed = false;
 // Compact summary for the tablet HUD (worst-frame ms per system),
 // refreshed each time PerformanceSystem flushes. Read via getFrameProfileHud().
 let hudLine = "";
+// Same content as hudLine, split per row. The tablet renders one span per entry
+// because UIKit ignores "\n" inside a text element — a single span word-wraps
+// the whole block and splits labels mid-row, which is unreadable on device.
+let hudLines: string[] = [];
 
 function slotFor(label: string, short: string): ProfSlot {
   for (const slot of slots) if (slot.label === label) return slot;
@@ -179,18 +205,19 @@ export function flushFrameProfile(): void {
     sceneMeshCount = meshes;
   }
   // "Draw:" line — visible meshes per category, biggest first, plus the total
-  // (compare against `Calls` on the counts line to gauge how good the proxy is).
+  // (compare `TotalMeshes` against `Calls` on the counts line to gauge how good
+  // the proxy is). Label stays ASCII: the tablet's font atlas has no "Σ" glyph,
+  // so a sigma renders on-device as an unreadable missing-glyph box.
   let drawLine = "";
+  let drawTotal = 0;
   if (drawBuckets.size > 0) {
-    let sum = 0;
-    for (const n of drawBuckets.values()) sum += n;
+    for (const n of drawBuckets.values()) drawTotal += n;
     drawLine =
       "Draw " +
       [...drawBuckets.entries()]
         .sort((a, b) => b[1] - a[1])
         .map(([cat, n]) => `${cat} ${n}`)
-        .join(" | ") +
-      ` | Σ${sum}`;
+        .join(" | ");
   }
   const countsLine = maxDrawCalls > 0 || sceneObjectCount > 0
     ? `Calls ${maxDrawCalls} | Tris ${Math.round(maxTriangles / 1000)}k | ` +
@@ -209,20 +236,26 @@ export function flushFrameProfile(): void {
 
   const priorityShorts = new Set<string>([
     ...DIAG_ROW,
-    ...PREPARATION_ROW,
-    ...CORE_ROW,
+    ...HUD_ROWS.flat(),
   ]);
   const rowLine = (row: readonly string[]): string =>
     row
       .map((short) => partsByShort.get(short))
       .filter((part): part is string => part !== undefined)
       .join(" | ");
+  // The draw-bucket total leads the whole-frame decomposition so the two
+  // "how much work was this frame" numbers sit on one line.
+  const diagLine = [
+    drawTotal > 0 ? `TotalMeshes ${drawTotal}` : "",
+    rowLine(DIAG_ROW),
+  ]
+    .filter((part) => part.length > 0)
+    .join(" | ");
   const lines = [
     countsLine,
     drawLine,
-    rowLine(DIAG_ROW),
-    rowLine(PREPARATION_ROW),
-    rowLine(CORE_ROW),
+    diagLine,
+    ...HUD_ROWS.map(rowLine),
   ].filter((line) => line.length > 0);
   const remaining = slots
     .filter((slot) => !priorityShorts.has(slot.short))
@@ -231,6 +264,7 @@ export function flushFrameProfile(): void {
   for (let i = 0; i < remaining.length; i += HUD_PER_LINE) {
     lines.push(remaining.slice(i, i + HUD_PER_LINE).join(" | "));
   }
+  hudLines = lines;
   hudLine = lines.join("\n");
 
   maxDrawCalls = 0;
@@ -246,6 +280,11 @@ export function flushFrameProfile(): void {
 /** Compact profiler summary for the tablet HUD (empty until first flush). */
 export function getFrameProfileHud(): string {
   return hudLine;
+}
+
+/** One entry per HUD row, for renderers that need real line breaks. */
+export function getFrameProfileHudLines(): readonly string[] {
+  return hudLines;
 }
 
 // Short HUD label from a class name: drop the "System" suffix and abbreviate

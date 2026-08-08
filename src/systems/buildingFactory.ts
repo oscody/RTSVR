@@ -1,7 +1,6 @@
 import {
   AssetManager,
   Box3,
-  BoxGeometry,
   Group,
   Mesh,
   MeshBasicMaterial,
@@ -16,6 +15,7 @@ import type { BuildingSpec } from "./buildingCatalog.js";
 import { footprintCells } from "./constructionRules.js";
 import { currentBuildingMaxHealth } from "./debugStatOverrides.js";
 import { attachHealthBar } from "./healthBar.js";
+import { UNIT_BOX_GEOMETRY } from "./sharedGeometry.js";
 import { attachTurretAnimation } from "./turretAnimation.js";
 import {
   Building,
@@ -71,16 +71,13 @@ export function createBuildingEntity(
   holder.add(model);
 
   const size = new Box3().setFromObject(model).getSize(new Vector3());
-  const proxy = new Mesh(
-    new BoxGeometry(
-      spec.widthTiles * TILE_SIZE * 0.86,
-      Math.max(size.y, TILE_SIZE * 0.8),
-      spec.widthTiles * TILE_SIZE * 0.86,
-    ),
-    interactionProxyMaterial,
-  );
+  const proxyFootprint = spec.widthTiles * TILE_SIZE * 0.86;
+  const proxyHeight = Math.max(size.y, TILE_SIZE * 0.8);
+  const proxy = new Mesh(UNIT_BOX_GEOMETRY, interactionProxyMaterial);
   proxy.name = `${name}InteractionProxy`;
-  proxy.position.y = Math.max(size.y, TILE_SIZE * 0.8) / 2;
+  proxy.scale.set(proxyFootprint, proxyHeight, proxyFootprint);
+  proxy.position.y = proxyHeight / 2;
+  proxy.userData.drawCat = "proxy"; // draw-call profiler category
   holder.add(proxy);
 
   const maxHealth = currentBuildingMaxHealth(spec.kind);

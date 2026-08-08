@@ -8,7 +8,7 @@ import {
   type Entity,
   type Object3D,
 } from "@iwsdk/core";
-import { TILE_SIZE } from "./board.js";
+import { TILE_SIZE } from "./board.ts";
 import {
   HEALTH_BAR_BACKGROUND_COLOR,
   HEALTH_BAR_CRITICAL_COLOR,
@@ -16,7 +16,7 @@ import {
   HEALTH_BAR_HEALTHY_COLOR,
   HEALTH_BAR_WARNING_COLOR,
 } from "./constants.ts";
-import { Health } from "./state.js";
+import { Health } from "./state.ts";
 
 export function attachHealthBar(holder: Object3D): void {
   const size = new Box3().setFromObject(holder).getSize(new Vector3());

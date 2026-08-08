@@ -62,7 +62,7 @@ import {
   TABLET_UNIT_BACKGROUND,
   TABLET_Y_OFFSET,
 } from "./constants.ts";
-import { getFrameProfileHud } from "./frameProfiler.js";
+import { getFrameProfileHudLines } from "./frameProfiler.js";
 import {
   clearUnitSelections,
   getSingleSelectedUnit,
@@ -94,6 +94,10 @@ import {
   boardState,
   type DebugSettingKey,
 } from "./state.js";
+
+// Number of `settings-frame-profile-N` spans in rts-tablet.uikitml. Keep in
+// sync with the markup; extra rows are blanked so the strip height is stable.
+const PROFILE_ROW_COUNT = 14;
 
 type UiElement = UIKit.Text & {
   setProperties(properties: Record<string, unknown>): void;
@@ -228,18 +232,22 @@ export class TabletSystem extends createSystem({
     this.setText("overview-astronauts", `${astronauts}`);
     this.setText("overview-enemies", `${enemyCount}`);
     this.setText("overview-kills", `${kills}`);
-    const profilerHud = getFrameProfileHud();
+    const profilerHudLines = getFrameProfileHudLines();
     this.setText(
       "settings-performance",
       performanceRevision > 0
         ? `FPS ${Math.round(performance?.getValue(RuntimePerformance, "fps") ?? 0)} | Avg ${(performance?.getValue(RuntimePerformance, "averageFrameMs") ?? 0).toFixed(1)} ms | Worst ${(performance?.getValue(RuntimePerformance, "worstFrameMs") ?? 0).toFixed(1)} ms | Moving ${performance?.getValue(RuntimePerformance, "movingEntities") ?? 0}`
         : "FPS -- | Avg -- ms | Worst -- ms | Moving 0",
     );
-    this.setText(
-      "settings-frame-profile",
-      profilerHud ||
-        "Prep -- | PAlien -- | PDrake -- | PMech -- | Spawn --\nWave -- | Tablet -- | Input -- | PanelUI --",
-    );
+    // One span per row: UIKit ignores "\n" in a text element, so a single span
+    // word-wraps the whole block and splits labels mid-row. Unused rows are
+    // blanked rather than removed so the layout height stays stable.
+    for (let row = 0; row < PROFILE_ROW_COUNT; row += 1) {
+      this.setText(
+        `settings-frame-profile-${row + 1}`,
+        profilerHudLines[row] ?? "",
+      );
+    }
     this.setText("tablet-status", tablet.getValue(TabletState, "status") ?? "");
     element(document, "tablet-status")?.setProperties({
       color:

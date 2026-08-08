@@ -76,22 +76,35 @@ test("board uses one ray target over a continuous ground surface", () => {
   assert.match(state, /terrainByKey: new Map<string, BoardTerrain>\(\)/);
 });
 
+test("health bars keep their headset-verified geometry sizing path", () => {
+  const healthBar = source("src/systems/healthBar.ts");
+
+  assert.doesNotMatch(healthBar, /bar\.scale\.x\s*=/);
+  assert.match(healthBar, /new BoxGeometry\(width, 0\.012/);
+  assert.match(healthBar, /new BoxGeometry\(width, 0\.016/);
+  assert.match(healthBar, /fill\.scale\.x = Math\.max\(0\.001, ratio\)/);
+  assert.match(healthBar, /fill\.position\.x = -\(width \* \(1 - ratio\)\) \/ 2/);
+});
+
 test("tablet exposes live headset performance diagnostics", () => {
   const markup = source("ui/rts-tablet.uikitml");
   const tablet = source("src/systems/tablet.ts");
   const frameProfiler = source("src/systems/frameProfiler.ts");
 
   assert.match(markup, /id="settings-performance"/);
-  assert.match(markup, /id="settings-frame-profile"/);
+  // One span per profiler row: UIKit ignores "\n" inside a text element, so a
+  // single span word-wraps the block and splits labels mid-row.
+  assert.match(markup, /id="settings-frame-profile-1"/);
+  assert.match(markup, /id="settings-frame-profile-12"/);
   assert.match(frameProfiler, /"prepareWaveIncrementally", "WaveSystem\.prepare", "Prep"/);
   assert.match(frameProfiler, /"createPreparedAlien", waveBuildDescriptor/);
   assert.match(
     frameProfiler,
-    /PREPARATION_ROW = \["Prep", "PAlien", "PDrake", "PMech", "Spawn"\]/,
+    /PREPARATION_ROW = \["Prep", "PAlien", "PDrake", "PMech", "Spawn", "Wave"\]/,
   );
   assert.match(
     frameProfiler,
-    /CORE_ROW = \["Wave", "Path", "Tablet", "Input", "PanelUI"\]/,
+    /CORE_ROW = \["Path", "Tablet", "Input", "PanelUI", "ScreenSpaceUI"\]/,
   );
   assert.match(
     frameProfiler,

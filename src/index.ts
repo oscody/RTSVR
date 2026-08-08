@@ -17,6 +17,7 @@ import { InteractionSystem } from "./systems/interaction.js";
 import { MeteorSystem } from "./systems/meteorSystem.js";
 import { MiningSystem } from "./systems/mining.js";
 import { MatchResultSystem } from "./systems/matchResult.js";
+import { optimizeLoadedAssets } from "./systems/meshMerge.js";
 import { MovementSystem } from "./systems/movement.js";
 import { MinerAnimationSystem } from "./systems/minerAnimation.js";
 import { PerformanceSystem } from "./systems/performance.js";
@@ -92,6 +93,9 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     },
   },
 }).then((world) => {
+  // Collapse each GLB's kit-bashed parts into one mesh per (rigid group,
+  // material) BEFORE any system clones an asset, so every instance inherits it.
+  optimizeLoadedAssets(Object.keys(assets), true);
   world
     .registerSystem(BoardSystem)
     .registerSystem(SkySystem)

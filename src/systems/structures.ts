@@ -1,7 +1,6 @@
 import {
   AssetManager,
   Box3,
-  BoxGeometry,
   Group,
   Mesh,
   MeshBasicMaterial,
@@ -33,6 +32,7 @@ import {
 import { attachAlienAnimation } from "./alienAnimation.js";
 import { attachCommandCenterAnimation } from "./commandCenterAnimation.js";
 import { attachHealthBar } from "./healthBar.js";
+import { UNIT_BOX_GEOMETRY } from "./sharedGeometry.js";
 import { attachMinerAnimation } from "./minerAnimation.js";
 import { attachTurretAnimation } from "./turretAnimation.js";
 import { attachUnitAnimation } from "./unitAnimation.js";
@@ -211,11 +211,9 @@ function addInteractionProxy(
     measuredSize ?? new Box3().setFromObject(model).getSize(new Vector3());
   const footprint = spec.widthTiles * TILE_SIZE * 0.82;
   const height = Math.max(size.y + visualYOffset, TILE_SIZE * 0.8);
-  const proxy = new Mesh(
-    new BoxGeometry(footprint, height, footprint),
-    interactionProxyMaterial,
-  );
+  const proxy = new Mesh(UNIT_BOX_GEOMETRY, interactionProxyMaterial);
   proxy.name = `${spec.name}InteractionProxy`;
+  proxy.scale.set(footprint, height, footprint);
   proxy.position.y = height / 2;
   proxy.userData.drawCat = "proxy"; // draw-call profiler category
   holder.add(proxy);
