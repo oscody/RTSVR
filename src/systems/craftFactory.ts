@@ -61,6 +61,7 @@ export function createCraftEntity(
   const holder = new Group();
   craftSerial += 1;
   holder.name = `Produced${spec.label.replace(/ /g, "")}_${craftSerial}`;
+  holder.userData.drawCat = "unit"; // draw-call profiler category
   const [worldX, worldZ] = gridToWorld(x, y);
   holder.position.set(worldX, 0.006, worldZ);
   holder.add(model);

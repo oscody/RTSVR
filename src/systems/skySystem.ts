@@ -94,6 +94,7 @@ export class SkySystem extends createSystem({}) {
       }),
     );
     stars.name = "Starfield";
+    stars.userData.drawCat = "sky"; // draw-call profiler category
     stars.frustumCulled = false;
     stars.renderOrder = -1;
     this.world.createTransformEntity(stars, { persistent: true });

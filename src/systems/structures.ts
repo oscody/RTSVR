@@ -217,7 +217,23 @@ function addInteractionProxy(
   );
   proxy.name = `${spec.name}InteractionProxy`;
   proxy.position.y = height / 2;
+  proxy.userData.drawCat = "proxy"; // draw-call profiler category
   holder.add(proxy);
+}
+
+// XR pointer input recurses through every mesh under a RayInteractable holder
+// and raycasts each one, for both hands, every frame. Alien GLBs carry ~70 mesh
+// primitives (drake/mech), so hit-testing the full visual model is the dominant
+// `Input` cost in later waves (Quest 2026-07-31: Input scaled ~5.6 -> ~13.4 ms
+// with live alien count). Selection only needs the tile-sized box proxy, so make
+// the visual model non-raycastable and let the proxy be the sole ray target.
+// Visuals are unaffected — this only changes hit-testing, not rendering.
+function disableModelRaycast(model: Object3D): void {
+  model.traverse((child) => {
+    if ((child as Mesh).isMesh) {
+      child.raycast = () => {};
+    }
+  });
 }
 
 function addCargoVisual(
@@ -269,12 +285,14 @@ export function createEnemyEntity(
   const holder = new Group();
   holder.name = spec.name;
   holder.visible = false;
+  holder.userData.drawCat = "alien"; // draw-call profiler category
   if (spec.yawDeg !== undefined) {
     holder.rotation.y = (spec.yawDeg * Math.PI) / 180;
   }
   const [worldX, worldZ] = gridToWorld(spec.x, spec.y);
   holder.position.set(worldX, 0.006, worldZ);
   holder.add(model);
+  disableModelRaycast(model);
   addInteractionProxy(holder, spec, model, visualYOffset, modelSize);
 
   const maxHealth = currentEnemyMaxHealth(
@@ -323,6 +341,9 @@ export function createInitialScenario(world: World): void {
 
       const holder = new Group();
       holder.name = spec.name;
+      // draw-call profiler category (units/buildings; static props inherit "static")
+      if (spec.unit) holder.userData.drawCat = "unit";
+      else if (spec.building) holder.userData.drawCat = "building";
       const [x0, x1] = spec.gridX;
       const [y0, y1] = spec.gridY;
       const [wx0, wz0] = gridToWorld(x0, y0);

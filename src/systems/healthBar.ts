@@ -26,6 +26,7 @@ export function attachHealthBar(holder: Object3D): void {
   );
   const bar = new Group();
   bar.name = "HealthBar";
+  bar.userData.drawCat = "hbar"; // draw-call profiler category
   bar.position.y = Math.max(size.y, TILE_SIZE * 0.8) + TILE_SIZE * 0.18;
   bar.userData.fullWidth = width;
 

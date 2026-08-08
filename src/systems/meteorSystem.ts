@@ -129,6 +129,7 @@ function ensurePool(): boolean {
     const holder = new Group();
     holder.name = `Meteor_${index}`;
     holder.visible = false;
+    holder.userData.drawCat = "meteor"; // draw-call profiler category
     holder.add(spinner);
     holder.add(trail);
     meteorWorld.createTransformEntity(holder, { parent: root });

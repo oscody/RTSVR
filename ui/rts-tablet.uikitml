@@ -662,7 +662,7 @@
     align-items: center;
     justify-content: center;
     width: 548px;
-    height: 116px;
+    height: 168px;
     margin-top: 4px;
     background-color: #eaf2f5;
     border-width: 1px;
@@ -681,7 +681,7 @@
 
   .performance-profile-text {
     width: 532px;
-    height: 96px;
+    height: 148px;
     color: #4d6878;
     font-size: 10px;
     font-weight: 700;

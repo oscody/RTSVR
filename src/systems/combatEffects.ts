@@ -166,6 +166,7 @@ function ensurePool(): boolean {
     mesh.name = `CombatBolt_${index}`;
     mesh.visible = false;
     mesh.frustumCulled = false;
+    mesh.userData.drawCat = "vfx"; // draw-call profiler category
     effectsWorld.createTransformEntity(mesh, { parent: root });
     boltSlots.push({
       mesh,
@@ -194,6 +195,7 @@ function ensurePool(): boolean {
     mesh.name = `CombatFlash_${index}`;
     mesh.visible = false;
     mesh.frustumCulled = false;
+    mesh.userData.drawCat = "vfx"; // draw-call profiler category
     effectsWorld.createTransformEntity(mesh, { parent: root });
     flashSlots.push({
       mesh,

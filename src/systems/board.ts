@@ -193,6 +193,9 @@ export class BoardSystem extends createSystem({}) {
   init(): void {
     const rootObject = new Group();
     rootObject.name = "BoardRoot";
+    // Draw-call profiler category (frameProfiler.ts). Everything under the board
+    // root inherits "static" unless its own subtree re-tags (aliens, VFX, etc.).
+    rootObject.userData.drawCat = "static";
     rootObject.position.set(0, BOARD_Y, 0);
     const root = this.world.createTransformEntity(rootObject);
     boardState.boardRoot = root;

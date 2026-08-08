@@ -66,6 +66,7 @@ export function createBuildingEntity(
   const [wx1, wz1] = gridToWorld(last.x, last.y);
   const holder = new Group();
   holder.name = name;
+  holder.userData.drawCat = "building"; // draw-call profiler category
   holder.position.set((wx0 + wx1) / 2, 0.006, (wz0 + wz1) / 2);
   holder.add(model);
 
