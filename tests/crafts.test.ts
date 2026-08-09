@@ -56,21 +56,23 @@ test("valid craft production deducts exactly one catalog cost", () => {
   const result = validateCraftPurchase({
     spec,
     crystals: 100,
-    buildingKind: "hangar",
     tileAvailable: true,
   });
 
   assert.deepEqual(result, { ok: true, remainingCrystals: 40 });
 });
 
-test("command center, hangar, and factory can produce crafts", () => {
-  const spec = getCraftSpec("rover");
-  for (const buildingKind of ["command-center", "hangar", "factory"]) {
+// Place-first, no producer requirement (decided 2026-08-09). You used to have
+// to select a command center, hangar or factory before a craft would validate,
+// and clicking a turret poisoned that selection with no way back. Now a craft
+// only needs to be affordable and to have an open tile.
+test("a craft needs no production building selected or built", () => {
+  for (const kind of ["miner", "racer"]) {
+    const spec = getCraftSpec(kind);
     assert.deepEqual(
       validateCraftPurchase({
         spec,
-        crystals: 40,
-        buildingKind,
+        crystals: spec!.cost,
         tileAvailable: true,
       }),
       { ok: true, remainingCrystals: 0 },
@@ -79,15 +81,13 @@ test("command center, hangar, and factory can produce crafts", () => {
 });
 
 test("invalid craft requests do not return a new balance", () => {
-  const spec = getCraftSpec("cargo");
+  const spec = getCraftSpec("racer");
   const locked = spec ? { ...spec, locked: true } : undefined;
   const results = [
-    validateCraftPurchase({ spec: undefined, crystals: 100, buildingKind: "hangar", tileAvailable: true }),
-    validateCraftPurchase({ spec: locked, crystals: 100, buildingKind: "hangar", tileAvailable: true }),
-    validateCraftPurchase({ spec, crystals: 100, buildingKind: null, tileAvailable: true }),
-    validateCraftPurchase({ spec, crystals: 100, buildingKind: "turret", tileAvailable: true }),
-    validateCraftPurchase({ spec, crystals: 10, buildingKind: "hangar", tileAvailable: true }),
-    validateCraftPurchase({ spec, crystals: 100, buildingKind: "hangar", tileAvailable: false }),
+    validateCraftPurchase({ spec: undefined, crystals: 100, tileAvailable: true }),
+    validateCraftPurchase({ spec: locked, crystals: 100, tileAvailable: true }),
+    validateCraftPurchase({ spec, crystals: 10, tileAvailable: true }),
+    validateCraftPurchase({ spec, crystals: 100, tileAvailable: false }),
   ];
 
   for (const result of results) {
@@ -98,9 +98,8 @@ test("invalid craft requests do not return a new balance", () => {
 
 test("a blocked selected tile rejects craft production", () => {
   const result = validateCraftPurchase({
-    spec: getCraftSpec("rover"),
+    spec: getCraftSpec("racer"),
     crystals: 100,
-    buildingKind: "factory",
     tileAvailable: false,
   });
   assert.deepEqual(result, { ok: false, error: "That tile is blocked" });

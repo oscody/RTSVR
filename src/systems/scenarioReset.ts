@@ -15,7 +15,9 @@ import {
   createScenarioResetDefaults,
   isScenarioRestartRequested,
 } from "./scenarioResetRules.js";
+import { cancelConstructionSite } from "./construction.js";
 import {
+  ConstructionSite,
   DebugSettings,
   GameState,
   GameStats,
@@ -38,6 +40,11 @@ const SCENARIO_RESET_DEFAULTS = createScenarioResetDefaults(
 
 export class ScenarioResetSystem extends createSystem({
   objects: { required: [ScenarioObject] },
+  // Construction sites are disposed by name, not incidentally. They used to be
+  // owned by a builder and vanish with it; a place-first site can be unclaimed,
+  // so nothing else guarantees it — and an orphan site would keep its reserved
+  // footprint blocked for the whole next match.
+  sites: { required: [ConstructionSite] },
 }) {
   update(): void {
     const source = boardState.waveSource;
@@ -69,6 +76,18 @@ export class ScenarioResetSystem extends createSystem({
     boardState.attackRangeRingByUnit.clear();
     for (const ring of boardState.rangeRingByTurret.values()) ring.dispose();
     boardState.rangeRingByTurret.clear();
+
+    const staleSites = Array.from(this.queries.sites.entities);
+    for (const site of staleSites) {
+      // No refund on restart — the whole economy is being reset anyway, and a
+      // refund here would credit crystals into the fresh starting balance.
+      cancelConstructionSite(site, false);
+    }
+    boardState.buildersBySite.clear();
+    boardState.liveSites.length = 0;
+    boardState.selectedSite = null;
+    // Build-queue numbering restarts at 1 with the match.
+    boardState.nextQueueOrder = 1;
 
     const staleObjects = Array.from(this.queries.objects.entities);
     for (const entity of staleObjects) {
@@ -186,6 +205,8 @@ export class ScenarioResetSystem extends createSystem({
     tablet.setValue(TabletState, "astronaut", null);
     tablet.setValue(TabletState, "astronautIndex", -1);
     tablet.setValue(TabletState, "selectedBuildingKind", "none");
+    tablet.setValue(TabletState, "selectedSite", null);
+    tablet.setValue(TabletState, "selectedSiteIndex", -1);
     tablet.setValue(TabletState, "buildPlacementActive", false);
     tablet.setValue(TabletState, "spawnBuilding", boardState.commandCenter);
     tablet.setValue(
@@ -193,6 +214,8 @@ export class ScenarioResetSystem extends createSystem({
       "spawnBuildingIndex",
       boardState.commandCenter?.index ?? -1,
     );
+    tablet.setValue(TabletState, "focusBuilding", null);
+    tablet.setValue(TabletState, "focusBuildingIndex", -1);
     tablet.setValue(TabletState, "selectedCraftKind", "none");
     tablet.setValue(TabletState, "selectedCraftCost", 0);
     tablet.setValue(TabletState, "craftPage", 0);

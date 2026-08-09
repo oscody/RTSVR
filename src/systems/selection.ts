@@ -125,6 +125,42 @@ export function removeUnitFromSelection(unit: Entity): void {
   publishSelectionSummary();
 }
 
+// Deselecting only HIDES a unit's rings, because a live unit will very likely
+// be selected again and rebuilding the geometry each time is wasteful. Death or
+// deliberate destruction is different: the rings are garbage, and EliCS
+// **recycles entity indices** (`EntityManager.requestEntityInstance` pops from a
+// pool and keeps `index`, bumping only `generation`). These maps are keyed on
+// the raw index, so leaving an entry behind means the next unit to land on that
+// index inherits a dead unit's ring — including its baked attack-range radius,
+// which is per-kind and live-tunable. Same reason `cargoVisualByUnit` and
+// `pathByUnit` are deleted on death.
+export function disposeUnitSelectionVisuals(unit: Entity): void {
+  const ring = boardState.selectionRingByUnit.get(unit.index);
+  if (ring) {
+    ring.dispose();
+    boardState.selectionRingByUnit.delete(unit.index);
+  }
+  const rangeRing = boardState.attackRangeRingByUnit.get(unit.index);
+  if (rangeRing) {
+    rangeRing.dispose();
+    boardState.attackRangeRingByUnit.delete(unit.index);
+  }
+}
+
+// Turrets keep their range ring in a parallel map and are not Units, so they
+// need their own disposal — and `selectedTurret` must be cleared or it holds a
+// disposed entity.
+export function disposeTurretRangeRing(turret: Entity): void {
+  if (boardState.selectedTurret === turret) {
+    boardState.selectedTurret = null;
+    updateCommandGridVisibility();
+  }
+  const ring = boardState.rangeRingByTurret.get(turret.index);
+  if (!ring) return;
+  ring.dispose();
+  boardState.rangeRingByTurret.delete(turret.index);
+}
+
 export function updateUnitSelectionRing(unit: Entity): void {
   const ring = boardState.selectionRingByUnit.get(unit.index)?.object3D;
   const object = unit.object3D;

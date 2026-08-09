@@ -20,9 +20,14 @@ import {
 import { detachAlienAnimation } from "./alienAnimation.js";
 import { emitAttackVfx } from "./combatEffects.js";
 import { detachCommandCenterAnimation } from "./commandCenterAnimation.js";
+import { releaseBuilder } from "./construction.js";
 import { updateHealthBar } from "./healthBar.js";
 import { detachMinerAnimation } from "./minerAnimation.js";
-import { removeUnitFromSelection } from "./selection.js";
+import {
+  disposeTurretRangeRing,
+  disposeUnitSelectionVisuals,
+  removeUnitFromSelection,
+} from "./selection.js";
 import { detachTurretAnimation } from "./turretAnimation.js";
 import { detachUnitAnimation } from "./unitAnimation.js";
 import {
@@ -255,8 +260,12 @@ export class CombatSystem extends createSystem({
     if (target.hasComponent(Unit)) {
       detachMinerAnimation(target);
       detachUnitAnimation(target);
-      this.cancelConstruction(target);
+      // A dead builder no longer takes the build with it. The site owns the
+      // work now, so it survives, keeps its progress, and waits to be reclaimed
+      // — losing the beacon holder just promotes another astronaut.
+      releaseBuilder(target);
       removeUnitFromSelection(target);
+      disposeUnitSelectionVisuals(target);
       boardState.cargoVisualByUnit.delete(target.index);
       boardState.pathByUnit.delete(target.index);
     }
@@ -268,6 +277,7 @@ export class CombatSystem extends createSystem({
       for (const cell of footprintCells(x, y, width)) {
         setTerrainAt(cell.x, cell.y, "open");
       }
+      if (kind === "turret") disposeTurretRangeRing(target);
       if (kind === "command-center") {
         detachCommandCenterAnimation(target);
         this.markCommandCenterDestroyed();
@@ -292,19 +302,6 @@ export class CombatSystem extends createSystem({
       detachTurretAnimation(target);
     }
     target.dispose();
-  }
-
-  private cancelConstruction(target: Entity): void {
-    if (!target.hasComponent(ConstructionState)) return;
-    const site = target.getValue(ConstructionState, "site") as Entity | null;
-    if (!site?.hasComponent(ConstructionSite)) return;
-    const x = site.getValue(ConstructionSite, "x") ?? -1;
-    const y = site.getValue(ConstructionSite, "y") ?? -1;
-    const width = site.getValue(ConstructionSite, "widthTiles") ?? 1;
-    for (const cell of footprintCells(x, y, width)) {
-      setTerrainAt(cell.x, cell.y, "open");
-    }
-    site.dispose();
   }
 
   private markCommandCenterDestroyed(): void {

@@ -5,6 +5,25 @@ export const BOARD_Y = 0.78;
 export const UNIT_MOVE_SPEED = 0.35;
 export const UNIT_ARRIVAL_EPSILON = 0.005;
 
+// Multi-builder construction. Each astronaut past the first adds
+// BUILD_RATE_PER_EXTRA_BUILDER to the site's fill rate, capped so a swarm
+// cannot trivialise a build: 1 / 1.6 / 2.2 / 2.5 (capped) builders.
+// Diminishing rather than linear keeps a lone astronaut viable while still
+// making "send everyone" meaningfully faster.
+export const BUILD_RATE_PER_EXTRA_BUILDER = 0.6;
+export const BUILD_RATE_MAX_MULTIPLIER = 2.5;
+// Auto-assignment runs one path search per frame, same budget discipline as
+// ALIEN_PATHFINDS_PER_FRAME, so a burst of queued sites cannot stack several
+// full-board searches onto one Quest frame.
+export const BUILDER_ASSIGNMENTS_PER_FRAME = 1;
+
+// Refunds. Cancelling an order that was never finished returns everything —
+// you are undoing a placement, not scrapping a built thing. Deliberately
+// scrapping something finished returns only part, so placement stays a real
+// decision instead of a free, reversible move.
+export const CANCEL_REFUND_RATE = 1;
+export const DESTROY_REFUND_RATE = 0.5;
+
 // How many aliens the WaveSystem creates per frame while amortizing the next
 // wave's build across the between-wave countdown (spawn spike -> spread out).
 // Fixed count (not a time budget) for predictability; 30s countdown ~= 2160
@@ -124,6 +143,17 @@ export const PROGRESS_BACKGROUND_COLOR = HEALTH_BAR_BACKGROUND_COLOR;
 export const PROGRESS_FILL_COLOR = HEALTH_BAR_HEALTHY_COLOR;
 export const CONSTRUCTION_FOUNDATION_COLOR = SELECTION_MARKER_COLOR;
 export const CONSTRUCTION_FOUNDATION_OPACITY = 0.35;
+// An unclaimed (pending) site reads as a dimmer, amber outline so it is
+// visually distinct from one an astronaut has already started.
+export const CONSTRUCTION_PENDING_FOUNDATION_COLOR = ORDER_MARKER_COLOR;
+export const CONSTRUCTION_PENDING_FOUNDATION_OPACITY = 0.22;
+
+// Build-queue badge: the number floating above an unclaimed site showing where
+// it sits in the build order. Sized and offset like a health bar.
+export const QUEUE_BADGE_SIZE = 0.55; // multiples of TILE_SIZE
+export const QUEUE_BADGE_Y_OFFSET = 0.95; // multiples of TILE_SIZE
+export const QUEUE_BADGE_BACKGROUND_COLOR = "#1d3442";
+export const QUEUE_BADGE_TEXT_COLOR = "#ffbd59";
 export const CRAFT_PRODUCTION_FOUNDATION_COLOR = 0x0e7490;
 export const CRAFT_PRODUCTION_FOUNDATION_OPACITY = 0.4;
 

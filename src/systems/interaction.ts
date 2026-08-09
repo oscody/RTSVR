@@ -9,10 +9,21 @@ import {
 import { GRID_SIZE, gridToWorld, worldToGrid } from "./board.js";
 import { stampBuildingFootprint } from "./buildingFactory.js";
 import { getBuildingSpec, type BuildingSpec } from "./buildingCatalog.js";
-import { createConstructionSite } from "./construction.js";
-import { getProductionSpec } from "./craftCatalog.js";
+import {
+  attachBuilderToSite,
+  createConstructionSite,
+  releaseBuilder,
+  siteAnchor,
+} from "./construction.js";
+import {
+  ASTRONAUT_PRODUCTION_SPEC,
+  getProductionSpec,
+} from "./craftCatalog.js";
 import { createCraftProductionSite } from "./craftProduction.js";
-import { validateCraftPurchase } from "./craftRules.js";
+import {
+  CRAFT_PRODUCTION_BUILDINGS,
+  validateCraftPurchase,
+} from "./craftRules.js";
 import {
   BLOCKED_MARKER_COLOR,
   ORDER_MARKER_COLOR,
@@ -42,7 +53,9 @@ import {
   Building,
   CombatCapability,
   CombatState,
+  ConstructionSite,
   ConstructionState,
+  CraftProductionSite,
   Enemy,
   GameState,
   MinerState,
@@ -94,8 +107,11 @@ export class InteractionSystem extends createSystem({
   pressedUnits: { required: [Unit, Pressed] },
   pressedEnemies: { required: [Enemy, Pressed] },
   pressedBuildings: { required: [Building, Pressed] },
+  pressedSites: { required: [ConstructionSite, Pressed] },
+  pressedCraftSites: { required: [CraftProductionSite, Pressed] },
   units: { required: [Unit] },
   enemies: { required: [Enemy] },
+  sites: { required: [ConstructionSite] },
 }) {
   init(): void {
     this.cleanupFuncs.push(
@@ -188,12 +204,27 @@ export class InteractionSystem extends createSystem({
         if (kind === "turret") {
           toggleTurretRangeRing(this.world, entity);
         }
+        // Always record what was clicked; only a building that can actually
+        // produce becomes the production source. Clicking a turret used to
+        // overwrite `spawnBuilding` with something that can never produce, and
+        // nothing set it back — every craft after that failed validation with
+        // "That building cannot produce crafts".
+        const canProduce = CRAFT_PRODUCTION_BUILDINGS.has(kind);
+        tablet.setValue(TabletState, "focusBuilding", entity);
+        tablet.setValue(TabletState, "focusBuildingIndex", entity.index);
         if (tablet.getValue(TabletState, "view") === "units") {
-          tablet.setValue(TabletState, "spawnBuilding", entity);
-          tablet.setValue(TabletState, "spawnBuildingIndex", entity.index);
-          tablet.setValue(TabletState, "unitFilter", kind);
-          tablet.setValue(TabletState, "unitPage", 0);
-          this.setTabletStatus(`Roster filter: ${this.buildingLabel(kind)}`);
+          if (canProduce) {
+            tablet.setValue(TabletState, "spawnBuilding", entity);
+            tablet.setValue(TabletState, "spawnBuildingIndex", entity.index);
+          }
+          // Do NOT narrow the roster to this building's kind. That used to be
+          // harmless because buildings were absent from the roster, so the
+          // filter produced nothing visible. Now that turrets are listed, it
+          // hid every unit behind a turrets-only view. Clicking a turret on the
+          // board is simply selecting it, exactly like clicking its card.
+          this.setTabletStatus(
+            `${this.buildingLabel(kind)} #${entity.index} selected`,
+          );
           return;
         }
         clearUnitSelections();
@@ -201,18 +232,62 @@ export class InteractionSystem extends createSystem({
         hideMarker(boardState.buildMarker);
         tablet.setValue(TabletState, "astronaut", null);
         tablet.setValue(TabletState, "astronautIndex", -1);
-        tablet.setValue(TabletState, "spawnBuilding", entity);
-        tablet.setValue(TabletState, "spawnBuildingIndex", entity.index);
+        if (canProduce) {
+          tablet.setValue(TabletState, "spawnBuilding", entity);
+          tablet.setValue(TabletState, "spawnBuildingIndex", entity.index);
+        }
         tablet.setValue(TabletState, "buildPlacementActive", false);
         tablet.setValue(TabletState, "craftPlacementActive", false);
         tablet.setValue(TabletState, "view", "crafts");
         updateCommandGridVisibility();
         this.setTabletStatus(
-          kind === "turret"
-            ? "Turret cannot produce crafts"
-            : "Choose a craft to produce",
-          kind === "turret" ? "error" : "info",
+          canProduce
+            ? "Choose a craft to produce"
+            : `${this.buildingLabel(kind)} selected - it cannot produce crafts`,
         );
+      }),
+      // Click a construction site. With astronauts selected they take the job
+      // (manual assignment); with nothing selected the site itself becomes the
+      // selection, which is what the tablet's Cancel action acts on.
+      this.queries.pressedSites.subscribe("qualify", (site) => {
+        if (this.isCraftPlacementActive()) {
+          this.rejectCraftPlacementTarget(site);
+          return;
+        }
+        if (this.isBuildPlacementModeActive()) {
+          this.rejectBuildPlacementTarget(site);
+          return;
+        }
+        const astronauts = getSelectedUnits().filter(
+          (unit) => unit.getValue(Unit, "kind") === "astronaut",
+        );
+        if (astronauts.length > 0) {
+          this.assignBuildersToSite(astronauts, site);
+          return;
+        }
+        this.selectConstructionSite(site);
+      }),
+      // An in-flight craft is the same idea: select it to be able to cancel it.
+      this.queries.pressedCraftSites.subscribe("qualify", (site) => {
+        if (this.isCraftPlacementActive()) {
+          this.rejectCraftPlacementTarget(site);
+          return;
+        }
+        if (this.isBuildPlacementModeActive()) {
+          this.rejectBuildPlacementTarget(site);
+          return;
+        }
+        const astronauts = getSelectedUnits().filter(
+          (unit) => unit.getValue(Unit, "kind") === "astronaut",
+        );
+        if (
+          astronauts.length > 0 &&
+          (site.getValue(CraftProductionSite, "requiresBuilder") ?? false)
+        ) {
+          this.assignBuildersToSite(astronauts, site);
+          return;
+        }
+        this.selectCraftProductionSite(site);
       }),
       // Click a tile: open -> move there. Terrain features and occupied tiles
       // are unavailable destinations, so approach from the nearest open tile.
@@ -224,13 +299,16 @@ export class InteractionSystem extends createSystem({
           this.placeCraft(tx, ty);
           return;
         }
+        // Place-first: a build order no longer needs a selected astronaut. The
+        // site drops on the board here and the ConstructionSystem sends
+        // whoever is free.
+        if (this.isBuildPlacementActive()) {
+          this.placeConstructionSite(tx, ty);
+          return;
+        }
         const units = getSelectedUnits();
         const unit = boardState.selectedUnit;
         if (unit && units.length > 0) {
-          if (this.isBuildPlacementActive(unit)) {
-            this.startConstruction(unit, tx, ty);
-            return;
-          }
           const resource = boardState.resourceByKey.get(gridKey(tx, ty));
           if (
             resource &&
@@ -374,12 +452,15 @@ export class InteractionSystem extends createSystem({
   }
 
   private prepareManualOrder(unit: Entity): boolean {
+    // A move order now pulls a builder off its job instead of being refused.
+    // The site survives and waits for someone else, so this is a reassignment
+    // rather than a lost build — and it is the only way to rescue a builder
+    // sent to a site that has become unreachable.
     if (
       unit.hasComponent(ConstructionState) &&
       unit.getValue(ConstructionState, "stage") !== "idle"
     ) {
-      this.setTabletStatus("Astronaut is already building", "error");
-      return false;
+      releaseBuilder(unit);
     }
     if (!unit.hasComponent(MinerState)) return true;
     if ((unit.getValue(MinerState, "cargo") ?? 0) > 0) return false;
@@ -474,12 +555,11 @@ export class InteractionSystem extends createSystem({
     }
   }
 
-  private isBuildPlacementActive(unit: Entity): boolean {
+  // No astronaut in this test any more — that is the place-first change.
+  private isBuildPlacementActive(): boolean {
     const tablet = boardState.tablet;
     return Boolean(
       tablet &&
-        unit.getValue(Unit, "kind") === "astronaut" &&
-        tablet.getValue(TabletState, "astronautIndex") === unit.index &&
         tablet.getValue(TabletState, "view") === "build" &&
         tablet.getValue(TabletState, "buildPlacementActive") &&
         tablet.getValue(TabletState, "selectedBuildingKind") !== "none",
@@ -511,14 +591,12 @@ export class InteractionSystem extends createSystem({
     const gameState = boardState.gameState;
     const root = boardState.boardRoot;
     if (!tablet || !gameState || !root) return;
-    const source = tablet.getValue(TabletState, "spawnBuilding") as Entity | null;
     const spec = getProductionSpec(
       tablet.getValue(TabletState, "selectedCraftKind") ?? "none",
     );
     const validation = validateCraftPurchase({
       spec,
       crystals: gameState.getValue(GameState, "crystals") ?? 0,
-      buildingKind: source?.getValue(Building, "kind") ?? null,
       tileAvailable: this.isCraftTileAvailable(tx, ty),
     });
     if (!validation.ok || !spec) {
@@ -537,22 +615,38 @@ export class InteractionSystem extends createSystem({
       (gameState.getValue(GameState, "revision") ?? 0) + 1,
     );
     setTerrainAt(tx, ty, "blocked");
-    createCraftProductionSite(
+    // Astronaut production is the one thing that still builds itself. Every
+    // other craft is a real job an astronaut has to come and do.
+    const requiresBuilder = spec.kind !== ASTRONAUT_PRODUCTION_SPEC.kind;
+    const site = createCraftProductionSite(
       this.world,
       root,
       spec,
       tx,
       ty,
-      source?.getValue(Building, "kind") ?? "command-center",
+      "none",
+      requiresBuilder,
     );
     tablet.setValue(TabletState, "craftPlacementActive", false);
     hideMarker(boardState.buildMarker);
-    updateCommandGridVisibility();
     setOrderMarker(tx, ty, VALID_PLACEMENT_MARKER_COLOR);
-    this.setTabletStatus(
-      `${spec.label} production started (${spec.duration}s)`,
-      "success",
-    );
+
+    const astronauts = requiresBuilder
+      ? getSelectedUnits().filter(
+          (unit) => unit.getValue(Unit, "kind") === "astronaut",
+        )
+      : [];
+    const assigned =
+      astronauts.length > 0 ? this.assignBuildersToSite(astronauts, site) : 0;
+    if (assigned === 0) {
+      this.setTabletStatus(
+        requiresBuilder
+          ? `${spec.label} placed. Waiting for an astronaut`
+          : `${spec.label} production started (${spec.duration}s)`,
+        "success",
+      );
+    }
+    this.clearCommandSelection();
   }
 
   private isCraftTileAvailable(tx: number, ty: number): boolean {
@@ -580,28 +674,28 @@ export class InteractionSystem extends createSystem({
     );
   }
 
-  private startConstruction(astronaut: Entity, tx: number, ty: number): void {
+  // Place-first construction. The order becomes a board object immediately:
+  // the footprint is reserved and the cost is taken NOW (so you cannot queue
+  // what you cannot afford — which is why cancelling refunds in full), and the
+  // site waits, unclaimed, until an astronaut is free.
+  private placeConstructionSite(tx: number, ty: number): void {
     const tablet = boardState.tablet;
     const gameState = boardState.gameState;
     const root = boardState.boardRoot;
     if (!tablet || !gameState || !root) return;
-    this.setCombatTarget(astronaut, null);
     const kind = tablet.getValue(TabletState, "selectedBuildingKind") ?? "none";
     const spec = getBuildingSpec(kind);
     const cells = spec ? footprintCells(tx, ty, spec.widthTiles) : [];
-    const footprintValid = this.isFootprintAvailable(cells);
-    const path = spec
-      ? this.findConstructionPath(astronaut, spec, tx, ty, cells)
-      : null;
     const validation = validateBuildOrder({
       spec,
       crystals: gameState.getValue(GameState, "crystals") ?? 0,
-      builderIdle:
-        astronaut.getValue(ConstructionState, "stage") === "idle",
-      footprintValid,
-      pathFound: path !== null,
+      footprintValid: this.isFootprintAvailable(cells),
+      // No builder is required to place, so there is no path to check here.
+      // Reachability is the assigner's problem, and an unreachable site can be
+      // cancelled for a full refund.
+      pathFound: true,
     });
-    if (!validation.ok || !spec || !path) {
+    if (!validation.ok || !spec) {
       this.setTabletStatus(
         validation.ok ? "Invalid build order" : validation.error,
         "error",
@@ -616,33 +710,107 @@ export class InteractionSystem extends createSystem({
       "revision",
       (gameState.getValue(GameState, "revision") ?? 0) + 1,
     );
+    // The footprint blocks at PLACEMENT, not at build start. Without this two
+    // orders could be placed overlapping and the second would corrupt the first.
     stampBuildingFootprint(tx, ty, spec.widthTiles);
     const site = createConstructionSite(this.world, root, spec, tx, ty);
-    astronaut.setValue(ConstructionState, "stage", "toSite");
-    astronaut.setValue(ConstructionState, "buildingKind", spec.kind);
-    astronaut.setValue(ConstructionState, "targetX", tx);
-    astronaut.setValue(ConstructionState, "targetY", ty);
-    astronaut.setValue(ConstructionState, "timer", 0);
-    astronaut.setValue(ConstructionState, "duration", spec.duration);
-    astronaut.setValue(ConstructionState, "cost", spec.cost);
-    astronaut.setValue(ConstructionState, "site", site);
     tablet.setValue(TabletState, "buildPlacementActive", false);
     hideMarker(boardState.buildMarker);
-    updateCommandGridVisibility();
 
-    const remaining = [...path];
-    const next = remaining.shift();
-    const holder = astronaut.object3D!;
-    const [fromX, fromY] = worldToGrid(holder.position.x, holder.position.z);
-    const approach = path[path.length - 1] ?? { x: fromX, y: fromY };
-    astronaut.setValue(ConstructionState, "approachX", approach.x);
-    astronaut.setValue(ConstructionState, "approachY", approach.y);
-    boardState.pathByUnit.set(astronaut.index, remaining);
-    if (next) this.issueOrder(astronaut, next.x, next.y);
-    else astronaut.setValue(Unit, "hasOrder", false);
-    this.setTabletStatus(`${spec.label} ordered. Astronaut moving to site`);
+    // If astronauts happen to be selected, treat that as an explicit "you three
+    // build it" and skip the wait. Otherwise it queues for the assigner.
+    const astronauts = getSelectedUnits().filter(
+      (unit) => unit.getValue(Unit, "kind") === "astronaut",
+    );
+    const assigned =
+      astronauts.length > 0 ? this.assignBuildersToSite(astronauts, site) : 0;
+    if (assigned === 0) {
+      this.setTabletStatus(`${spec.label} placed. Waiting for an astronaut`);
+    }
     setOrderMarker(tx, ty, ORDER_MARKER_COLOR);
     this.clearCommandSelection();
+  }
+
+  private assignBuildersToSite(
+    astronauts: readonly Entity[],
+    site: Entity,
+  ): number {
+    const anchor = siteAnchor(site);
+    if (!anchor) return 0;
+    const { x: anchorX, y: anchorY, widthTiles: width } = anchor;
+    const cells = footprintCells(anchorX, anchorY, width);
+    let assigned = 0;
+    for (const astronaut of astronauts) {
+      const path = this.findSitePath(astronaut, anchorX, anchorY, width, cells);
+      if (!path) continue;
+      this.setCombatTarget(astronaut, null);
+      attachBuilderToSite(astronaut, site, path);
+      assigned += 1;
+    }
+    const label = this.siteLabel(site);
+    if (assigned === 0) {
+      this.setTabletStatus(`No path to the ${label} site`, "error");
+    } else {
+      this.setTabletStatus(
+        `${assigned} astronaut${assigned === 1 ? "" : "s"} building ${label}`,
+      );
+    }
+    return assigned;
+  }
+
+  private selectConstructionSite(site: Entity): void {
+    const tablet = boardState.tablet;
+    if (!tablet) return;
+    clearUnitSelections();
+    boardState.selectedSite = site;
+    tablet.setValue(TabletState, "selectedSite", site);
+    tablet.setValue(TabletState, "selectedSiteIndex", site.index);
+    tablet.setValue(TabletState, "view", "build");
+    tablet.setValue(TabletState, "buildPlacementActive", false);
+    tablet.setValue(TabletState, "craftPlacementActive", false);
+    hideMarker(boardState.buildMarker);
+    updateCommandGridVisibility();
+    const spec = getBuildingSpec(site.getValue(ConstructionSite, "kind") ?? "");
+    this.setTabletStatus(
+      `${spec?.label ?? "Site"} selected. Cancel refunds ${
+        site.getValue(ConstructionSite, "cost") ?? 0
+      } crystals`,
+    );
+  }
+
+  private siteLabel(site: Entity): string {
+    if (site.hasComponent(ConstructionSite)) {
+      return (
+        getBuildingSpec(site.getValue(ConstructionSite, "kind") ?? "")?.label ??
+        "Building"
+      );
+    }
+    return (
+      getProductionSpec(site.getValue(CraftProductionSite, "kind") ?? "")
+        ?.label ?? "Craft"
+    );
+  }
+
+  private selectCraftProductionSite(site: Entity): void {
+    const tablet = boardState.tablet;
+    if (!tablet) return;
+    clearUnitSelections();
+    boardState.selectedSite = site;
+    tablet.setValue(TabletState, "selectedSite", site);
+    tablet.setValue(TabletState, "selectedSiteIndex", site.index);
+    tablet.setValue(TabletState, "view", "build");
+    tablet.setValue(TabletState, "buildPlacementActive", false);
+    tablet.setValue(TabletState, "craftPlacementActive", false);
+    hideMarker(boardState.buildMarker);
+    updateCommandGridVisibility();
+    const spec = getProductionSpec(
+      site.getValue(CraftProductionSite, "kind") ?? "",
+    );
+    this.setTabletStatus(
+      `${spec?.label ?? "Craft"} in production. Cancel refunds ${
+        spec?.cost ?? 0
+      } crystals`,
+    );
   }
 
   private clearCommandSelection(): void {
@@ -656,6 +824,9 @@ export class InteractionSystem extends createSystem({
     tablet.setValue(TabletState, "astronautIndex", -1);
     tablet.setValue(TabletState, "buildPlacementActive", false);
     tablet.setValue(TabletState, "craftPlacementActive", false);
+    boardState.selectedSite = null;
+    tablet.setValue(TabletState, "selectedSite", null);
+    tablet.setValue(TabletState, "selectedSiteIndex", -1);
     updateCommandGridVisibility();
   }
 
@@ -664,8 +835,7 @@ export class InteractionSystem extends createSystem({
       this.updateCraftPlacementHover(tx, ty);
       return;
     }
-    const unit = boardState.selectedUnit;
-    if (!unit || !this.isBuildPlacementActive(unit)) {
+    if (!this.isBuildPlacementActive()) {
       hideMarker(boardState.buildMarker);
       moveMarker(boardState.hoverMarker, { x: tx, y: ty });
       return;
@@ -678,13 +848,11 @@ export class InteractionSystem extends createSystem({
     const marker = boardState.buildMarker?.object3D as Mesh | undefined;
     if (!spec || !marker) return;
     const cells = footprintCells(tx, ty, spec.widthTiles);
-    const path = this.findConstructionPath(unit, spec, tx, ty, cells);
     const validation = validateBuildOrder({
       spec,
       crystals: boardState.gameState?.getValue(GameState, "crystals") ?? 0,
-      builderIdle: unit.getValue(ConstructionState, "stage") === "idle",
       footprintValid: this.isFootprintAvailable(cells),
-      pathFound: path !== null,
+      pathFound: true,
     });
     const first = cells[0];
     const last = cells[cells.length - 1];
@@ -703,13 +871,11 @@ export class InteractionSystem extends createSystem({
     const marker = boardState.buildMarker?.object3D as Mesh | undefined;
     const tablet = boardState.tablet;
     if (!marker || !tablet) return;
-    const source = tablet.getValue(TabletState, "spawnBuilding") as Entity | null;
     const validation = validateCraftPurchase({
       spec: getProductionSpec(
         tablet.getValue(TabletState, "selectedCraftKind") ?? "none",
       ),
       crystals: boardState.gameState?.getValue(GameState, "crystals") ?? 0,
-      buildingKind: source?.getValue(Building, "kind") ?? null,
       tileAvailable: this.isCraftTileAvailable(tx, ty),
     });
     const [worldX, worldZ] = gridToWorld(tx, ty);
@@ -721,23 +887,48 @@ export class InteractionSystem extends createSystem({
     marker.visible = true;
   }
 
+  // Terrain alone used to be the whole test, which is how two build orders
+  // could land on the same tile. A placed site reserves its cells (stamped
+  // "blocked"), and this also checks live sites directly so the rule holds even
+  // if terrain is restored out from under one.
   private isFootprintAvailable(cells: readonly GridPosition[]): boolean {
     return (
       cells.length > 0 &&
       cells.every(({ x, y }) => {
         return (
           getTerrainAt(x, y) === "open" &&
-          !this.isOccupied(x, y, null)
+          !this.isOccupied(x, y, null) &&
+          !this.isReservedBySite(x, y)
         );
       })
     );
   }
 
-  private findConstructionPath(
+  private isReservedBySite(tx: number, ty: number): boolean {
+    for (const site of this.queries.sites.entities) {
+      const anchorX = site.getValue(ConstructionSite, "x") ?? -1;
+      const anchorY = site.getValue(ConstructionSite, "y") ?? -1;
+      const width = site.getValue(ConstructionSite, "widthTiles") ?? 1;
+      const half = Math.floor((width - 1) / 2);
+      const startX = anchorX - half;
+      const startY = anchorY - half;
+      if (
+        tx >= startX &&
+        tx < startX + width &&
+        ty >= startY &&
+        ty < startY + width
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private findSitePath(
     astronaut: Entity,
-    spec: BuildingSpec,
     tx: number,
     ty: number,
+    widthTiles: number,
     cells: readonly GridPosition[],
   ): GridPosition[] | null {
     const holder = astronaut.object3D;
@@ -751,12 +942,10 @@ export class InteractionSystem extends createSystem({
         !this.isOccupied(x, y, astronaut)
       );
     };
-    const goals = footprintApproaches(
-      tx,
-      ty,
-      spec.widthTiles,
-      GRID_SIZE,
-    ).filter(({ x, y }) => canStandAt(x, y));
+    const goals = footprintApproaches(tx, ty, widthTiles, GRID_SIZE).filter(
+      ({ x, y }) => canStandAt(x, y),
+    );
+    if (goals.length === 0) return null;
     return findGridPath({
       start: { x: fromX, y: fromY },
       goals,

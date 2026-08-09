@@ -7,12 +7,14 @@ import {
   Mesh,
   MeshBasicMaterial,
   Object3D,
+  RayInteractable,
   Vector3,
   createSystem,
   type World,
 } from "@iwsdk/core";
 import type { AnimationClip } from "three";
-import { makeNonInteractive } from "./sharedGeometry.js";
+import { UNIT_BOX_GEOMETRY, makeNonInteractive } from "./sharedGeometry.js";
+import { disableModelRaycast } from "./structures.js";
 import { TILE_SIZE, gridToWorld } from "./board.js";
 import {
   CRAFT_PRODUCTION_FOUNDATION_COLOR,
@@ -27,6 +29,9 @@ import {
   craftProductionProgress,
   type CraftProductionCycleState,
 } from "./craftRules.js";
+import { buildRateMultiplier } from "./constructionRules.js";
+import { releaseSiteBuilders, takeQueueOrder } from "./construction.js";
+import { attachQueueBadge } from "./queueBadge.js";
 import {
   attachCraftProductionAnimation,
   detachCraftProductionAnimation,
@@ -40,6 +45,11 @@ import {
   setTerrainAt,
 } from "./state.js";
 
+const craftSiteProxyMaterial = new MeshBasicMaterial({
+  colorWrite: false,
+  depthWrite: false,
+});
+
 export function createCraftProductionSite(
   world: World,
   parent: Entity,
@@ -47,6 +57,9 @@ export function createCraftProductionSite(
   x: number,
   y: number,
   sourceKind: string,
+  // Crafts wait for an astronaut; astronaut production does not (a deadlock
+  // otherwise: no astronauts means no way to make one).
+  requiresBuilder = false,
 ): Entity {
   const size = TILE_SIZE * 0.9;
   const holder = new Group();
@@ -107,10 +120,26 @@ export function createCraftProductionSite(
     animatedClips = gltf.animations;
   }
 
+  // Clickable so an in-flight craft can be cancelled for a refund, same as a
+  // construction site. Single box proxy, so the animated model itself is never
+  // hit-tested by the pointer.
+  const proxyHeight = TILE_SIZE * 0.9;
+  const proxy = new Mesh(UNIT_BOX_GEOMETRY, craftSiteProxyMaterial);
+  proxy.name = "CraftProductionSiteInteractionProxy";
+  proxy.scale.set(size, proxyHeight, size);
+  proxy.position.y = proxyHeight / 2;
+  proxy.userData.drawCat = "proxy";
+  holder.add(proxy);
+  if (animatedModel) disableModelRaycast(animatedModel);
+  // Craft orders share the same build queue and badge as buildings.
+  attachQueueBadge(holder);
+
   const entity = world
     .createTransformEntity(holder, { parent })
     .addComponent(ScenarioObject)
+    .addComponent(RayInteractable)
     .addComponent(CraftProductionSite, {
+      queueOrder: takeQueueOrder(),
       kind: spec.kind,
       sourceKind,
       x,
@@ -118,6 +147,11 @@ export function createCraftProductionSite(
       timer: 0,
       duration: spec.duration,
       progress: 0,
+      cost: spec.cost,
+      stage: "pending",
+      requiresBuilder,
+      builderCount: 0,
+      beaconBuilder: null,
     });
   if (animatedModel) {
     attachCraftProductionAnimation(
@@ -137,18 +171,39 @@ export class CraftProductionSystem extends createSystem({
     timer: 0,
     duration: 0,
   };
+  // Never dispose while iterating the query the site came from.
+  private readonly completed: Entity[] = [];
 
   update(delta: number): void {
     for (const site of this.queries.sites.entities) {
+      // Crafts now wait for an astronaut, and go faster with more of them.
+      // Astronaut production sets requiresBuilder = false and keeps the old
+      // self-building behaviour — see the CraftProductionSite comment for why
+      // that exemption is not optional.
+      const requiresBuilder =
+        site.getValue(CraftProductionSite, "requiresBuilder") ?? false;
+      const builderCount = requiresBuilder
+        ? (site.getValue(CraftProductionSite, "builderCount") ?? 0)
+        : 1;
+      if (builderCount <= 0) {
+        this.updateProgress(site);
+        continue;
+      }
+      site.setValue(CraftProductionSite, "stage", "building");
       this.cycle.timer = site.getValue(CraftProductionSite, "timer") ?? 0;
       this.cycle.duration =
         site.getValue(CraftProductionSite, "duration") ?? 0;
-      const transition = advanceCraftProduction(this.cycle, delta);
+      const transition = advanceCraftProduction(
+        this.cycle,
+        delta * buildRateMultiplier(builderCount),
+      );
       site.setValue(CraftProductionSite, "timer", this.cycle.timer);
       this.updateProgress(site);
       updateCraftProductionAnimation(site, delta);
-      if (transition === "completed") this.completeCraft(site);
+      if (transition === "completed") this.completed.push(site);
     }
+    for (const site of this.completed) this.completeCraft(site);
+    this.completed.length = 0;
   }
 
   private updateProgress(site: Entity): void {
@@ -176,6 +231,10 @@ export class CraftProductionSystem extends createSystem({
       site.getValue(CraftProductionSite, "sourceKind") ?? "command-center";
     setTerrainAt(x, y, "open");
     detachCraftProductionAnimation(site);
+    // Hand its astronauts back before the site goes away, or they keep a
+    // dangling `ConstructionState.site` until the next frame notices.
+    releaseSiteBuilders(site);
+    boardState.buildersBySite.delete(site.index);
     site.dispose();
     createCraftEntity(
       this.world,

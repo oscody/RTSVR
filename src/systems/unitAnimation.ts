@@ -16,9 +16,12 @@ import {
   UNIT_LASER_POINT_ASSIST_CLIP,
   UNIT_MOVE_CLIPS,
 } from "./constants.ts";
+import { isBuildableSite, siteBeaconBuilder } from "./construction.js";
 import {
   CombatState,
+  ConstructionSite,
   ConstructionState,
+  CraftProductionSite,
   Health,
   Unit,
   UnitSelection,
@@ -117,8 +120,22 @@ function desiredAnimation(
     const constructionStage =
       entity.getValue(ConstructionState, "stage") ?? "idle";
     if (constructionStage === "building") {
-      const timer = entity.getValue(ConstructionState, "timer") ?? 0;
-      return timer < controller.beaconDuration ? "beacon" : "laser";
+      // Role-based, not time-based. The site names one beacon holder; every
+      // other astronaut on the same site is an assistant. Previously the clip
+      // was chosen by elapsed time, so a lone builder played Beacon then Laser
+      // and two builders played the same thing in lockstep.
+      // The site may be a building site or a craft-production site — both are
+      // real jobs an astronaut walks to and works on.
+      const site = entity.getValue(ConstructionState, "site") as Entity | null;
+      if (!isBuildableSite(site)) return "laser";
+      if (siteBeaconBuilder(site) !== entity) return "laser";
+      // The beacon holder plants it, then joins the assist work — BeaconPlacement
+      // is a one-shot clip, so holding it for a whole build would freeze the
+      // astronaut on its last frame.
+      const elapsed = site.hasComponent(ConstructionSite)
+        ? (site.getValue(ConstructionSite, "timer") ?? 0)
+        : (site.getValue(CraftProductionSite, "timer") ?? 0);
+      return elapsed < controller.beaconDuration ? "beacon" : "laser";
     }
   }
   if (

@@ -147,14 +147,34 @@ export const Building = createComponent("Building", {
   widthTiles: { type: Types.Int8, default: 1 },
 });
 
+// The build order itself. It exists as a board object from the moment the
+// player places it — before any astronaut is involved — and it owns the timer,
+// so it completes exactly once regardless of how many builders attach to it.
+// `beaconBuilder` is the one astronaut playing BeaconPlacement; every other
+// assigned builder plays LaserPointAssist.
 export const ConstructionSite = createComponent("ConstructionSite", {
   kind: { type: Types.String, default: "none" },
   x: { type: Types.Int16, default: -1 },
   y: { type: Types.Int16, default: -1 },
   widthTiles: { type: Types.Int8, default: 1 },
   progress: { type: Types.Float32, default: 0 },
+  stage: { type: Types.String, default: "pending" },
+  timer: { type: Types.Float32, default: 0 },
+  duration: { type: Types.Float32, default: 0 },
+  cost: { type: Types.Int16, default: 0 },
+  builderCount: { type: Types.Int8, default: 0 },
+  beaconBuilder: { type: Types.Entity, default: null },
+  // Position in the global build queue, assigned at placement from
+  // boardState.nextQueueOrder. Lower builds first, and Cancel starts here.
+  queueOrder: { type: Types.Int32, default: 0 },
 });
 
+// Same shape of idea as ConstructionSite: the order is a board object that owns
+// its own timer. Crafts now also need an astronaut to come and work on them
+// (`requiresBuilder`), so they share the builder fields and the multi-builder
+// speed-up. Astronaut production is the one exemption — it self-builds, because
+// if making an astronaut required an astronaut, losing your last one would end
+// the game with no way to recover.
 export const CraftProductionSite = createComponent("CraftProductionSite", {
   kind: { type: Types.String, default: "none" },
   sourceKind: { type: Types.String, default: "command-center" },
@@ -163,18 +183,24 @@ export const CraftProductionSite = createComponent("CraftProductionSite", {
   timer: { type: Types.Float32, default: 0 },
   duration: { type: Types.Float32, default: 0 },
   progress: { type: Types.Float32, default: 0 },
+  cost: { type: Types.Int16, default: 0 },
+  stage: { type: Types.String, default: "pending" },
+  requiresBuilder: { type: Types.Boolean, default: false },
+  builderCount: { type: Types.Int8, default: 0 },
+  beaconBuilder: { type: Types.Entity, default: null },
+  // Same global queue as building sites: a turret, a hangar and a mining craft
+  // placed in that order are 1, 2, 3 together, because they all compete for the
+  // same astronauts.
+  queueOrder: { type: Types.Int32, default: 0 },
 });
 
+// A builder's ROLE only. What is being built, how far along it is, and what it
+// cost all live on the ConstructionSite now; this just records which site this
+// astronaut is assigned to and whether it is walking there or working on it.
 export const ConstructionState = createComponent("ConstructionState", {
   stage: { type: Types.String, default: "idle" },
-  buildingKind: { type: Types.String, default: "none" },
-  targetX: { type: Types.Int16, default: -1 },
-  targetY: { type: Types.Int16, default: -1 },
   approachX: { type: Types.Int16, default: -1 },
   approachY: { type: Types.Int16, default: -1 },
-  timer: { type: Types.Float32, default: 0 },
-  duration: { type: Types.Float32, default: 0 },
-  cost: { type: Types.Int16, default: 0 },
   site: { type: Types.Entity, default: null },
 });
 
@@ -184,8 +210,19 @@ export const TabletState = createComponent("TabletState", {
   astronautIndex: { type: Types.Int32, default: -1 },
   selectedBuildingKind: { type: Types.String, default: "none" },
   buildPlacementActive: { type: Types.Boolean, default: false },
+  // The building that will produce the next craft. Only ever set to a building
+  // that CAN produce, so clicking a turret cannot poison it.
   spawnBuilding: { type: Types.Entity, default: null },
   spawnBuildingIndex: { type: Types.Int32, default: -1 },
+  // The building the player last clicked, whatever it is. Drives the Destroy
+  // action. Deliberately separate from spawnBuilding: "what I am looking at"
+  // and "what will build my craft" are different questions.
+  focusBuilding: { type: Types.Entity, default: null },
+  focusBuildingIndex: { type: Types.Int32, default: -1 },
+  // The construction site the player has clicked, if any — drives the Cancel
+  // action in the Build tab.
+  selectedSite: { type: Types.Entity, default: null },
+  selectedSiteIndex: { type: Types.Int32, default: -1 },
   selectedCraftKind: { type: Types.String, default: "none" },
   selectedCraftCost: { type: Types.Int16, default: 0 },
   craftPage: { type: Types.Int16, default: 0 },
@@ -307,6 +344,7 @@ export const boardState = {
   hoveredTile: null as BoardCoordinate | null,
   selectedTile: null as BoardCoordinate | null,
   selectedUnit: null as Entity | null,
+  selectedSite: null as Entity | null, // clicked ConstructionSite, for cancel
   selectedUnits: new Set<Entity>(),
   selectionRingByUnit: new Map<number, Entity>(),
   attackRangeRingByUnit: new Map<number, Entity>(),
@@ -315,6 +353,15 @@ export const boardState = {
   resourceByKey: new Map<string, Entity>(),
   cargoVisualByUnit: new Map<number, Object3D>(),
   pathByUnit: new Map<number, { x: number; y: number }[]>(),
+  // Rebuilt in place each frame by ConstructionSystem: which astronauts are
+  // attached to each construction site (by site entity index). Read by the
+  // animation system to decide beacon-vs-assist roles.
+  buildersBySite: new Map<number, Entity[]>(),
+  // Monotonic counter handing out build-queue positions. Reset on restart.
+  nextQueueOrder: 1,
+  // Republished each frame by ConstructionSystem: every live build site of
+  // either kind, so the tablet can resolve its Cancel target without a query.
+  liveSites: [] as Entity[],
   debugSettings: null as Entity | null,
 };
 

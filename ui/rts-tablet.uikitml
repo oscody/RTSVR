@@ -459,6 +459,20 @@
     background-color: #105446;
   }
 
+  /* Crafts action row carries pagination as well, so its cancel and produce
+     buttons are narrower than the Build tab's: 168 + 148 + 224 = 540 of 548.
+     Full-width versions would total 664 and overflow by 116px, which is what
+     crushed the pagination the last time three items shared this row. */
+  .craft-cancel {
+    width: 148px;
+    min-width: 148px;
+  }
+
+  .craft-action-narrow {
+    width: 224px;
+    min-width: 224px;
+  }
+
   .craft-action-icon {
     width: 17px;
     height: 17px;
@@ -768,12 +782,12 @@
       <button id="build-lab" class="build-card locked-card" style="display: none;"><span class="locked-label">Research Lab - Locked</span></button>
     </div>
     <div class="craft-action-row">
-      <span class="craft-page">Page 1 / 1</span>
+      <button id="build-cancel" class="unit-clear"><span id="build-cancel-label">Cancel site</span></button>
       <button id="build-produce" class="craft-action"><HammerIcon class="craft-action-icon"></HammerIcon><span id="build-action-label">Choose a building</span></button>
     </div>
   </div>
   <div id="crafts-view" class="view" style="display: none;">
-    <span id="craft-source-label" class="craft-source">Production: Command Center</span>
+    <span id="craft-source-label" class="craft-source">Pick a craft, then pick a tile</span>
     <div class="craft-row">
       <button id="craft-card-0" class="craft-card"><img id="craft-image-0" class="craft-image" src="/images/craft_miner.png"></img><div class="craft-copy"><span id="craft-name-0" class="craft-name">Cargo Craft</span><span id="craft-cost-0" class="craft-cost">50 crystals</span></div></button>
       <button id="craft-card-1" class="craft-card"><img id="craft-image-1" class="craft-image" src="/images/craft_miner.png"></img><div class="craft-copy"><span id="craft-name-1" class="craft-name">Mining Craft</span><span id="craft-cost-1" class="craft-cost">60 crystals</span></div></button>
@@ -784,7 +798,8 @@
     </div>
     <div class="craft-action-row">
       <div class="craft-pagination"><button id="craft-prev" class="page-button"><ChevronLeftIcon class="page-icon"></ChevronLeftIcon></button><span id="craft-page-label" class="craft-page">Page 1 / 1</span><button id="craft-next" class="page-button"><ChevronRightIcon class="page-icon"></ChevronRightIcon></button></div>
-      <button id="craft-produce" class="craft-action"><RocketIcon class="craft-action-icon"></RocketIcon><span id="craft-action-label">Choose a craft</span></button>
+      <button id="craft-cancel" class="unit-clear craft-cancel"><span id="craft-cancel-label">Cancel</span></button>
+      <button id="craft-produce" class="craft-action craft-action-narrow"><RocketIcon class="craft-action-icon"></RocketIcon><span id="craft-action-label">Choose a craft</span></button>
     </div>
   </div>
   <div id="units-view" class="view" style="display: none;">
@@ -797,7 +812,7 @@
       <button id="unit-card-2" class="unit-card"><img id="unit-image-2" class="unit-image" src="/images/rover.png"></img><div class="unit-copy"><span id="unit-name-2" class="unit-name">Empty</span><span id="unit-meta-2" class="unit-meta">No unit in this slot</span></div></button>
       <button id="unit-card-3" class="unit-card"><img id="unit-image-3" class="unit-image" src="/images/rover.png"></img><div class="unit-copy"><span id="unit-name-3" class="unit-name">Locked</span><span id="unit-meta-3" class="unit-meta">Future reinforcement</span></div></button>
     </div>
-    <div class="unit-action-row"><div class="craft-pagination"><button id="unit-prev" class="page-button"><ChevronLeftIcon class="page-icon"></ChevronLeftIcon></button><span id="unit-page-label" class="craft-page">Page 1 / 1</span><button id="unit-next" class="page-button"><ChevronRightIcon class="page-icon"></ChevronRightIcon></button></div><button id="unit-clear" class="unit-clear"><span>Clear selection</span></button></div>
+    <div class="unit-action-row"><div class="craft-pagination"><button id="unit-prev" class="page-button"><ChevronLeftIcon class="page-icon"></ChevronLeftIcon></button><span id="unit-page-label" class="craft-page">Page 1 / 1</span><button id="unit-next" class="page-button"><ChevronRightIcon class="page-icon"></ChevronRightIcon></button></div><button id="unit-destroy" class="unit-clear"><span id="unit-destroy-label">Destroy</span></button><button id="unit-clear" class="unit-clear"><span>Clear selection</span></button></div>
   </div>
   <div id="settings-view" class="view" style="display: none;">
     <span class="section-title">Playtesting settings</span>

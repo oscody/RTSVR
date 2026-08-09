@@ -8,7 +8,6 @@ export const CRAFT_PRODUCTION_BUILDINGS = new Set<string>(
 export interface CraftPurchaseOptions {
   spec: CraftSpec | undefined;
   crystals: number;
-  buildingKind: string | null;
   tileAvailable: boolean;
 }
 
@@ -23,18 +22,18 @@ export interface CraftProductionCycleState {
 
 export type CraftProductionTransition = "none" | "completed";
 
+// Place-first, and no producer requirement (decided 2026-08-09): you never
+// select a building to produce from, and you do not need one to exist. Pick a
+// craft, pick a tile. `CRAFT_PRODUCTION_BUILDINGS` is kept because the vision
+// doc still wants "units locked behind buildings" later — it is simply not
+// consulted here any more.
 export function validateCraftPurchase({
   spec,
   crystals,
-  buildingKind,
   tileAvailable,
 }: CraftPurchaseOptions): CraftPurchaseValidation {
   if (!spec) return { ok: false, error: "Choose a craft" };
   if (spec.locked) return { ok: false, error: `${spec.label} is locked` };
-  if (!buildingKind) return { ok: false, error: "Select a production building" };
-  if (!CRAFT_PRODUCTION_BUILDINGS.has(buildingKind)) {
-    return { ok: false, error: "That building cannot produce crafts" };
-  }
   if (!tileAvailable) return { ok: false, error: "That tile is blocked" };
   if (crystals < spec.cost) {
     return { ok: false, error: `Need ${spec.cost} crystals` };

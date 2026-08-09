@@ -65,9 +65,11 @@ import {
 import { getFrameProfileHudLines } from "./frameProfiler.js";
 import {
   clearUnitSelections,
+  getSelectedUnits,
   getSingleSelectedUnit,
   refreshTurretRangeRingGeometry,
   refreshUnitAttackRangeRingGeometry,
+  toggleTurretRangeRing,
   toggleUnitSelection,
   updateCommandGridVisibility,
 } from "./selection.js";
@@ -76,9 +78,13 @@ import {
   paginateRoster,
   type RosterEntry,
 } from "./selectionRules.js";
+import { currentBuildTarget } from "./construction.js";
+import { canDestroy, destroyOwnEntity } from "./demolition.js";
+import { destroyRefund } from "./constructionRules.js";
 import {
   Building,
-  ConstructionState,
+  ConstructionSite,
+  CraftProductionSite,
   DebugSettings,
   Enemy,
   GameState,
@@ -109,6 +115,9 @@ function element(document: UIKitDocument, id: string): UiElement | null {
 
 interface LiveRosterEntry extends RosterEntry {
   entity: Entity;
+  // Turrets ride in the same roster but are Buildings — they toggle a range
+  // ring instead of joining the unit selection.
+  building: boolean;
 }
 
 export class TabletSystem extends createSystem({
@@ -265,8 +274,11 @@ export class TabletSystem extends createSystem({
     const astronautIndex = tablet.getValue(TabletState, "astronautIndex") ?? -1;
     this.setText(
       "builder-label",
-      astronautIndex >= 0 ? `Astronaut #${astronautIndex}` : "Select an astronaut",
+      astronautIndex >= 0
+        ? `Astronaut #${astronautIndex}`
+        : "Place a building - an astronaut will come",
     );
+    this.applySiteActions(tablet);
     this.applyView(tablet.getValue(TabletState, "view") ?? "overview");
     this.applySelectedCard(
       tablet.getValue(TabletState, "selectedBuildingKind") ?? "none",
@@ -297,14 +309,9 @@ export class TabletSystem extends createSystem({
             : `Produce ${building.label} - ${building.cost}`
           : "Choose a building",
     );
-    const source = tablet.getValue(TabletState, "spawnBuilding") as Entity | null;
-    const sourceKind = source?.getValue(Building, "kind") ?? null;
-    this.setText(
-      "craft-source-label",
-      sourceKind
-        ? `Production: ${this.buildingLabel(sourceKind)}`
-        : "Select a production building",
-    );
+    // No production building is selected or required any more. The header now
+    // says what the tab actually does.
+    this.setText("craft-source-label", "Pick a craft, then pick a tile");
     const craftKind = tablet.getValue(TabletState, "selectedCraftKind") ?? "none";
     const craft = getCraftSpec(craftKind);
     const placingCraft =
@@ -320,6 +327,65 @@ export class TabletSystem extends createSystem({
     this.applyCraftPage(tablet, craftKind);
     this.applyUnitPage(tablet);
     this.applySettingsView();
+  }
+
+  // Keeps the three destructive actions honest about what they would do right
+  // now: what gets cancelled, how many units get scrapped and for how much, and
+  // that the command center refuses. All three route through the same dirty
+  // guard, so an unchanged label costs nothing.
+  private applySiteActions(tablet: Entity): void {
+    const clicked = tablet.getValue(TabletState, "selectedSite") as Entity | null;
+    const site =
+      clicked && this.isLiveSite(clicked) ? clicked : currentBuildTarget();
+    let cancelLabel = "No build to cancel";
+    if (site?.hasComponent(ConstructionSite)) {
+      const label =
+        getBuildingSpec(site.getValue(ConstructionSite, "kind") ?? "")?.label ??
+        "Site";
+      cancelLabel = `Cancel ${label} +${site.getValue(ConstructionSite, "cost") ?? 0}`;
+    } else if (site?.hasComponent(CraftProductionSite)) {
+      const spec = getProductionSpec(
+        site.getValue(CraftProductionSite, "kind") ?? "",
+      );
+      cancelLabel = `Cancel ${spec?.label ?? "Craft"} +${spec?.cost ?? 0}`;
+    }
+    this.setText("build-cancel-label", cancelLabel);
+    // The Crafts tab's cancel is narrower, so it drops the refund figure rather
+    // than overflowing its row; the status line still reports the exact amount.
+    this.setText(
+      "craft-cancel-label",
+      cancelLabel === "No build to cancel"
+        ? "Nothing to cancel"
+        : cancelLabel.replace(/ \+\d+$/, ""),
+    );
+
+    const units = getSelectedUnits();
+    let unitRefund = 0;
+    for (const unit of units) {
+      unitRefund += destroyRefund(
+        getProductionSpec(unit.getValue(Unit, "kind") ?? "")?.cost ?? 0,
+      );
+    }
+    // With no units selected the button falls through to the focused turret,
+    // so the label has to say so rather than a bare "Destroy".
+    const focused = tablet.getValue(TabletState, "focusBuilding") as
+      | Entity
+      | null;
+    const focusedKind = focused?.hasComponent(Building)
+      ? (focused.getValue(Building, "kind") ?? null)
+      : null;
+    this.setText(
+      "unit-destroy-label",
+      units.length > 0
+        ? `Destroy ${units.length} +${unitRefund}`
+        : focusedKind === "command-center"
+          ? "Cannot destroy HQ"
+          : focusedKind
+            ? `Destroy ${this.buildingLabel(focusedKind)} +${destroyRefund(
+                getBuildingSpec(focusedKind)?.cost ?? 0,
+              )}`
+            : "Destroy",
+    );
   }
 
   private invalidateSnapshot(): void {
@@ -476,6 +542,92 @@ export class TabletSystem extends createSystem({
     });
     on("build-produce", () => this.produceSelectedBuildItem(tablet));
     on("craft-produce", () => this.produceSelectedCraft(tablet));
+    // Both tabs cancel the same thing — there is one build queue, so Build and
+    // Crafts show the same target and the same label.
+    on("build-cancel", () => this.cancelCurrentBuild(tablet));
+    on("craft-cancel", () => this.cancelCurrentBuild(tablet));
+    on("unit-destroy", () => this.destroySelectedUnits(tablet));
+  }
+
+  // The Build tab's one destructive action. It does not care what is selected:
+  // it cancels the build an astronaut is actually working on, and if nobody has
+  // started anything it cancels the FIRST in the queue — so repeated presses
+  // unwind the queue from the front. Clicking a site on the board overrides the
+  // target, for when you want a specific one. Refund is full: the crystals were
+  // taken at placement and nothing was finished.
+  private cancelCurrentBuild(tablet: Entity): void {
+    const clicked = tablet.getValue(TabletState, "selectedSite") as Entity | null;
+    const site =
+      clicked && this.isLiveSite(clicked) ? clicked : currentBuildTarget();
+    if (!site) {
+      this.touch(tablet, "No build to cancel", "error");
+      return;
+    }
+    const result = destroyOwnEntity(site);
+    tablet.setValue(TabletState, "selectedSite", null);
+    tablet.setValue(TabletState, "selectedSiteIndex", -1);
+    boardState.selectedSite = null;
+    this.touch(
+      tablet,
+      result.ok
+        ? `${result.label} cancelled. ${result.refund} crystals refunded`
+        : (result.reason ?? "Cannot cancel that"),
+      result.ok ? "success" : "error",
+    );
+  }
+
+  private destroySelectedUnits(tablet: Entity): void {
+    const units = getSelectedUnits();
+    if (units.length === 0) {
+      // Turrets live in this roster too, so this is also where a FINISHED
+      // building gets destroyed — the capability lost when the Crafts tab
+      // button was removed.
+      const building = tablet.getValue(TabletState, "focusBuilding") as
+        | Entity
+        | null;
+      if (building?.hasComponent(Building)) {
+        const refusal = canDestroy(building);
+        if (refusal) {
+          this.touch(tablet, refusal.reason ?? "Cannot destroy that", "error");
+          return;
+        }
+        const result = destroyOwnEntity(building);
+        tablet.setValue(TabletState, "focusBuilding", null);
+        tablet.setValue(TabletState, "focusBuildingIndex", -1);
+        this.touch(
+          tablet,
+          `${result.label} destroyed. ${result.refund} crystals refunded`,
+          "success",
+        );
+        return;
+      }
+      this.touch(tablet, "Select units to destroy", "error");
+      return;
+    }
+    let refunded = 0;
+    let destroyed = 0;
+    for (const unit of units) {
+      const result = destroyOwnEntity(unit);
+      if (!result.ok) continue;
+      refunded += result.refund;
+      destroyed += 1;
+    }
+    clearUnitSelections();
+    tablet.setValue(TabletState, "astronaut", null);
+    tablet.setValue(TabletState, "astronautIndex", -1);
+    updateCommandGridVisibility();
+    this.touch(
+      tablet,
+      `${destroyed} unit${destroyed === 1 ? "" : "s"} destroyed. ${refunded} crystals refunded`,
+      destroyed > 0 ? "success" : "error",
+    );
+  }
+
+  private isLiveSite(site: Entity): boolean {
+    return (
+      site.hasComponent(ConstructionSite) ||
+      site.hasComponent(CraftProductionSite)
+    );
   }
 
   private changeCraftPage(tablet: Entity, direction: number): void {
@@ -509,6 +661,11 @@ export class TabletSystem extends createSystem({
 
   private setView(tablet: Entity, view: string, status: string): void {
     tablet.setValue(TabletState, "view", view);
+    // Switching tabs drops the site selection, so Cancel can never act on
+    // something the player has stopped looking at.
+    tablet.setValue(TabletState, "selectedSite", null);
+    tablet.setValue(TabletState, "selectedSiteIndex", -1);
+    boardState.selectedSite = null;
     tablet.setValue(TabletState, "buildPlacementActive", false);
     tablet.setValue(TabletState, "craftPlacementActive", false);
     this.hidePlacementMarker();
@@ -741,8 +898,11 @@ export class TabletSystem extends createSystem({
     for (let slot = 0; slot < 4; slot += 1) {
       const entry = page.entries[slot];
       if (entry) {
-        const selected =
-          entry.entity.getValue(UnitSelection, "selected") ?? false;
+        // Turrets are not part of the unit selection, so "selected" for them
+        // means "this is the turret whose range ring is showing".
+        const selected = entry.building
+          ? boardState.selectedTurret === entry.entity
+          : (entry.entity.getValue(UnitSelection, "selected") ?? false);
         this.setProps(`unit-card-${slot}`, `live:${selected}`, {
           backgroundColor: selected
             ? TABLET_SELECTED_UNIT_BACKGROUND
@@ -795,14 +955,34 @@ export class TabletSystem extends createSystem({
     });
   }
 
+  // Turrets are Buildings, not Units, so they never appeared here. They are
+  // still forces you own and want to find, so the roster lists them alongside
+  // the units — marked `building` because they select and destroy differently.
   private liveRoster(): LiveRosterEntry[] {
-    return Array.from(this.queries.units.entities, (entity) => ({
-      entity,
-      index: entity.index,
-      kind: entity.getValue(Unit, "kind") ?? "unknown",
-      category:
-        entity.getValue(UnitSelection, "category") ?? "command-center",
-    }));
+    const roster: LiveRosterEntry[] = Array.from(
+      this.queries.units.entities,
+      (entity) => ({
+        entity,
+        index: entity.index,
+        kind: entity.getValue(Unit, "kind") ?? "unknown",
+        category:
+          entity.getValue(UnitSelection, "category") ?? "command-center",
+        building: false,
+      }),
+    );
+    for (const entity of this.queries.buildings.entities) {
+      if (entity.getValue(Building, "kind") !== "turret") continue;
+      roster.push({
+        entity,
+        index: entity.index,
+        kind: "turret",
+        // Matches the filter a board click sets, so clicking a turret on the
+        // board and then opening Units narrows to turrets.
+        category: "turret",
+        building: true,
+      });
+    }
+    return roster;
   }
 
   private toggleRosterSlot(tablet: Entity, slot: number): void {
@@ -813,6 +993,25 @@ export class TabletSystem extends createSystem({
     );
     const entry = page.entries[slot];
     if (!entry) return;
+    // A turret card behaves exactly like clicking the turret on the board:
+    // toggle its range ring and make it the focused building, which is what the
+    // Destroy action targets when no units are selected.
+    if (entry.building) {
+      const shown = toggleTurretRangeRing(this.world, entry.entity);
+      tablet.setValue(TabletState, "focusBuilding", shown ? entry.entity : null);
+      tablet.setValue(
+        TabletState,
+        "focusBuildingIndex",
+        shown ? entry.entity.index : -1,
+      );
+      this.touch(
+        tablet,
+        shown
+          ? `Turret #${entry.index} selected`
+          : `Turret #${entry.index} deselected`,
+      );
+      return;
+    }
     const selected = toggleUnitSelection(this.world, entry.entity);
     const single = getSingleSelectedUnit();
     const astronaut =
@@ -838,8 +1037,9 @@ export class TabletSystem extends createSystem({
     this.touch(tablet, `Unit roster page ${next + 1} of ${page.pageCount}`);
   }
 
+  // No production building to select any more, and none needs to exist. Pick a
+  // craft, then pick a tile.
   private produceSelectedCraft(tablet: Entity): void {
-    const source = tablet.getValue(TabletState, "spawnBuilding") as Entity | null;
     const game = boardState.gameState;
     const spec = getProductionSpec(
       tablet.getValue(TabletState, "selectedCraftKind") ?? "none",
@@ -847,7 +1047,6 @@ export class TabletSystem extends createSystem({
     const validation = validateCraftPurchase({
       spec,
       crystals: game?.getValue(GameState, "crystals") ?? 0,
-      buildingKind: source?.getValue(Building, "kind") ?? null,
       // Tile availability is validated when the player clicks the board.
       tileAvailable: true,
     });
@@ -901,21 +1100,15 @@ export class TabletSystem extends createSystem({
     this.produceSelectedBuilding(tablet);
   }
 
+  // Place-first: no astronaut is required to start a build order. The site is
+  // placed on the board and an available astronaut comes to it.
   private produceSelectedBuilding(tablet: Entity): void {
-    const astronaut = tablet.getValue(TabletState, "astronaut") as Entity | null;
-    if (!astronaut) {
-      this.touch(tablet, "Select an astronaut to build", "error");
-      return;
-    }
     const spec = getBuildingSpec(
       tablet.getValue(TabletState, "selectedBuildingKind") ?? "none",
     );
     const validation = validateBuildOrder({
       spec,
       crystals: boardState.gameState?.getValue(GameState, "crystals") ?? 0,
-      builderIdle:
-        astronaut.hasComponent(ConstructionState) &&
-        astronaut.getValue(ConstructionState, "stage") === "idle",
       // Footprint and path are validated against the tile the player clicks.
       footprintValid: true,
       pathFound: true,
@@ -951,10 +1144,14 @@ export class TabletSystem extends createSystem({
 
   private unitLabel(kind: string): string {
     if (kind === "astronaut") return "Astronaut";
+    if (kind === "turret") return "Turret";
     return getCraftSpec(kind)?.label ?? kind;
   }
 
   private unitImage(unit: Entity, kind: string): string {
+    if (kind === "turret") {
+      return getBuildingSpec("turret")?.image ?? "/images/turret_single.png";
+    }
     if (kind === "astronaut") {
       return unit.object3D?.name.includes("B")
         ? "/images/astronautB.png"
