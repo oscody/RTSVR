@@ -662,7 +662,7 @@
     align-items: center;
     justify-content: center;
     width: 548px;
-    height: 176px;
+    height: 202px;
     margin-top: 4px;
     background-color: #eaf2f5;
     border-width: 1px;
@@ -725,17 +725,19 @@
     <span id="settings-frame-profile-1" class="performance-profile-text">Calls -- | Tris -- | Objs -- | Mesh -- | Geom -- | Prog -- | Prof --</span>
     <span id="settings-frame-profile-2" class="performance-profile-text">Draw --</span>
     <span id="settings-frame-profile-3" class="performance-profile-text">TotalMeshes -- | Frame -- | Update -- | Render -- | Other --</span>
-    <span id="settings-frame-profile-4" class="performance-profile-text">Prep -- | PAlien -- | PDrake -- | PMech -- | Spawn -- | Wave --</span>
-    <span id="settings-frame-profile-5" class="performance-profile-text">Path -- | Tablet -- | Input -- | PanelUI -- | ScreenSpaceUI --</span>
-    <span id="settings-frame-profile-6" class="performance-profile-text">CanvasPointer -- | Grab -- | Transform -- | Visibility -- | Environment --</span>
-    <span id="settings-frame-profile-7" class="performance-profile-text">Movement -- | Combat -- | CombatEffects --</span>
-    <span id="settings-frame-profile-8" class="performance-profile-text">AlienAnim -- | CommandCenterAnim -- | TurretAnim --</span>
-    <span id="settings-frame-profile-9" class="performance-profile-text">UnitAnim -- | Mining -- | MinerAnim --</span>
-    <span id="settings-frame-profile-10" class="performance-profile-text">Construction -- | CraftProduction -- | CraftVisualRise --</span>
-    <span id="settings-frame-profile-11" class="performance-profile-text">Level -- | Audio -- | Follow -- | Board -- | Sky -- | Structures --</span>
-    <span id="settings-frame-profile-12" class="performance-profile-text">Performance -- | Interaction -- | Meteor -- | MatchResult -- | ScenarioReset --</span>
-    <span id="settings-frame-profile-13" class="performance-profile-text"></span>
-    <span id="settings-frame-profile-14" class="performance-profile-text"></span>
+    <span id="settings-frame-profile-4" class="performance-profile-text">WorstUpd --</span>
+    <span id="settings-frame-profile-5" class="performance-profile-text">Path -- | Tablet -- | Input -- | PanelUI -- | ScreenSpaceUI -- | RayMesh --</span>
+    <span id="settings-frame-profile-6" class="performance-profile-text">Avg Update -- | Tablet -- | Input -- | PanelUI --</span>
+    <span id="settings-frame-profile-7" class="performance-profile-text">Prep -- | PAlien -- | PDrake -- | PMech -- | Spawn -- | Wave --</span>
+    <span id="settings-frame-profile-8" class="performance-profile-text">CanvasPointer -- | Grab -- | Transform -- | Visibility -- | Environment --</span>
+    <span id="settings-frame-profile-9" class="performance-profile-text">Movement -- | Combat -- | CombatEffects --</span>
+    <span id="settings-frame-profile-10" class="performance-profile-text">AlienAnim -- | CommandCenterAnim -- | TurretAnim --</span>
+    <span id="settings-frame-profile-11" class="performance-profile-text">UnitAnim -- | Mining -- | MinerAnim --</span>
+    <span id="settings-frame-profile-12" class="performance-profile-text">Construction -- | CraftProduction -- | CraftVisualRise --</span>
+    <span id="settings-frame-profile-13" class="performance-profile-text">Level -- | Audio -- | Follow -- | Board -- | Sky -- | Structures --</span>
+    <span id="settings-frame-profile-14" class="performance-profile-text">Performance -- | Interaction -- | Meteor -- | MatchResult -- | ScenarioReset --</span>
+    <span id="settings-frame-profile-15" class="performance-profile-text"></span>
+    <span id="settings-frame-profile-16" class="performance-profile-text"></span>
   </div>
   <div id="overview-view" class="view">
     <span class="section-title">Economy and forces</span>

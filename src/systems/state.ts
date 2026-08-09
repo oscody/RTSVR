@@ -134,6 +134,9 @@ export const RuntimePerformance = createComponent("RuntimePerformance", {
   averageFrameMs: { type: Types.Float32, default: 0 },
   worstFrameMs: { type: Types.Float32, default: 0 },
   movingEntities: { type: Types.Int16, default: 0 },
+  // Live enemy count, published alongside the frame sample so the profiler's
+  // context line can report scene load without needing its own ECS query.
+  enemiesAlive: { type: Types.Int16, default: 0 },
   revision: { type: Types.Int32, default: 0 },
 });
 

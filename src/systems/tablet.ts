@@ -97,7 +97,7 @@ import {
 
 // Number of `settings-frame-profile-N` spans in rts-tablet.uikitml. Keep in
 // sync with the markup; extra rows are blanked so the strip height is stable.
-const PROFILE_ROW_COUNT = 14;
+const PROFILE_ROW_COUNT = 16;
 
 type UiElement = UIKit.Text & {
   setProperties(properties: Record<string, unknown>): void;

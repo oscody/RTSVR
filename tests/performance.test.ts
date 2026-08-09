@@ -164,3 +164,90 @@ test("alien pathfinding is bounded, shared, and follows cached routes", () => {
   assert.match(wave, /this\.pathfinder\.findPathToAny/);
   assert.doesNotMatch(wave, /findPathToTarget/);
 });
+
+test("profiler reports one coherent worst-Update frame, averages, and ray targets", () => {
+  const profiler = source("src/systems/frameProfiler.ts");
+  const markup = source("ui/rts-tablet.uikitml");
+  const tablet = source("src/systems/tablet.ts");
+
+  // Per-slot maxima can come from different frames and cannot be added. The
+  // worst-Update snapshot captures one real frame so its parts do add up.
+  assert.match(profiler, /lastMs: number/);
+  assert.match(profiler, /slot\.lastMs = ms/);
+  assert.match(profiler, /if \(lastUpdateMs > worstUpdateMs\)/);
+  assert.match(profiler, /WorstUpd \$\{worstUpdateMs\.toFixed\(1\)\}/);
+  // Render/Other run outside world.update, so their lastMs belongs to the
+  // previous frame and must be excluded from the breakdown.
+  assert.match(profiler, /if \(DIAG_ROW\.includes/);
+
+  // frames/totalMs were already collected and discarded; surface the average so
+  // a sustained cost can be told apart from a one-frame spike.
+  assert.match(profiler, /slot\.totalMs \/ slot\.frames/);
+  assert.match(profiler, /"Avg " \+/);
+
+  // Input is raycasting, so count ray-testable meshes the way Draw counts
+  // visible ones.
+  assert.match(profiler, /RayMesh \$\{rayTestableMeshes\}/);
+  assert.match(profiler, /function isRaycastDisabled/);
+
+  // The HUD must have room for the two new rows.
+  const rows = markup.match(/id="settings-frame-profile-\d+"/g) ?? [];
+  assert.ok(rows.length >= 16, `expected >=16 profile rows, found ${rows.length}`);
+  assert.match(tablet, /PROFILE_ROW_COUNT = 16/);
+  assert.match(markup, /settings-frame-profile-4[^>]*>WorstUpd --</);
+  assert.match(
+    markup,
+    /settings-frame-profile-5[^>]*>Path -- \| Tablet -- \| Input -- \| PanelUI -- \| ScreenSpaceUI -- \| RayMesh --</,
+  );
+  assert.match(
+    markup,
+    /settings-frame-profile-6[^>]*>Avg Update -- \| Tablet -- \| Input -- \| PanelUI --</,
+  );
+  assert.match(profiler, /const coreLine = \[rowLine\(CORE_ROW\), `RayMesh /);
+  assert.match(
+    profiler,
+    /coreLine,\s+avgLine,\s+rowLine\(PREPARATION_ROW\),/,
+  );
+});
+
+test("profiler readings are copyable from chrome://inspect DevTools", () => {
+  const profiler = readFileSync(
+    new URL("src/systems/frameProfiler.ts", ROOT),
+    "utf8",
+  );
+
+  // Readings must be readable over remote debugging, not only transcribed from
+  // video frames — video cannot show console warnings or call stacks at all.
+  assert.match(profiler, /const FRAME_PROFILER_LOG = /);
+  assert.match(profiler, /if \(FRAME_PROFILER_LOG\)/);
+  // One grouped entry per flush, with a filterable prefix.
+  assert.match(profiler, /\[Profile\] t\+/);
+  assert.match(profiler, /\$\{hudLine\}/);
+});
+
+test("profiler readings open with session context", () => {
+  const profiler = readFileSync(
+    new URL("src/systems/frameProfiler.ts", ROOT),
+    "utf8",
+  );
+  const state = readFileSync(new URL("src/systems/state.ts", ROOT), "utf8");
+  const performance = readFileSync(
+    new URL("src/systems/performance.ts", ROOT),
+    "utf8",
+  );
+
+  // A wall of milliseconds cannot be compared between captures without knowing
+  // the level, the frame rate and how loaded the board was.
+  assert.match(profiler, /function buildContextLine/);
+  assert.match(profiler, /Lvl \$\{level\}/);
+  assert.match(profiler, /FPS \$\{fps\}/);
+  assert.match(profiler, /Enemies \$\{alive\} alive \/ \$\{killed\} killed/);
+  assert.match(profiler, /Moving \$\{moving\}/);
+  // It must lead the reading, not trail it.
+  assert.match(profiler, /hudLines = \[contextLine, \.\.\.lines\]/);
+
+  // Live enemy count is published by PerformanceSystem on the same sample tick.
+  assert.match(state, /enemiesAlive: \{ type: Types\.Int16/);
+  assert.match(performance, /"enemiesAlive",\s+this\.queries\.aliens\.entities\.size/);
+});
+

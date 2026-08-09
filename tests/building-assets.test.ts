@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 interface GlbPrimitive {
@@ -98,54 +98,21 @@ function estimatedRuntimeMeshCount(gltf: GlbJson): number {
   );
 }
 
-function geometryContract(
-  primitive: GlbPrimitive,
-  ignoredAttributes: string[],
-): object {
-  const attributes = Object.fromEntries(
-    Object.entries(primitive.attributes).filter(
-      ([name]) => !ignoredAttributes.includes(name),
-    ),
-  );
-  return {
-    attributes,
-    indices: primitive.indices,
-    mode: primitive.mode ?? 4,
-  };
-}
-
 test("turret shares one material and binds recoil to named barrels", () => {
-  const source = readGlbJson(
-    "../public/gltf/equipment/turret_single_source.glb",
-  );
   const output = readGlbJson("../public/gltf/equipment/turret_single.glb");
   const recoil = output.animations.find(({ name }) => name === "Fire_Recoil");
   const targets = recoil?.channels.map(
     (channel) => output.nodes[channel.target.node]?.name,
   );
 
-  assert.deepEqual(source.skins ?? [], []);
   assert.deepEqual(output.skins ?? [], []);
   assert.equal(reachablePrimitiveCount(output), 10);
-  assert.equal(estimatedRuntimeMeshCount(source), 8);
   assert.equal(estimatedRuntimeMeshCount(output), 3);
   assert.deepEqual(targets?.sort(), ["Barrel_L", "Barrel_R"]);
-  assert.deepEqual(output.animations, source.animations);
-  output.nodes.forEach((node, index) => {
-    const { name: _outputName, ...outputContract } = node;
-    const { name: _sourceName, ...sourceContract } = source.nodes[index];
-    assert.deepEqual(outputContract, sourceContract);
-  });
-  output.meshes.forEach((mesh, meshIndex) => {
-    assert.deepEqual(
-      mesh.primitives.map((primitive) =>
-        geometryContract(primitive, ["COLOR_0"]),
-      ),
-      source.meshes[meshIndex].primitives.map((primitive) =>
-        geometryContract(primitive, ["COLOR_0"]),
-      ),
-    );
-  });
+  assert.deepEqual(
+    output.animations.map(({ name }) => name),
+    ["Fire_Recoil"],
+  );
   const shared = output.materials.findIndex(
     ({ name }) => name === "TurretVertexColors",
   );
@@ -157,43 +124,28 @@ test("turret shares one material and binds recoil to named barrels", () => {
     true,
   );
   assert.equal(output.asset.extras?.rtsvrOptimization?.kind, "turret-materials");
+  assert.equal(output.asset.extras?.rtsvrOptimization?.runtimeMeshesBefore, 8);
+  assert.equal(output.asset.extras?.rtsvrOptimization?.runtimeMeshesAfter, 3);
 });
 
 test("command center atlas preserves geometry, animation, and transparent glass", () => {
-  const source = readGlbJson("../public/gltf/command_center_source.glb");
   const output = readGlbJson("../public/gltf/command_center.glb");
 
-  assert.deepEqual(source.skins ?? [], []);
   assert.deepEqual(output.skins ?? [], []);
   assert.equal(reachablePrimitiveCount(output), 233);
-  assert.equal(estimatedRuntimeMeshCount(source), 34);
   assert.equal(estimatedRuntimeMeshCount(output), 15);
-  assert.deepEqual(output.nodes, source.nodes);
-  assert.deepEqual(output.animations, source.animations);
   assert.deepEqual(
     output.animations.map(({ name }) => name),
     ["Idle_Operational", "Door_Open", "Door_Close"],
   );
-  output.meshes.forEach((mesh, meshIndex) => {
-    assert.deepEqual(
-      mesh.primitives.map((primitive) =>
-        geometryContract(primitive, ["TEXCOORD_0"]),
-      ),
-      source.meshes[meshIndex].primitives.map((primitive) =>
-        geometryContract(primitive, ["TEXCOORD_0"]),
-      ),
-    );
-  });
-
   const atlas = output.materials.findIndex(
     ({ name }) => name === "CommandCenterOpaqueAtlas",
   );
-  const sourceGlass = source.materials.findIndex(
+  const glassMaterial = output.materials.findIndex(
     ({ name }) => name === "EnergyGlass",
   );
   assert.notEqual(atlas, -1);
-  assert.notEqual(sourceGlass, -1);
-  assert.deepEqual(output.materials[sourceGlass], source.materials[sourceGlass]);
+  assert.notEqual(glassMaterial, -1);
   assert.equal(output.images?.length, 3);
   assert.equal(output.textures?.length, 3);
   assert.equal(output.samplers?.length, 1);
@@ -216,7 +168,7 @@ test("command center atlas preserves geometry, animation, and transparent glass"
 
   const primitives = output.meshes.flatMap(({ primitives }) => primitives);
   const atlased = primitives.filter(({ material }) => material === atlas);
-  const glass = primitives.filter(({ material }) => material === sourceGlass);
+  const glass = primitives.filter(({ material }) => material === glassMaterial);
   assert.equal(atlased.length, 207);
   assert.equal(glass.length, 26);
   assert.equal(
@@ -227,12 +179,33 @@ test("command center atlas preserves geometry, animation, and transparent glass"
     output.asset.extras?.rtsvrOptimization?.kind,
     "command-center-material-atlas",
   );
+  assert.equal(output.asset.extras?.rtsvrOptimization?.runtimeMeshesBefore, 34);
+  assert.equal(output.asset.extras?.rtsvrOptimization?.runtimeMeshesAfter, 15);
 });
 
-test("building optimizer is registered as a reproducible asset command", () => {
+test("building optimizer uses external inputs and legacy source GLBs stay absent", () => {
   const packageJson = readFileSync(
     new URL("../package.json", import.meta.url),
     "utf8",
   );
+  const optimizer = readFileSync(
+    new URL("../scripts/optimize-buildings.mjs", import.meta.url),
+    "utf8",
+  );
   assert.match(packageJson, /"asset:optimize-buildings"/);
+  assert.doesNotMatch(optimizer, /turret_single_source\.glb/);
+  assert.doesNotMatch(optimizer, /command_center_source\.glb/);
+  assert.match(optimizer, /source must live outside public\//);
+  assert.equal(
+    existsSync(
+      new URL("../public/gltf/equipment/turret_single_source.glb", import.meta.url),
+    ),
+    false,
+  );
+  assert.equal(
+    existsSync(
+      new URL("../public/gltf/command_center_source.glb", import.meta.url),
+    ),
+    false,
+  );
 });

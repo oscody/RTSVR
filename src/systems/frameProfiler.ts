@@ -1,4 +1,10 @@
 import { type World } from "@iwsdk/core";
+import {
+  GameStats,
+  RuntimePerformance,
+  WaveSource,
+  boardState,
+} from "./state.js";
 import { WaveSystem } from "./wave.js";
 
 // Lightweight per-system frame profiler. Wraps the update() of EVERY registered
@@ -8,6 +14,11 @@ import { WaveSystem } from "./wave.js";
 // tick to refresh the HUD text, which the tablet's Settings tab shows via
 // getFrameProfileHud(). Flip FRAME_PROFILER_ENABLED off to disable.
 const FRAME_PROFILER_ENABLED = true;
+// Mirror each flush to the console (~1 Hz) so profiler readings can be copied
+// out of `chrome://inspect` DevTools rather than transcribed from video frames.
+// Filter the DevTools console by "[Profile]" to isolate them. Turn off to keep
+// the console quiet — the tablet HUD is unaffected either way.
+const FRAME_PROFILER_LOG = true;
 // Any system not named in HUD_ROWS falls back to this many per line.
 const HUD_PER_LINE = 6;
 // Fixed HUD rows, in display order. Systems are grouped by what they do so a
@@ -57,6 +68,18 @@ interface WalkNode {
   visible?: boolean;
   userData?: { drawCat?: string };
   children?: WalkNode[];
+  raycast?: unknown;
+}
+let rayTestableMeshes = 0;
+
+// A mesh has opted out of hit-testing when its own `raycast` differs from the
+// one it inherits from the prototype — the shape `disableModelRaycast` and the
+// decorative opt-outs use (`child.raycast = () => {}`).
+function isRaycastDisabled(node: WalkNode): boolean {
+  const own = node.raycast;
+  if (typeof own !== "function") return false;
+  const proto = Object.getPrototypeOf(node) as { raycast?: unknown } | null;
+  return proto ? own !== proto.raycast : false;
 }
 let profiledScene: WalkNode | null = null;
 // Per-frame decomposition state (see DIAG_ROW).
@@ -75,7 +98,16 @@ interface ProfSlot {
   frames: number;
   totalMs: number;
   maxMs: number;
+  /** This frame's value, so a worst-Update frame can be decomposed coherently. */
+  lastMs: number;
 }
+
+// Per-slot maxima are independent: the worst Tablet and the worst Input can come
+// from different frames in the same window, so they cannot be added and cannot
+// be attributed. Snapshot every slot's THIS-FRAME value at the moment `Update`
+// sets a new window maximum, giving one coherent breakdown of one real frame.
+let worstUpdateMs = 0;
+let worstUpdateParts: { short: string; ms: number }[] = [];
 
 const slots: ProfSlot[] = [];
 let installed = false;
@@ -87,9 +119,40 @@ let hudLine = "";
 // the whole block and splits labels mid-row, which is unreadable on device.
 let hudLines: string[] = [];
 
+// Scene/session context for the top of every reading: which level, how fast it
+// ran, and how loaded the board was. Every value is read from a singleton that
+// PerformanceSystem writes on the same sample tick as this flush, so the numbers
+// belong to the same window as the timings below them.
+function buildContextLine(): string {
+  const perf = boardState.runtimePerformance;
+  const wave = boardState.waveSource;
+  const stats = boardState.gameStats;
+  if (!perf && !wave) return "";
+  const fps = Math.round(perf?.getValue(RuntimePerformance, "fps") ?? 0);
+  const avg = perf?.getValue(RuntimePerformance, "averageFrameMs") ?? 0;
+  const worst = perf?.getValue(RuntimePerformance, "worstFrameMs") ?? 0;
+  const moving = perf?.getValue(RuntimePerformance, "movingEntities") ?? 0;
+  const alive = perf?.getValue(RuntimePerformance, "enemiesAlive") ?? 0;
+  const killed = stats?.getValue(GameStats, "enemiesKilled") ?? 0;
+  const level = wave?.getValue(WaveSource, "waveNumber") ?? 0;
+  const stage = wave?.getValue(WaveSource, "stage") ?? "";
+  return (
+    `Lvl ${level}${stage ? ` ${stage}` : ""} | FPS ${fps} | ` +
+    `Avg ${avg.toFixed(1)} | Worst ${worst.toFixed(1)} | ` +
+    `Enemies ${alive} alive / ${killed} killed | Moving ${moving}`
+  );
+}
+
 function slotFor(label: string, short: string): ProfSlot {
   for (const slot of slots) if (slot.label === label) return slot;
-  const slot: ProfSlot = { label, short, frames: 0, totalMs: 0, maxMs: 0 };
+  const slot: ProfSlot = {
+    label,
+    short,
+    frames: 0,
+    totalMs: 0,
+    maxMs: 0,
+    lastMs: 0,
+  };
   slots.push(slot);
   return slot;
 }
@@ -97,6 +160,7 @@ function slotFor(label: string, short: string): ProfSlot {
 function record(slot: ProfSlot, ms: number): void {
   slot.frames += 1;
   slot.totalMs += ms;
+  slot.lastMs = ms;
   if (ms > slot.maxMs) slot.maxMs = ms;
 }
 
@@ -181,10 +245,16 @@ export function flushFrameProfile(): void {
   // call per visible mesh, no auto-batch). Invisible subtrees are skipped for
   // the category buckets because the renderer skips them (no draw call), but
   // still counted for Objs/Mesh. Category is the nearest tagged ancestor.
+  // It also counts (3) ray-testable meshes: `Input` is raycasting, so this is to
+  // the input cost what the Draw buckets are to the draw-call cost. A mesh is
+  // counted unless something replaced its `raycast` method — which is exactly
+  // what `disableModelRaycast` and the decorative opt-outs do. Upper bound: a
+  // mesh only really costs if it also sits under a RayInteractable ancestor.
   const drawBuckets = new Map<string, number>();
   if (profiledScene) {
     let objects = 0;
     let meshes = 0;
+    let rayTestable = 0;
     const walk = (node: WalkNode, cat: string, visible: boolean): void => {
       objects += 1;
       const isMesh = node.type === "Mesh" || node.type === "SkinnedMesh";
@@ -194,6 +264,7 @@ export function flushFrameProfile(): void {
       const nextVisible = visible && node.visible !== false;
       if (isMesh && nextVisible) {
         drawBuckets.set(nextCat, (drawBuckets.get(nextCat) ?? 0) + 1);
+        if (!isRaycastDisabled(node)) rayTestable += 1;
       }
       const children = node.children;
       if (children) {
@@ -203,6 +274,7 @@ export function flushFrameProfile(): void {
     walk(profiledScene, "static", true);
     sceneObjectCount = objects;
     sceneMeshCount = meshes;
+    rayTestableMeshes = rayTestable;
   }
   // "Draw:" line — visible meshes per category, biggest first, plus the total
   // (compare `TotalMeshes` against `Calls` on the counts line to gauge how good
@@ -226,13 +298,42 @@ export function flushFrameProfile(): void {
       `Prof ${lastFlushMs.toFixed(2)}`
     : "";
 
+  // "WorstUpd" — one real frame, decomposed. Unlike the per-slot maxima below,
+  // these numbers came from the same frame and therefore add up.
+  const worstUpdateLine =
+    worstUpdateMs > 0
+      ? `WorstUpd ${worstUpdateMs.toFixed(1)} = ` +
+        worstUpdateParts
+          .slice(0, 6)
+          .map((part) => `${part.short} ${part.ms.toFixed(1)}`)
+          .join(" | ")
+      : "";
+
+  // "Avg" — sustained cost for the three UI slots, so a steady 6 ms can be told
+  // apart from a one-frame 6 ms spike. `frames`/`totalMs` were already being
+  // collected and discarded here.
+  const avgFor = (short: string): string => {
+    const slot = slots.find((candidate) => candidate.short === short);
+    if (!slot || slot.frames === 0) return "";
+    return `${short} ${(slot.totalMs / slot.frames).toFixed(1)}`;
+  };
+  const avgLine =
+    "Avg " +
+    ["Update", "Tablet", "Input", "PanelUI"]
+      .map(avgFor)
+      .filter((part) => part.length > 0)
+      .join(" | ");
+
   const partsByShort = new Map<string, string>();
   for (const slot of slots) {
     partsByShort.set(slot.short, `${slot.short} ${slot.maxMs.toFixed(1)}`);
     slot.frames = 0;
     slot.totalMs = 0;
     slot.maxMs = 0;
+    slot.lastMs = 0;
   }
+  worstUpdateMs = 0;
+  worstUpdateParts = [];
 
   const priorityShorts = new Set<string>([
     ...DIAG_ROW,
@@ -251,11 +352,18 @@ export function flushFrameProfile(): void {
   ]
     .filter((part) => part.length > 0)
     .join(" | ");
+  const coreLine = [rowLine(CORE_ROW), `RayMesh ${rayTestableMeshes}`]
+    .filter((part) => part.length > 0)
+    .join(" | ");
   const lines = [
     countsLine,
     drawLine,
     diagLine,
-    ...HUD_ROWS.map(rowLine),
+    worstUpdateLine,
+    coreLine,
+    avgLine,
+    rowLine(PREPARATION_ROW),
+    ...HUD_ROWS.slice(2).map(rowLine),
   ].filter((line) => line.length > 0);
   const remaining = slots
     .filter((slot) => !priorityShorts.has(slot.short))
@@ -266,6 +374,23 @@ export function flushFrameProfile(): void {
   }
   hudLines = lines;
   hudLine = lines.join("\n");
+  // Context first: without it a reading is a wall of milliseconds with no way to
+  // know which level, how loaded the scene was, or what the frame rate actually
+  // was — so two captures cannot be compared. Sourced from the singletons
+  // PerformanceSystem already publishes on this same flush tick.
+  const contextLine = buildContextLine();
+  if (contextLine) {
+    hudLines = [contextLine, ...lines];
+    hudLine = `${contextLine}\n${hudLine}`;
+  }
+
+  // Mirror the HUD to the console so it can be read over `chrome://inspect`
+  // remote debugging instead of transcribed from a video frame. One grouped
+  // entry per flush (~1 Hz) so a whole reading copies in a single selection,
+  // and one prefix so it filters cleanly in DevTools.
+  if (FRAME_PROFILER_LOG) {
+    console.log(`[Profile] t+${(performance.now() / 1000).toFixed(1)}s\n${hudLine}`);
+  }
 
   maxDrawCalls = 0;
   maxTriangles = 0;
@@ -316,6 +441,21 @@ function wrapWorldUpdate(world: any): void {
     original(delta, time);
     lastUpdateMs = performance.now() - start;
     record(updateSlot, lastUpdateMs);
+    // Every system slot's lastMs is now this frame's value (they all ran inside
+    // original()), so this is the one moment a coherent decomposition exists.
+    // Render/Other are excluded: they happen outside world.update, so their
+    // lastMs would be the previous frame's and would not belong to this Update.
+    if (lastUpdateMs > worstUpdateMs) {
+      worstUpdateMs = lastUpdateMs;
+      worstUpdateParts = [];
+      for (const slot of slots) {
+        if (DIAG_ROW.includes(slot.short as (typeof DIAG_ROW)[number])) continue;
+        if (slot.lastMs > 0) {
+          worstUpdateParts.push({ short: slot.short, ms: slot.lastMs });
+        }
+      }
+      worstUpdateParts.sort((a, b) => b.ms - a.ms);
+    }
   };
 }
 

@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, resolve, sep } from "node:path";
 import { deflateSync } from "node:zlib";
 
 const GLB_MAGIC = 0x46546c67;
@@ -267,8 +267,23 @@ function validateAsset(json, clips, primitives, before, label) {
   }
 }
 
-function optimizeTurret() {
-  const inputPath = resolve("public/gltf/equipment/turret_single_source.glb");
+function externalSourcePath(path, label) {
+  if (!path) {
+    fail(
+      `usage: node scripts/optimize-buildings.mjs ` +
+        `<turret-source.glb> <command-center-source.glb>`,
+    );
+  }
+  const inputPath = resolve(path);
+  const publicRoot = `${resolve("public")}${sep}`;
+  if (inputPath.startsWith(publicRoot)) {
+    fail(`${label} source must live outside public/`);
+  }
+  return inputPath;
+}
+
+function optimizeTurret(sourcePath) {
+  const inputPath = externalSourcePath(sourcePath, "turret");
   const outputPath = resolve("public/gltf/equipment/turret_single.glb");
   const state = readGlb(inputPath);
   const { json } = state;
@@ -350,8 +365,8 @@ function optimizeTurret() {
   console.log(`[building-optimize] turret_single.glb: 10 -> ${after} runtime meshes`);
 }
 
-function optimizeCommandCenter() {
-  const inputPath = resolve("public/gltf/command_center_source.glb");
+function optimizeCommandCenter(sourcePath) {
+  const inputPath = externalSourcePath(sourcePath, "command-center");
   const outputPath = resolve("public/gltf/command_center.glb");
   const state = readGlb(inputPath);
   const { json } = state;
@@ -491,5 +506,6 @@ function optimizeCommandCenter() {
   console.log(`[building-optimize] command_center.glb: 233 -> ${after} runtime meshes`);
 }
 
-optimizeTurret();
-optimizeCommandCenter();
+const [turretSourcePath, commandCenterSourcePath] = process.argv.slice(2);
+optimizeTurret(turretSourcePath);
+optimizeCommandCenter(commandCenterSourcePath);

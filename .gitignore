@@ -66,3 +66,7 @@ metaspatial/
 public/gltf/generated/
 public/glxf/
 public/ui/
+
+# Legacy optimizer inputs must never be restored under the public asset tree.
+public/gltf/command_center_source.glb
+public/gltf/equipment/turret_single_source.glb

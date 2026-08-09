@@ -48,6 +48,11 @@ export class PerformanceSystem extends createSystem({
       this.frameCount,
       this.worstFrameSeconds,
     );
+    diagnostics.setValue(
+      RuntimePerformance,
+      "enemiesAlive",
+      this.queries.aliens.entities.size,
+    );
     diagnostics.setValue(RuntimePerformance, "fps", sample.fps);
     diagnostics.setValue(
       RuntimePerformance,
