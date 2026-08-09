@@ -119,6 +119,11 @@ export class TabletSystem extends createSystem({
 }) {
   private document: UIKitDocument | null = null;
   private tabletEntity: Entity | null = null;
+  // Last value written to each element, so unchanged writes can be skipped.
+  // WeakMap keyed on the element: entries vanish with a rebuilt document, so a
+  // stale guard can never suppress a real update.
+  private readonly lastSetText = new WeakMap<object, string>();
+  private readonly lastSetProps = new WeakMap<object, string>();
   private lastAstronauts = Number.NaN;
   private lastBuildingCount = Number.NaN;
   private lastCountdown = Number.NaN;
@@ -249,7 +254,7 @@ export class TabletSystem extends createSystem({
       );
     }
     this.setText("tablet-status", tablet.getValue(TabletState, "status") ?? "");
-    element(document, "tablet-status")?.setProperties({
+    this.setProps("tablet-status", tablet.getValue(TabletState, "statusKind") ?? "", {
       color:
         tablet.getValue(TabletState, "statusKind") === "error"
           ? TABLET_STATUS_ERROR_COLOR
@@ -522,21 +527,10 @@ export class TabletSystem extends createSystem({
   }
 
   private applyView(view: string): void {
-    element(this.document!, "overview-view")?.setProperties({
-      display: view === "overview" ? "flex" : "none",
-    });
-    element(this.document!, "build-view")?.setProperties({
-      display: view === "build" ? "flex" : "none",
-    });
-    element(this.document!, "crafts-view")?.setProperties({
-      display: view === "crafts" ? "flex" : "none",
-    });
-    element(this.document!, "units-view")?.setProperties({
-      display: view === "units" ? "flex" : "none",
-    });
-    element(this.document!, "settings-view")?.setProperties({
-      display: view === "settings" ? "flex" : "none",
-    });
+    for (const name of ["overview", "build", "crafts", "units", "settings"]) {
+      const display = view === name ? "flex" : "none";
+      this.setProps(`${name}-view`, display, { display });
+    }
     const tabs = [
       ["tab-overview", "overview"],
       ["tab-build", "build"],
@@ -545,11 +539,11 @@ export class TabletSystem extends createSystem({
       ["tab-settings", "settings"],
     ];
     for (const [id, tabView] of tabs) {
-      element(this.document!, id)?.setProperties({
-        backgroundColor:
-          view === tabView
-            ? TABLET_TAB_ACTIVE_BACKGROUND
-            : TABLET_TAB_INACTIVE_BACKGROUND,
+      const active = view === tabView;
+      this.setProps(id, `${active}`, {
+        backgroundColor: active
+          ? TABLET_TAB_ACTIVE_BACKGROUND
+          : TABLET_TAB_INACTIVE_BACKGROUND,
         borderColor:
           view === tabView
             ? TABLET_TAB_ACTIVE_BORDER
@@ -561,10 +555,12 @@ export class TabletSystem extends createSystem({
 
   private applySelectedCard(kind: string): void {
     for (const spec of BUILDING_CATALOG.filter((item) => !item.locked)) {
-      element(this.document!, `build-${spec.kind}`)?.setProperties({
-        borderColor:
-          spec.kind === kind ? TABLET_SELECTED_BUILD_BORDER : TABLET_CARD_BORDER,
-        borderWidth: spec.kind === kind ? 3 : 1,
+      const selected = spec.kind === kind;
+      this.setProps(`build-${spec.kind}`, `${selected}`, {
+        borderColor: selected
+          ? TABLET_SELECTED_BUILD_BORDER
+          : TABLET_CARD_BORDER,
+        borderWidth: selected ? 3 : 1,
       });
     }
     const selectedCraftKind =
@@ -598,19 +594,15 @@ export class TabletSystem extends createSystem({
         borderWidth: spec?.kind === selectedKind ? 3 : 1,
       });
       if (!spec) continue;
-      element(this.document!, `craft-image-${slot}`)?.setProperties({
-        src: spec.image,
-      });
+      this.setProps(`craft-image-${slot}`, spec.image, { src: spec.image });
       this.setText(`craft-name-${slot}`, spec.label);
       this.setText(`craft-cost-${slot}`, `${spec.cost} crystals`);
     }
     this.setText("craft-page-label", `Page ${page + 1} / ${pageCount}`);
-    element(this.document!, "craft-prev")?.setProperties({
-      opacity: page > 0 ? 1 : 0.35,
-    });
-    element(this.document!, "craft-next")?.setProperties({
-      opacity: page < pageCount - 1 ? 1 : 0.35,
-    });
+    const prevOn = page > 0;
+    const nextOn = page < pageCount - 1;
+    this.setProps("craft-prev", `${prevOn}`, { opacity: prevOn ? 1 : 0.35 });
+    this.setProps("craft-next", `${nextOn}`, { opacity: nextOn ? 1 : 0.35 });
   }
 
   private adjustSetting(
@@ -748,12 +740,10 @@ export class TabletSystem extends createSystem({
 
     for (let slot = 0; slot < 4; slot += 1) {
       const entry = page.entries[slot];
-      const card = element(this.document!, `unit-card-${slot}`);
-      const image = element(this.document!, `unit-image-${slot}`);
       if (entry) {
         const selected =
           entry.entity.getValue(UnitSelection, "selected") ?? false;
-        card?.setProperties({
+        this.setProps(`unit-card-${slot}`, `live:${selected}`, {
           backgroundColor: selected
             ? TABLET_SELECTED_UNIT_BACKGROUND
             : TABLET_UNIT_BACKGROUND,
@@ -763,9 +753,10 @@ export class TabletSystem extends createSystem({
           borderWidth: selected ? 3 : 1,
           cursor: "pointer",
         });
-        image?.setProperties({
+        const unitSrc = this.unitImage(entry.entity, entry.kind);
+        this.setProps(`unit-image-${slot}`, `flex:${unitSrc}`, {
           display: "flex",
-          src: this.unitImage(entry.entity, entry.kind),
+          src: unitSrc,
         });
         this.setText(`unit-name-${slot}`, this.unitLabel(entry.kind));
         this.setText(
@@ -776,7 +767,7 @@ export class TabletSystem extends createSystem({
       }
 
       const locked = slot === 3;
-      card?.setProperties({
+      this.setProps(`unit-card-${slot}`, `empty:${locked}`, {
         backgroundColor: locked
           ? TABLET_LOCKED_UNIT_BACKGROUND
           : TABLET_EMPTY_UNIT_BACKGROUND,
@@ -784,7 +775,7 @@ export class TabletSystem extends createSystem({
         borderWidth: 1,
         cursor: "default",
       });
-      image?.setProperties({ display: "none" });
+      this.setProps(`unit-image-${slot}`, "none", { display: "none" });
       this.setText(`unit-name-${slot}`, locked ? "Locked" : "Empty");
       this.setText(
         `unit-meta-${slot}`,
@@ -796,10 +787,10 @@ export class TabletSystem extends createSystem({
       "unit-page-label",
       `Page ${page.page + 1} / ${page.pageCount}`,
     );
-    element(this.document!, "unit-prev")?.setProperties({
+    this.setProps("unit-prev", `${page.page > 0}`, {
       opacity: page.page > 0 ? 1 : 0.35,
     });
-    element(this.document!, "unit-next")?.setProperties({
+    this.setProps("unit-next", `${page.page < page.pageCount - 1}`, {
       opacity: page.page < page.pageCount - 1 ? 1 : 0.35,
     });
   }
@@ -972,7 +963,36 @@ export class TabletSystem extends createSystem({
     return getCraftSpec(kind)?.image ?? "/images/rover.png";
   }
 
+  // Phase A dirty guard. `setProperties` allocates and dirties UIKit layout, and
+  // a full render touches ~43 elements of which typically one or two actually
+  // changed. Measured on Quest 2026-08-09: `PanelUI` is a fixed ~6.8 ms burst
+  // about twice a second, identical at every level while the scene tripled —
+  // scene-independent, so it is the rewrite itself. Skipping unchanged writes is
+  // the direct attack on that. Keyed on the element object, not the id, because
+  // ids are reused across pages (`craft-name-${slot}`) and a WeakMap cannot go
+  // stale when the document is rebuilt.
   private setText(id: string, text: string): void {
-    element(this.document!, id)?.setProperties({ text });
+    const target = element(this.document!, id);
+    if (!target) return;
+    if (this.lastSetText.get(target) === text) return;
+    this.lastSetText.set(target, text);
+    target.setProperties({ text });
+  }
+
+  // Same guard for the non-text writes (colours, borders, opacity, display,
+  // image src). These are the most repetitive of all — tab colours and card
+  // borders are rewritten on every render and change only when the selection
+  // does. Compares a caller-supplied signature rather than the object, so one
+  // string covers a multi-property write.
+  private setProps(
+    id: string,
+    signature: string,
+    properties: Record<string, unknown>,
+  ): void {
+    const target = element(this.document!, id);
+    if (!target) return;
+    if (this.lastSetProps.get(target) === signature) return;
+    this.lastSetProps.set(target, signature);
+    target.setProperties(properties);
   }
 }

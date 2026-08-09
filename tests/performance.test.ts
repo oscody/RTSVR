@@ -251,3 +251,27 @@ test("profiler readings open with session context", () => {
   assert.match(performance, /"enemiesAlive",\s+this\.queries\.aliens\.entities\.size/);
 });
 
+test("tablet skips unchanged element writes", () => {
+  const tablet = readFileSync(new URL("src/systems/tablet.ts", ROOT), "utf8");
+
+  // setProperties allocates and dirties UIKit layout. A render touches ~43
+  // elements of which typically one or two changed, and PanelUI was measured as
+  // a fixed ~6.8ms burst about twice a second — scene-independent, so it is the
+  // rewrite itself. Skipping unchanged writes is the direct attack on that.
+  assert.match(tablet, /lastSetText = new WeakMap<object, string>/);
+  assert.match(tablet, /lastSetProps = new WeakMap<object, string>/);
+  assert.match(tablet, /if \(this\.lastSetText\.get\(target\) === text\) return;/);
+  assert.match(tablet, /if \(this\.lastSetProps\.get\(target\) === signature\) return;/);
+
+  // Keyed on the element, never the id: ids repeat across pages
+  // (`craft-name-${slot}`) and a WeakMap cannot go stale on a rebuilt document.
+  assert.doesNotMatch(tablet, /lastSetText = new Map<string/);
+
+  // The repetitive per-render writes must go through the guard, not raw
+  // setProperties. A few one-shot writes may remain unguarded.
+  const guarded = (tablet.match(/this\.setProps\(/g) ?? []).length;
+  const raw = (tablet.match(/\?\.setProperties\(\{/g) ?? []).length;
+  assert.ok(guarded >= 12, `expected >=12 guarded writes, found ${guarded}`);
+  assert.ok(raw <= 4, `expected <=4 raw setProperties left, found ${raw}`);
+});
+
