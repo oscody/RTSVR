@@ -83,8 +83,15 @@ export function createCraftProductionSite(
   let animatedModel: Object3D | null = null;
   let animatedClips: AnimationClip[] = [];
   if (spec.asset === "craftMinerAnimated" || spec.asset === "craftRacer") {
-    const gltf = AssetManager.getGLTF(spec.asset);
-    if (!gltf) throw new Error(`${spec.asset} not preloaded`);
+    // Completed miners use the reduced model. Construction temporarily uses
+    // the full source model so its one-shot spawn effect remains unchanged.
+    const animationAsset = spec.asset === "craftMinerAnimated"
+      ? "craftMinerConstruction"
+      : spec.asset === "craftRacer"
+        ? "craftRacerConstruction"
+        : spec.asset;
+    const gltf = AssetManager.getGLTF(animationAsset);
+    if (!gltf) throw new Error(`${animationAsset} not preloaded`);
     animatedModel = gltf.scene;
     animatedModel.rotation.y = Math.PI;
     const width = new Box3().setFromObject(animatedModel).getSize(new Vector3()).x;

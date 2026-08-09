@@ -195,7 +195,7 @@ export function optimizeLoadedAssets(keys: string[], verbose = false): void {
     const stats = mergeRigidGroups(gltf.scene, gltf.animations ?? []);
     before += stats.before;
     after += stats.after;
-    if (verbose && stats.before !== stats.after) {
+    if (verbose) {
       console.log(
         `[MeshMerge] ${key}: ${stats.before} -> ${stats.after} meshes`,
       );

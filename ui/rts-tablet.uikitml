@@ -773,7 +773,7 @@
   <div id="crafts-view" class="view" style="display: none;">
     <span id="craft-source-label" class="craft-source">Production: Command Center</span>
     <div class="craft-row">
-      <button id="craft-card-0" class="craft-card"><img id="craft-image-0" class="craft-image" src="/images/craft_cargoA.png"></img><div class="craft-copy"><span id="craft-name-0" class="craft-name">Cargo Craft</span><span id="craft-cost-0" class="craft-cost">50 crystals</span></div></button>
+      <button id="craft-card-0" class="craft-card"><img id="craft-image-0" class="craft-image" src="/images/craft_miner.png"></img><div class="craft-copy"><span id="craft-name-0" class="craft-name">Cargo Craft</span><span id="craft-cost-0" class="craft-cost">50 crystals</span></div></button>
       <button id="craft-card-1" class="craft-card"><img id="craft-image-1" class="craft-image" src="/images/craft_miner.png"></img><div class="craft-copy"><span id="craft-name-1" class="craft-name">Mining Craft</span><span id="craft-cost-1" class="craft-cost">60 crystals</span></div></button>
     </div>
     <div class="craft-row">

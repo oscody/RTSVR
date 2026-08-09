@@ -189,10 +189,7 @@ function enemyVisualElevation(spec: EnemyEntitySpec): number {
 }
 
 function isHoverCraftAsset(asset: string): boolean {
-  return (
-    asset === "craftCargoA" ||
-    asset === "craftRacer"
-  );
+  return asset === "craftRacer";
 }
 
 const interactionProxyMaterial = new MeshBasicMaterial({
