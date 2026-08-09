@@ -40,6 +40,7 @@ import {
   RACER_CANNON_MUZZLE_NODES,
 } from "./constants.ts";
 import { Building, Enemy, Unit, boardState } from "./state.js";
+import { makeNonInteractive } from "./sharedGeometry.js";
 
 type BoltShape = "plasma" | "laser";
 type EmitterMode = "nodes" | "single" | "double" | "melee";
@@ -163,6 +164,7 @@ function ensurePool(): boolean {
       toneMapped: false,
     });
     const mesh = new Mesh(boltGeometry, material);
+    makeNonInteractive(mesh);
     mesh.name = `CombatBolt_${index}`;
     mesh.visible = false;
     mesh.frustumCulled = false;
@@ -192,6 +194,7 @@ function ensurePool(): boolean {
       toneMapped: false,
     });
     const mesh = new Mesh(flashGeometry, material);
+    makeNonInteractive(mesh);
     mesh.name = `CombatFlash_${index}`;
     mesh.visible = false;
     mesh.frustumCulled = false;

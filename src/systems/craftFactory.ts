@@ -18,6 +18,7 @@ import { attachCraftVisualRise } from "./craftVisualRise.js";
 import { currentUnitMaxHealth } from "./debugStatOverrides.js";
 import { attachHealthBar } from "./healthBar.js";
 import { UNIT_BOX_GEOMETRY } from "./sharedGeometry.js";
+import { disableModelRaycast } from "./structures.js";
 import { attachMinerAnimation } from "./minerAnimation.js";
 import { attachUnitAnimation } from "./unitAnimation.js";
 import {
@@ -65,6 +66,9 @@ export function createCraftEntity(
   const [worldX, worldZ] = gridToWorld(x, y);
   holder.position.set(worldX, 0.006, worldZ);
   holder.add(model);
+  // The box proxy below is the sole ray target, as for enemies. Without
+  // this the whole model hierarchy is hit-tested every frame, both hands.
+  disableModelRaycast(model);
 
   const size = new Box3().setFromObject(model).getSize(new Vector3());
   const proxyHeight = Math.max(size.y + visualYOffset, TILE_SIZE * 0.8);

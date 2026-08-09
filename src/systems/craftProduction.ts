@@ -12,6 +12,7 @@ import {
   type World,
 } from "@iwsdk/core";
 import type { AnimationClip } from "three";
+import { makeNonInteractive } from "./sharedGeometry.js";
 import { TILE_SIZE, gridToWorld } from "./board.js";
 import {
   CRAFT_PRODUCTION_FOUNDATION_COLOR,
@@ -62,6 +63,8 @@ export function createCraftProductionSite(
       depthWrite: false,
     }),
   );
+
+  makeNonInteractive(foundation);
   foundation.name = "CraftProductionFoundation";
   holder.add(foundation);
 
@@ -69,12 +72,15 @@ export function createCraftProductionSite(
     new BoxGeometry(size, 0.028, 0.035),
     new MeshBasicMaterial({ color: PROGRESS_BACKGROUND_COLOR }),
   );
+
+  makeNonInteractive(progressBackground);
   progressBackground.position.set(0, TILE_SIZE * 0.8, 0);
   holder.add(progressBackground);
   const progressFill = new Mesh(
     new BoxGeometry(size, 0.032, 0.04),
     new MeshBasicMaterial({ color: PROGRESS_FILL_COLOR }),
   );
+  makeNonInteractive(progressFill);
   progressFill.name = "CraftProductionProgressFill";
   progressFill.position.set(-size / 2, TILE_SIZE * 0.8, 0.001);
   progressFill.scale.x = 0.001;

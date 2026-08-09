@@ -12,6 +12,7 @@ import {
   type World,
 } from "@iwsdk/core";
 import { GRID_SIZE, TILE_SIZE, gridToWorld } from "./board.js";
+import { makeNonInteractive } from "./sharedGeometry.js";
 import {
   METEOR_ARRIVAL_EPSILON,
   METEOR_CYCLE_GAP_SECONDS,
@@ -115,6 +116,8 @@ function ensurePool(): boolean {
         toneMapped: false,
       }),
     );
+
+    makeNonInteractive(trail);
     // Vertical streak directly ABOVE the rock. The rock falls straight down, so
     // its tail always points straight up — no holder rotation needed (which
     // wouldn't survive the Transform binding anyway).
@@ -162,6 +165,7 @@ function ensurePool(): boolean {
       toneMapped: false,
     });
     const mesh = new Mesh(flashGeometry, material);
+    makeNonInteractive(mesh);
     mesh.name = `MeteorImpact_${index}`;
     mesh.visible = false;
     mesh.frustumCulled = false;

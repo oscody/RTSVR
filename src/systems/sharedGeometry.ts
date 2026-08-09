@@ -1,4 +1,23 @@
-import { BoxGeometry } from "@iwsdk/core";
+import { BoxGeometry, type Object3D } from "@iwsdk/core";
+
+/**
+ * Mark decoration as never hit-testable.
+ *
+ * Pointer raycasting runs for both hands every frame against every visible mesh
+ * under a `RayInteractable`, and `Input` was measured on Quest 2026-08-09 as a
+ * *sustained* ~3.5-4.5 ms — the only cost paid on every single frame. Most of
+ * what is on screen is scenery nobody can click: health bars, range rings,
+ * bolts, meteors, progress fills, board dressing.
+ *
+ * The examples treat this as a per-mesh decision made at creation
+ * (`vr_examples/brushspace` opts out in 10 of its 11 mesh-creating systems);
+ * RTSVR historically left everything hit-testable. Call this on anything
+ * decorative. Rendering is unaffected — raycast is not draw.
+ */
+export function makeNonInteractive<T extends Object3D>(object: T): T {
+  object.raycast = () => {};
+  return object;
+}
 
 /**
  * One unit cube reused by every interaction proxy. Proxies differ only in

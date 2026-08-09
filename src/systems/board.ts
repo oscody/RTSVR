@@ -14,6 +14,7 @@ import {
   createSystem,
 } from "@iwsdk/core";
 import { Object3D, RingGeometry } from "@iwsdk/core";
+import { makeNonInteractive } from "./sharedGeometry.js";
 import {
   BoardMarker,
   BoardSurface,
@@ -90,6 +91,7 @@ function makeMarker(color: number): Mesh {
       depthWrite: false,
     }),
   );
+  makeNonInteractive(marker);
   marker.rotateX(-Math.PI / 2);
   marker.position.y = MARKER_Y_OFFSET;
   marker.visible = false;
@@ -223,6 +225,7 @@ export class BoardSystem extends createSystem({}) {
         side: DoubleSide,
       }),
     );
+    makeNonInteractive(rim);
     rim.name = "BoardRim";
     this.world.createTransformEntity(rim, { parent: root });
 
@@ -234,6 +237,7 @@ export class BoardSystem extends createSystem({}) {
         side: DoubleSide,
       }),
     );
+    makeNonInteractive(ground);
     ground.name = "BoardGround";
     this.world.createTransformEntity(ground, { parent: root });
 
@@ -253,6 +257,7 @@ export class BoardSystem extends createSystem({}) {
         side: DoubleSide,
       }),
     );
+    makeNonInteractive(dustPatches);
     dustPatches.name = "BoardDustPatches";
     dustPatches.renderOrder = 1;
     rootObject.add(dustPatches);
@@ -362,6 +367,7 @@ export class BoardSystem extends createSystem({}) {
         depthWrite: false,
       }),
     );
+    makeNonInteractive(orderMesh);
     orderMesh.name = "BoardOrderMarker";
     orderMesh.rotateX(-Math.PI / 2);
     orderMesh.position.y = ORDER_MARKER_Y_OFFSET;

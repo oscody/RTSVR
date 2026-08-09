@@ -275,3 +275,39 @@ test("tablet skips unchanged element writes", () => {
   assert.ok(raw <= 4, `expected <=4 raw setProperties left, found ${raw}`);
 });
 
+test("decoration is not ray-testable, pick targets still are", () => {
+  const read = (f: string) => readFileSync(new URL(f, ROOT), "utf8");
+  const shared = read("src/systems/sharedGeometry.ts");
+  const structures = read("src/systems/structures.ts");
+  const board = read("src/systems/board.ts");
+
+  // Input is the only sustained cost (~3.5-4.5 ms every frame) and it scales
+  // with ray-testable meshes, so decoration must opt out at creation.
+  assert.match(shared, /export function makeNonInteractive/);
+
+  // D1: friendly models hand hit-testing to their box proxy, as enemies do.
+  assert.match(structures, /export function disableModelRaycast/);
+  for (const f of ["src/systems/craftFactory.ts", "src/systems/buildingFactory.ts"]) {
+    assert.match(read(f), /disableModelRaycast\(model\)/, f);
+  }
+
+  // D2: decoration nobody can click.
+  for (const f of [
+    "src/systems/healthBar.ts",
+    "src/systems/selection.ts",
+    "src/systems/combatEffects.ts",
+    "src/systems/meteorSystem.ts",
+    "src/systems/construction.ts",
+    "src/systems/craftProduction.ts",
+    "src/systems/board.ts",
+  ]) {
+    assert.match(read(f), /makeNonInteractive\(/, f);
+  }
+
+  // The board's single pick volume must stay hit-testable — switching it off
+  // would silently break tile selection with no error anywhere.
+  assert.doesNotMatch(board, /makeNonInteractive\(boardSurface\)/);
+  // Same for the tablet's grab handle.
+  assert.doesNotMatch(read("src/systems/tablet.ts"), /makeNonInteractive\(handle\)/);
+});
+

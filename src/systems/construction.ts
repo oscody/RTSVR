@@ -8,6 +8,7 @@ import {
   type World,
 } from "@iwsdk/core";
 import { TILE_SIZE, gridToWorld } from "./board.js";
+import { makeNonInteractive } from "./sharedGeometry.js";
 import {
   CONSTRUCTION_FOUNDATION_COLOR,
   CONSTRUCTION_FOUNDATION_OPACITY,
@@ -58,6 +59,7 @@ export function createConstructionSite(
       depthWrite: false,
     }),
   );
+  makeNonInteractive(foundation);
   foundation.name = "ConstructionFoundation";
   holder.add(foundation);
 
@@ -65,12 +67,15 @@ export function createConstructionSite(
     new BoxGeometry(footprintSize, 0.028, 0.035),
     new MeshBasicMaterial({ color: PROGRESS_BACKGROUND_COLOR }),
   );
+
+  makeNonInteractive(progressBackground);
   progressBackground.position.set(0, TILE_SIZE * 0.8, 0);
   holder.add(progressBackground);
   const progressFill = new Mesh(
     new BoxGeometry(footprintSize, 0.032, 0.04),
     new MeshBasicMaterial({ color: PROGRESS_FILL_COLOR }),
   );
+  makeNonInteractive(progressFill);
   progressFill.name = "ConstructionProgressFill";
   progressFill.position.set(-footprintSize / 2, TILE_SIZE * 0.8, 0.001);
   progressFill.scale.x = 0.001;

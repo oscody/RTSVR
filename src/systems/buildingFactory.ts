@@ -16,6 +16,7 @@ import { footprintCells } from "./constructionRules.js";
 import { currentBuildingMaxHealth } from "./debugStatOverrides.js";
 import { attachHealthBar } from "./healthBar.js";
 import { UNIT_BOX_GEOMETRY } from "./sharedGeometry.js";
+import { disableModelRaycast } from "./structures.js";
 import { attachTurretAnimation } from "./turretAnimation.js";
 import {
   Building,
@@ -69,6 +70,9 @@ export function createBuildingEntity(
   holder.userData.drawCat = "building"; // draw-call profiler category
   holder.position.set((wx0 + wx1) / 2, 0.006, (wz0 + wz1) / 2);
   holder.add(model);
+  // The box proxy below is the sole ray target, as for enemies. Without
+  // this the whole model hierarchy is hit-tested every frame, both hands.
+  disableModelRaycast(model);
 
   const size = new Box3().setFromObject(model).getSize(new Vector3());
   const proxyFootprint = spec.widthTiles * TILE_SIZE * 0.86;

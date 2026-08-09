@@ -223,7 +223,7 @@ function addInteractionProxy(
 // with live alien count). Selection only needs the tile-sized box proxy, so make
 // the visual model non-raycastable and let the proxy be the sole ray target.
 // Visuals are unaffected — this only changes hit-testing, not rendering.
-function disableModelRaycast(model: Object3D): void {
+export function disableModelRaycast(model: Object3D): void {
   model.traverse((child) => {
     if ((child as Mesh).isMesh) {
       child.raycast = () => {};
@@ -347,6 +347,10 @@ export function createInitialScenario(world: World): void {
       holder.add(model);
       if (spec.unit || spec.building) {
         addInteractionProxy(holder, spec, model, visualYOffset);
+        // Only safe once the proxy exists to take over: the box becomes the
+        // sole ray target, exactly as for enemies. Scenery has no proxy, so it
+        // keeps its own raycast (nothing points at it either way).
+        disableModelRaycast(model);
       }
       const entity = world
         .createTransformEntity(holder, { parent: root })

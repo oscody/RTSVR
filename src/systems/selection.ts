@@ -6,6 +6,7 @@ import {
   type World,
 } from "@iwsdk/core";
 import { TILE_SIZE } from "./board.js";
+import { makeNonInteractive } from "./sharedGeometry.js";
 import { getUnitAttackSpec, TURRET_ATTACK_SPEC } from "./combatRules.js";
 import {
   ATTACK_RANGE_RING_COLOR,
@@ -182,6 +183,7 @@ function showTurretRangeRing(world: World, turret: Entity): void {
         depthWrite: false,
       }),
     );
+    makeNonInteractive(ring);
     ring.name = `TurretRangeRing_${turret.index}`;
     ring.rotateX(-Math.PI / 2);
     ring.position.y = ATTACK_RANGE_RING_Y_OFFSET;
@@ -259,6 +261,7 @@ function setUnitAttackRangeRingVisible(
         depthWrite: false,
       }),
     );
+    makeNonInteractive(ring);
     ring.name = `UnitAttackRangeRing_${unit.index}`;
     ring.rotateX(-Math.PI / 2);
     ring.position.y = ATTACK_RANGE_RING_Y_OFFSET;
@@ -286,6 +289,7 @@ function setRingVisible(world: World, unit: Entity, visible: boolean): void {
         depthWrite: false,
       }),
     );
+    makeNonInteractive(ring);
     ring.name = `UnitSelectionRing_${unit.index}`;
     ring.rotateX(-Math.PI / 2);
     ring.position.y = 0.026;
