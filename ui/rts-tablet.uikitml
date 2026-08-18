@@ -162,7 +162,14 @@
     background-color: #912018;
   }
 
-  .exit-icon, .restart-icon {
+  .restart-icon {
+    width: 15px;
+    height: 15px;
+    color: #ffffff;
+    margin-right: 5px;
+  }
+
+  .exit-icon {
     width: 15px;
     height: 15px;
     color: #ffffff;
@@ -837,6 +844,7 @@
         <div class="settings-row"><span class="settings-label">Astro Power</span><div class="settings-controls"><button id="setting-astronautAttackDamage-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-astronautAttackDamage-value" class="settings-value">8</span><button id="setting-astronautAttackDamage-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
         <div class="settings-row"><span class="settings-label">Racer Power</span><div class="settings-controls"><button id="setting-craftRacerAttackDamage-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-craftRacerAttackDamage-value" class="settings-value">12</span><button id="setting-craftRacerAttackDamage-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
         <div class="settings-row"><span class="settings-label">Turret Power</span><div class="settings-controls"><button id="setting-turretAttackDamage-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-turretAttackDamage-value" class="settings-value">18</span><button id="setting-turretAttackDamage-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
+        <div class="settings-row"><span class="settings-label">Alert Volume</span><div class="settings-controls"><button id="setting-underAttackAlertVolume-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-underAttackAlertVolume-value" class="settings-value">0.25</span><button id="setting-underAttackAlertVolume-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
       </div>
     </div>
   </div>

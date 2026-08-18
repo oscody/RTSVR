@@ -198,6 +198,28 @@ export function resolveWaveSpawnGroups(spec: WaveSpec): WaveSpawnGroup[] {
   return composeThreatBudgetGroups(spec);
 }
 
+/**
+ * How many enemies a wave is worth in total — the denominator of the "troops
+ * remaining" readout.
+ *
+ * Resolved through {@link resolveWaveSpawnGroups} rather than read off `groups`,
+ * so threat-budget waves (which compose their roster at runtime) report the
+ * same number they will actually spawn. Cached because the answer for a given
+ * wave never changes and the HUD asks every frame.
+ */
+const totalByWave = new Map<number, number>();
+
+export function waveTotalEnemyCount(waveNumber: number): number {
+  const cached = totalByWave.get(waveNumber);
+  if (cached !== undefined) return cached;
+  const spec = getWaveSpec(waveNumber);
+  const total = spec
+    ? resolveWaveSpawnGroups(spec).reduce((sum, group) => sum + group.count, 0)
+    : 0;
+  totalByWave.set(waveNumber, total);
+  return total;
+}
+
 export function resolveWavePacing(spec: WaveSpec): {
   maxActiveAliens: number;
   releaseIntervalSeconds: number;

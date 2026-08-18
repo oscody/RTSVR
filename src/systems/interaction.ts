@@ -42,6 +42,7 @@ import {
 import {
   clearUnitSelections,
   getSelectedUnits,
+  toggleEnemyRangeRing,
   getSingleSelectedUnit,
   toggleTurretRangeRing,
   toggleUnitSelection,
@@ -165,7 +166,18 @@ export class InteractionSystem extends createSystem({
         }
         const units = getSelectedUnits();
         const enemyObject = entity.object3D;
-        if (units.length === 0 || !enemyObject) return;
+        if (!enemyObject) return;
+        // Nothing of yours selected, so this click cannot be an attack order:
+        // treat it as inspection and show the alien's threat radius instead.
+        if (units.length === 0) {
+          const shown = toggleEnemyRangeRing(this.world, entity);
+          const kind = entity.getValue(Enemy, "kind") ?? "alien";
+          this.setTabletStatus(
+            shown ? `${kind} attack range shown` : "Attack range hidden",
+            "info",
+          );
+          return;
+        }
         const attackers = units.filter((unit) =>
           unit.hasComponent(CombatCapability),
         );

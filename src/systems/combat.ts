@@ -24,11 +24,14 @@ import { releaseBuilder } from "./construction.js";
 import { updateHealthBar } from "./healthBar.js";
 import { detachMinerAnimation } from "./minerAnimation.js";
 import {
+  disposeEnemyRangeRing,
   disposeTurretRangeRing,
   disposeUnitSelectionVisuals,
   removeUnitFromSelection,
 } from "./selection.js";
 import { detachTurretAnimation } from "./turretAnimation.js";
+import { notifyFriendlyDamage, notifyThreat } from "./underAttackAlert.js";
+import { clearThreat } from "./underAttackVfx.js";
 import { detachUnitAnimation } from "./unitAnimation.js";
 import {
   Building,
@@ -185,6 +188,10 @@ export class CombatSystem extends createSystem({
         this.clearAttack(attacker);
         continue;
       }
+      // Threat cue: this alien has locked onto a friendly. Marking here reuses
+      // targeting work that already happened, and covers aliens still closing
+      // in — the badge is a warning, not a damage report.
+      notifyThreat(target);
       if (
         (attacker.getValue(WaveUnit, "hasWaypoint") ?? false) ||
         !this.enemyHasContact(attacker, target)
@@ -230,6 +237,12 @@ export class CombatSystem extends createSystem({
     resolveDamageInto(this.damage, current, spec.damage, hits, targetType);
     target.setValue(Health, "current", this.damage.remaining);
     updateHealthBar(target);
+    // Under-attack alerting: real enemy damage on a friendly, published before
+    // any destruction so the target is still readable. Fatal hits are passed
+    // through and suppressed by the rules — destruction messaging is truer.
+    if (targetType !== "enemy" && attacker.hasComponent(Enemy)) {
+      notifyFriendlyDamage(target, this.damage.died);
+    }
     if (this.damage.died) this.destroyTarget(target, this.damage.enemyKilled);
   }
 
@@ -240,6 +253,9 @@ export class CombatSystem extends createSystem({
   }
 
   private destroyTarget(target: Entity, enemyKilled: boolean): void {
+    // Entity indexes are pooled and reused, so a threat entry left behind here
+    // would re-point at whatever entity is created next.
+    clearThreat(target);
     for (const attacker of this.queries.attackers.entities) {
       if (attacker.getValue(CombatState, "target") === target) {
         this.clearAttack(attacker);
@@ -297,6 +313,9 @@ export class CombatSystem extends createSystem({
     }
     if (target.hasComponent(Enemy)) {
       detachAlienAnimation(target);
+      // Index recycling: a ring left keyed to this dead alien would reappear
+      // under whatever entity claims the index next.
+      disposeEnemyRangeRing(target);
     }
     if (target.hasComponent(Building) && target.getValue(Building, "kind") === "turret") {
       detachTurretAnimation(target);

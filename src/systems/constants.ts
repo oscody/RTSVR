@@ -267,3 +267,143 @@ export const CRAFT_PRODUCTION_BUILDING_KINDS = [
   "hangar",
   "factory",
 ] as const;
+
+// ── Under-attack alerting ──────────────────────────────────────────────────
+// World-space cues, deliberately NOT on the tablet: the player should never
+// have to look down to learn something is being hit.
+//
+// Three of the original five were removed 2026-08-17: the board shake (cue A),
+// the rim beacon (cue B), and the rim/ground flash (half of cue D). What remains
+// is the threat badge, the command-center banner, and the alarm audio — so the
+// BOARD ITSELF no longer reacts to damage at all; the warning is a floating
+// panel and a sound. Consequences to keep in mind: damage to a unit or building
+// has no banner and no board-level cue, only the badge turning to crossed swords
+// and the sting. All deliberate.
+
+// Cue C: crossed-swords badge above the health bar. Threat-driven, not
+// damage-driven — it appears the moment an alien targets a friendly. A fixed
+// pool repositioned onto whoever is threatened, never one mesh per unit.
+export const UNDER_ATTACK_BADGE_POOL_SIZE = 12;
+// Two states, because "an alien is aiming at me" and "an alien is hitting me"
+// are different pieces of news: the eye is a warning you can still act on, the
+// swords mean damage is already landing.
+export const UNDER_ATTACK_BADGE_LOCKED_GLYPH = "⦾";
+export const UNDER_ATTACK_BADGE_ATTACK_GLYPH = "⚔️";
+// How long the swords stay up after the last hit before falling back to the eye.
+export const UNDER_ATTACK_BADGE_ATTACK_SECONDS = 1.5;
+export const UNDER_ATTACK_BADGE_TEXTURE_SIZE = 256;
+export const UNDER_ATTACK_BADGE_SIZE = TILE_SIZE * 0.62;
+export const UNDER_ATTACK_BADGE_Y_OFFSET = 0.03;
+// Linger keeps the badge steady while an alien re-acquires its target.
+export const UNDER_ATTACK_BADGE_LINGER_SECONDS = 1;
+export const UNDER_ATTACK_BADGE_POP_SECONDS = 0.18;
+export const UNDER_ATTACK_BADGE_POP_OVERSHOOT = 1.15;
+export const UNDER_ATTACK_BADGE_OUT_SECONDS = 0.2;
+export const UNDER_ATTACK_BADGE_PUNCH_SECONDS = 0.12;
+export const UNDER_ATTACK_BADGE_PUNCH_SCALE = 1.3;
+export const UNDER_ATTACK_BADGE_BOB = 0.006;
+export const UNDER_ATTACK_BADGE_BOB_HZ = 1.2;
+
+// Command-center banner. Parented to the SCENE, not the board
+// root — otherwise cue A shakes the text and makes it unreadable. Its position
+// is sampled from the command center each time it is raised (once, not per
+// frame, so the shake cannot reach it) and it sits above the health bar and
+// threat badge, so the warning and the thing being warned about are in one
+// glance. The fixed position is only a fallback if the command center is gone.
+export const UNDER_ATTACK_BANNER_POSITION = [0, BOARD_Y + 1.18, 0.3] as const;
+// Clearance above the command center's health bar. The whole stack shares one
+// vertical line directly over the base, reading bottom-to-top: health bar →
+// threat badge → HUD strip → this panel. Leaves ~15 cm of air above the HUD so
+// the alert reads as its own thing rather than another readout row.
+//
+// The panel used to step toward the player as well, to dodge the tablet parked
+// beside the base. That is unnecessary now that it draws over the scene, and it
+// broke the vertical alignment, so the step was removed 2026-08-17.
+export const UNDER_ATTACK_BANNER_ABOVE_BAR = 0.44;
+export const UNDER_ATTACK_BANNER_MAX_WIDTH = 0.78;
+export const UNDER_ATTACK_BANNER_MAX_HEIGHT = 0.18;
+export const UNDER_ATTACK_BANNER_IN_SECONDS = 0.2;
+export const UNDER_ATTACK_BANNER_HOLD_SECONDS = 3;
+export const UNDER_ATTACK_BANNER_OUT_SECONDS = 0.3;
+export const UNDER_ATTACK_BANNER_SLIDE = 0.06;
+export const UNDER_ATTACK_BANNER_PULSE_HZ = 1;
+// Two styles on the one panel. "critical" is the command center taking real
+// damage; "caution" is an alien having merely spotted a friendly, which is a
+// warning you can still act on — so it is amber, silent, and never interrupts
+// a critical alert.
+export const UNDER_ATTACK_BANNER_BORDER_COLOR = "#ef4444";
+export const UNDER_ATTACK_BANNER_BORDER_PULSE_COLOR = "#7f1d1d";
+export const UNDER_ATTACK_BANNER_BACKGROUND_COLOR = "#14090a";
+export const UNDER_ATTACK_BANNER_ICON_BACKGROUND = "#2a0d0d";
+export const UNDER_ATTACK_BANNER_CAUTION_BORDER_COLOR = "#f59e0b";
+export const UNDER_ATTACK_BANNER_CAUTION_PULSE_COLOR = "#78350f";
+export const UNDER_ATTACK_BANNER_CAUTION_BACKGROUND_COLOR = "#161004";
+export const UNDER_ATTACK_BANNER_CAUTION_ICON_BACKGROUND = "#2e1f05";
+
+// Cue E: alarm audio. These are URLs, and must stay byte-identical to the
+// `alertSting` / `alertAlarm` manifest entries in index.ts: the manifest
+// preloads the buffer into the AssetManager cache keyed by URL, so playback
+// reuses it instead of fetching again.
+//
+// A manifest KEY here does NOT work, despite AudioSystem.loadAudio() resolving
+// keys via CacheManager.resolveUrl(). Measured 2026-08-09: both sources failed
+// with "EncodingError: Unable to decode audio data" every frame, because the
+// unresolved key is requested as a path and the dev server answers with
+// index.html. `vangogh` passes a key and gets away with it; `space-station` and
+// `foosball` pass URLs, which is the form that actually holds.
+//
+// Both are WAV. The loop was Ogg and the sting MP3 — both decoded fine in
+// desktop Chrome but produced no sound on Quest (2026-08-09), so the codec is
+// the prime suspect and PCM removes the question. `space-station` also ships
+// its alarm/hum loops as .wav. WAV additionally has no encoder padding, which
+// is what would otherwise put a gap at the loop point.
+export const UNDER_ATTACK_STING_SRC = "/audio/attack-alarm-sting.wav";
+export const UNDER_ATTACK_ALARM_SRC = "/audio/attack-alarm-loop.wav";
+export const UNDER_ATTACK_ALERT_VOLUME = 0.25;
+export const UNDER_ATTACK_STING_VOLUME = 0.45;
+export const UNDER_ATTACK_STING_COMMAND_CENTER_VOLUME = 0.7;
+export const UNDER_ATTACK_ALARM_VOLUME = 0.5;
+export const UNDER_ATTACK_ALARM_FADE_IN_SECONDS = 0.15;
+export const UNDER_ATTACK_ALARM_FADE_OUT_SECONDS = 0.6;
+// The alarm outlives the banner during a sustained assault: it keeps playing
+// until this long passes with no fresh command-center damage.
+export const UNDER_ATTACK_ALARM_HOLD_SECONDS = 4;
+
+// "Spotted" alerts fire the instant an alien acquires a friendly, before any
+// damage. That is a far more common event than being hit, so it gets its own
+// much longer cooldowns — otherwise every wave would be a wall of banners.
+export const SPOTTED_ALERT_GLOBAL_GAP_SECONDS = 8;
+export const SPOTTED_ALERT_TARGET_COOLDOWN_SECONDS = 20;
+
+// Offset added to every node's existing renderOrder so the command-center
+// banner draws over the scene. The tablet sits beside the command center and
+// otherwise hides it, and the player can carry the tablet anywhere, so no
+// placement alone can solve it.
+export const UNDER_ATTACK_BANNER_RENDER_ORDER = 1000;
+
+// ── Command-center HUD strip ───────────────────────────────────────────────
+// A thin always-on readout floating over the base: which level you are on, how
+// much of that level's wave is still alive, and your crystal balance. It sits
+// in the gap between the threat badge and the under-attack banner, so the whole
+// stack over the command center reads bottom-to-top as
+// health bar -> threat badge -> HUD -> alert banner.
+export const COMMAND_CENTER_HUD_Y_OFFSET = 0.15; // above the health bar
+export const COMMAND_CENTER_HUD_WIDTH = TILE_SIZE * 3.8;
+export const COMMAND_CENTER_HUD_HEIGHT = TILE_SIZE * 0.6;
+export const COMMAND_CENTER_HUD_TEXTURE_WIDTH = 768;
+export const COMMAND_CENTER_HUD_TEXTURE_HEIGHT = 120;
+export const COMMAND_CENTER_HUD_BACKGROUND = "rgba(16, 26, 33, 0.86)";
+export const COMMAND_CENTER_HUD_BORDER = "#5f7d8f";
+export const COMMAND_CENTER_HUD_LABEL_COLOR = "#9fb6c4";
+export const COMMAND_CENTER_HUD_VALUE_COLOR = "#edf4f7";
+// Troops left turns amber then red as the wave is worn down — the same
+// healthy/warning/critical language the health bars already speak.
+export const COMMAND_CENTER_HUD_GEM_COLOR = "#67e8f9";
+export const COMMAND_CENTER_HUD_TROOPS_HIGH_COLOR = "#fca5a5";
+export const COMMAND_CENTER_HUD_TROOPS_LOW_COLOR = "#86efac";
+export const COMMAND_CENTER_HUD_TROOPS_LOW_RATIO = 0.34;
+
+// Threat radius shown when an alien is clicked with nothing of yours selected.
+// Purple rather than the friendly rings' red — it is a danger zone, not one of
+// your own weapons. Same hue as the alien melee bursts.
+export const ENEMY_RANGE_RING_COLOR = 0xa855f7;

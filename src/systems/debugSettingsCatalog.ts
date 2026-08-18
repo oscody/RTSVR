@@ -150,4 +150,12 @@ export const DEBUG_SETTINGS_CATALOG: readonly DebugSettingSpec[] = [
     max: 10,
     decimals: 1,
   },
+  {
+    key: "underAttackAlertVolume",
+    label: "Under Attack Alert Volume",
+    step: 0.05,
+    min: 0,
+    max: 1,
+    decimals: 2,
+  },
 ];

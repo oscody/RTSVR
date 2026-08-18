@@ -1,0 +1,76 @@
+<!--
+  One panel, two alert styles, restyled at runtime by underAttackBanner.ts:
+
+    critical (red)   - COMMAND CENTER UNDER ATTACK. Real damage on the base.
+    caution  (amber) - UNIT DETECTED. An alien has spotted a friendly, and no
+                       damage has landed yet.
+
+  The colours below are the critical defaults; every one of them is overwritten
+  per raise, so edit UNDER_ATTACK_BANNER_* in constants.ts, not here, if you
+  want a different palette.
+-->
+<style>
+  .alert-banner {
+    width: 720px;
+    height: 140px;
+    padding: 20px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    background-color: #14090a;
+    border-color: #ef4444;
+    border-width: 3px;
+    border-radius: 10px;
+  }
+
+  .alert-icon-box {
+    width: 92px;
+    height: 92px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    background-color: #2a0d0d;
+    border-color: #ef4444;
+    border-width: 3px;
+    border-radius: 12px;
+    margin-right: 22px;
+  }
+
+  /* A text glyph, not a lucide <TriangleAlertIcon>: that name does not resolve
+     in this uikit build and compiles to an empty custom element. */
+  .alert-icon {
+    color: #ef4444;
+    font-size: 56px;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .alert-text {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .alert-title {
+    color: #ef4444;
+    font-size: 30px;
+    font-weight: 800;
+  }
+
+  .alert-detail {
+    color: #e8e8e8;
+    font-size: 19px;
+    margin-top: 8px;
+  }
+</style>
+
+<Panel id="alert-banner" class="alert-banner">
+  <div id="alert-icon-box" class="alert-icon-box">
+    <span id="alert-icon" class="alert-icon">!</span>
+  </div>
+  <div class="alert-text">
+    <span id="alert-title" class="alert-title">COMMAND CENTER UNDER ATTACK</span>
+    <span id="alert-detail" class="alert-detail">Multiple enemy units detected.</span>
+  </div>
+</Panel>

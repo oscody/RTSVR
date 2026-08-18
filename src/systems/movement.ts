@@ -2,6 +2,7 @@ import { createSystem } from "@iwsdk/core";
 import { gridToWorld } from "./board.js";
 import { UNIT_ARRIVAL_EPSILON, UNIT_MOVE_SPEED } from "./constants.ts";
 import {
+  updateEnemyRangeRing,
   updateUnitAttackRangeRing,
   updateUnitSelectionRing,
 } from "./selection.js";
@@ -11,6 +12,9 @@ export class MovementSystem extends createSystem({
   units: { required: [Unit] },
 }) {
   update(delta: number): void {
+    // Aliens walk, so an inspected alien's threat ring has to follow it. No-op
+    // unless one is actually being inspected.
+    updateEnemyRangeRing();
     const unitSpeed =
       boardState.debugSettings?.getValue(DebugSettings, "unitMoveSpeed") ??
       UNIT_MOVE_SPEED;

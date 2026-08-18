@@ -7,19 +7,25 @@ import {
 } from "@iwsdk/core";
 import { TILE_SIZE } from "./board.js";
 import { makeNonInteractive } from "./sharedGeometry.js";
-import { getUnitAttackSpec, TURRET_ATTACK_SPEC } from "./combatRules.js";
+import {
+  getEnemyAttackSpec,
+  getUnitAttackSpec,
+  TURRET_ATTACK_SPEC,
+} from "./combatRules.js";
 import {
   ATTACK_RANGE_RING_COLOR,
   ATTACK_RANGE_RING_OPACITY,
   ATTACK_RANGE_RING_SEGMENTS,
   ATTACK_RANGE_RING_THICKNESS,
   ATTACK_RANGE_RING_Y_OFFSET,
+  ENEMY_RANGE_RING_COLOR,
   SELECTION_MARKER_COLOR,
 } from "./constants.ts";
 import { toggleSelectionMembership } from "./selectionRules.js";
 import {
   BoardMarker,
   DebugSettings,
+  Enemy,
   SelectionState,
   TabletState,
   Unit,
@@ -70,6 +76,9 @@ export function getSingleSelectedUnit(): Entity | null {
 }
 
 export function toggleUnitSelection(world: World, unit: Entity): boolean {
+  // Selecting your own unit ends enemy-inspection mode: from here a click on an
+  // alien means "attack that", so leaving its threat ring up would be confusing.
+  clearEnemyRangeRing();
   const selected = toggleSelectionMembership(boardState.selectedUnits, unit);
   unit.setValue(UnitSelection, "selected", selected);
   if (selected) boardState.selectedUnit = unit;
@@ -193,6 +202,105 @@ export function toggleTurretRangeRing(world: World, turret: Entity): boolean {
   showTurretRangeRing(world, turret);
   updateCommandGridVisibility();
   return true;
+}
+
+/**
+ * Show an alien's threat radius on click — how close it has to get before it
+ * can hit something.
+ *
+ * Only reachable with no friendly unit selected. With units selected, a click
+ * on an alien already means "attack that", and inspection must not hijack an
+ * order (see the `units.length === 0` branch in `interaction.ts`).
+ */
+export function toggleEnemyRangeRing(world: World, enemy: Entity): boolean {
+  if (boardState.selectedEnemy === enemy) {
+    hideEnemyRangeRing(enemy);
+    boardState.selectedEnemy = null;
+    return false;
+  }
+  if (boardState.selectedEnemy) hideEnemyRangeRing(boardState.selectedEnemy);
+  boardState.selectedEnemy = enemy;
+  showEnemyRangeRing(world, enemy);
+  return true;
+}
+
+function hideEnemyRangeRing(enemy: Entity): void {
+  const ring = boardState.rangeRingByEnemy.get(enemy.index)?.object3D;
+  if (ring) ring.visible = false;
+}
+
+function showEnemyRangeRing(world: World, enemy: Entity): void {
+  let ringEntity = boardState.rangeRingByEnemy.get(enemy.index);
+  if (!ringEntity) {
+    const root = boardState.boardRoot;
+    if (!root) return;
+    const range = getEnemyAttackSpec(enemy.getValue(Enemy, "kind") ?? "alien")
+      .range;
+    const ring = new Mesh(
+      new RingGeometry(
+        Math.max(ATTACK_RANGE_RING_THICKNESS, range - ATTACK_RANGE_RING_THICKNESS),
+        range,
+        ATTACK_RANGE_RING_SEGMENTS,
+      ),
+      new MeshBasicMaterial({
+        // Purple, not the friendly red: this is a threat radius, not one of
+        // your own weapons. Same hue the alien melee bursts already use.
+        color: ENEMY_RANGE_RING_COLOR,
+        transparent: true,
+        opacity: ATTACK_RANGE_RING_OPACITY,
+        depthWrite: false,
+      }),
+    );
+    makeNonInteractive(ring);
+    ring.name = `EnemyRangeRing_${enemy.index}`;
+    ring.rotateX(-Math.PI / 2);
+    ring.position.y = ATTACK_RANGE_RING_Y_OFFSET;
+    ringEntity = world
+      .createTransformEntity(ring, { parent: root })
+      .addComponent(BoardMarker, { kind: "enemy-range" });
+    boardState.rangeRingByEnemy.set(enemy.index, ringEntity);
+  }
+  const object = ringEntity.object3D;
+  if (!object) return;
+  object.visible = true;
+  // Aliens walk, so the ring is re-seated on every show and then tracked each
+  // frame by EnemyRangeRingSystem while it stays visible.
+  syncEnemyRangeRing(enemy, ringEntity);
+}
+
+function syncEnemyRangeRing(enemy: Entity, ringEntity: Entity): void {
+  const source = enemy.object3D;
+  const ring = ringEntity.object3D;
+  if (!source || !ring) return;
+  ring.position.set(source.position.x, ATTACK_RANGE_RING_Y_OFFSET, source.position.z);
+}
+
+/** Keep the visible ring under its alien as it advances. */
+export function updateEnemyRangeRing(): void {
+  const enemy = boardState.selectedEnemy;
+  if (!enemy) return;
+  const ringEntity = boardState.rangeRingByEnemy.get(enemy.index);
+  if (!ringEntity?.object3D?.visible) return;
+  syncEnemyRangeRing(enemy, ringEntity);
+}
+
+/**
+ * Entity indexes are recycled, so a ring left keyed to a dead alien would
+ * reappear under whatever entity claims that index next. Called on enemy death
+ * and on scenario reset.
+ */
+export function disposeEnemyRangeRing(enemy: Entity): void {
+  if (boardState.selectedEnemy === enemy) boardState.selectedEnemy = null;
+  const ring = boardState.rangeRingByEnemy.get(enemy.index);
+  if (!ring) return;
+  ring.dispose();
+  boardState.rangeRingByEnemy.delete(enemy.index);
+}
+
+export function clearEnemyRangeRing(): void {
+  const enemy = boardState.selectedEnemy;
+  if (enemy) hideEnemyRangeRing(enemy);
+  boardState.selectedEnemy = null;
 }
 
 function hideTurretRangeRing(turret: Entity): void {

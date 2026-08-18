@@ -1,5 +1,5 @@
 import { Entity, Object3D, Types, createComponent } from "@iwsdk/core";
-import { UNIT_MOVE_SPEED } from "./constants.ts";
+import { UNDER_ATTACK_ALERT_VOLUME, UNIT_MOVE_SPEED } from "./constants.ts";
 import {
   TURRET_ATTACK_SPEC,
   UNIT_ATTACK_SPECS,
@@ -88,6 +88,24 @@ export const MatchState = createComponent("MatchState", {
 });
 
 export const MatchResultPanel = createComponent("MatchResultPanel", {
+  visible: { type: Types.Boolean, default: false },
+});
+
+// Under-attack alerting lives in its own singleton rather than in
+// TabletState.status: a routine status write would immediately clobber the
+// warning, and the warning would hide a victory or defeat message. Presentation
+// reads this only when `revision` changes — timers and cooldown history stay
+// private to UnderAttackAlertSystem instead of being rewritten into ECS.
+export const UnderAttackAlertState = createComponent("UnderAttackAlertState", {
+  active: { type: Types.Boolean, default: false },
+  message: { type: Types.String, default: "" },
+  detail: { type: Types.String, default: "" },
+  priority: { type: Types.Int8, default: 0 },
+  targetIndex: { type: Types.Int32, default: -1 },
+  revision: { type: Types.Int32, default: 0 },
+});
+
+export const UnderAttackBanner = createComponent("UnderAttackBanner", {
   visible: { type: Types.Boolean, default: false },
 });
 
@@ -298,6 +316,10 @@ export const DebugSettings = createComponent("DebugSettings", {
     type: Types.Float32,
     default: MINING_GATHER_TIME_SECONDS,
   },
+  underAttackAlertVolume: {
+    type: Types.Float32,
+    default: UNDER_ATTACK_ALERT_VOLUME,
+  },
   revision: { type: Types.Int32, default: 0 },
 });
 
@@ -321,7 +343,8 @@ export type DebugSettingKey =
   | "astronautAttackDamage"
   | "craftRacerAttackDamage"
   | "turretAttackDamage"
-  | "miningGatherTimeSeconds";
+  | "miningGatherTimeSeconds"
+  | "underAttackAlertVolume";
 
 export const boardState = {
   boardRoot: null as Entity | null,
@@ -338,6 +361,8 @@ export const boardState = {
   runtimePerformance: null as Entity | null,
   waveSource: null as Entity | null,
   matchResultPanel: null as Entity | null,
+  underAttackAlert: null as Entity | null, // carries UnderAttackAlertState
+  underAttackBanner: null as Entity | null, // command-center warning panel
   tablet: null as Entity | null,
   commandCenter: null as Entity | null,
   pointerTile: null as BoardCoordinate | null,
@@ -350,6 +375,10 @@ export const boardState = {
   attackRangeRingByUnit: new Map<number, Entity>(),
   selectedTurret: null as Entity | null,
   rangeRingByTurret: new Map<number, Entity>(),
+  // Enemy inspection: click an alien with nothing of yours selected to see its
+  // threat radius. Keyed by entity index, so both disposal paths must delete.
+  selectedEnemy: null as Entity | null,
+  rangeRingByEnemy: new Map<number, Entity>(),
   resourceByKey: new Map<string, Entity>(),
   cargoVisualByUnit: new Map<number, Object3D>(),
   pathByUnit: new Map<number, { x: number; y: number }[]>(),

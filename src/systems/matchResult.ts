@@ -13,6 +13,10 @@ import {
   WaveSource,
   boardState,
 } from "./state.js";
+import {
+  liftAboveScene,
+  placeAtCommandCenterAlertPosition,
+} from "./underAttackBanner.js";
 
 type UiElement = UIKit.Text & {
   setProperties(properties: Record<string, unknown>): void;
@@ -57,7 +61,14 @@ export class MatchResultSystem extends createSystem({
     const visible = status === "defeat" || status === "victory";
     if (!panel?.object3D || status === this.lastStatus) return;
     this.lastStatus = status;
-    if (visible) this.presentResult(status);
+    if (visible) {
+      this.presentResult(status);
+      placeAtCommandCenterAlertPosition(panel.object3D, this.camera);
+      // Same spot as the alert banner, so it needs the same protection from the
+      // tablet parked beside the base. Applied on show because uikit builds the
+      // mesh tree lazily. Raycasting is unaffected, so the buttons still work.
+      liftAboveScene(panel.object3D);
+    }
     panel.object3D.visible = visible;
     panel.setValue(MatchResultPanel, "visible", visible);
   }
@@ -97,7 +108,7 @@ export class MatchResultSystem extends createSystem({
       .addComponent(RayInteractable)
       .addComponent(MatchResultPanel);
     panel.object3D!.name = "MatchResultPanel";
-    panel.object3D!.position.set(0, 1.02, 0.45);
+    placeAtCommandCenterAlertPosition(panel.object3D!, this.camera);
     panel.object3D!.visible = false;
     boardState.matchResultPanel = panel;
   }

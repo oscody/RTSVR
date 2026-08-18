@@ -8,6 +8,7 @@ import { BoardSystem } from "./systems/board.js";
 import { ConstructionSystem } from "./systems/construction.js";
 import { CombatSystem } from "./systems/combat.js";
 import { CombatEffectsSystem } from "./systems/combatEffects.js";
+import { CommandCenterHudSystem } from "./systems/commandCenterHud.js";
 import { installFrameProfiler } from "./systems/frameProfiler.js";
 import { AlienAnimationSystem } from "./systems/alienAnimation.js";
 import { CommandCenterAnimationSystem } from "./systems/commandCenterAnimation.js";
@@ -26,6 +27,10 @@ import { SkySystem } from "./systems/skySystem.js";
 import { StructuresSystem } from "./systems/structures.js";
 import { TabletSystem } from "./systems/tablet.js";
 import { TurretAnimationSystem } from "./systems/turretAnimation.js";
+import { UnderAttackAlertSystem } from "./systems/underAttackAlert.js";
+import { UnderAttackAudioSystem } from "./systems/underAttackAudio.js";
+import { UnderAttackBannerSystem } from "./systems/underAttackBanner.js";
+import { UnderAttackVfxSystem } from "./systems/underAttackVfx.js";
 import { UnitAnimationSystem } from "./systems/unitAnimation.js";
 import { WaveSystem } from "./systems/wave.js";
 
@@ -70,6 +75,11 @@ const assets: AssetManifest = {
   meteor: { url: "/gltf/terrain/meteor/meteor.glb", type: AssetType.GLTF, priority: "critical" },
   meteorDetailed: { url: "/gltf/terrain/meteor/meteor_detailed.glb", type: AssetType.GLTF, priority: "critical" },
   meteorHalf: { url: "/gltf/terrain/meteor/meteor_half.glb", type: AssetType.GLTF, priority: "critical" },
+  // Under-attack alerting. AudioSource.src repeats these URLs verbatim
+  // (UNDER_ATTACK_*_SRC) so playback reuses the preloaded buffer. WAV because
+  // compressed formats produced no sound on Quest — see the constants note.
+  alertSting: { url: "/audio/attack-alarm-sting.wav", type: AssetType.Audio, priority: "background" },
+  alertAlarm: { url: "/audio/attack-alarm-loop.wav", type: AssetType.Audio, priority: "background" },
 };
 
 World.create(document.getElementById("scene-container") as HTMLDivElement, {
@@ -108,6 +118,12 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(WaveSystem)
     .registerSystem(CombatSystem)
     .registerSystem(CombatEffectsSystem)
+    // After CombatSystem: it publishes damage and threat, these render it.
+    .registerSystem(UnderAttackAlertSystem)
+    .registerSystem(UnderAttackVfxSystem)
+    .registerSystem(UnderAttackBannerSystem)
+    .registerSystem(UnderAttackAudioSystem)
+    .registerSystem(CommandCenterHudSystem)
     .registerSystem(AlienAnimationSystem)
     .registerSystem(CommandCenterAnimationSystem)
     .registerSystem(TurretAnimationSystem)

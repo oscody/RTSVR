@@ -1,6 +1,7 @@
 import { RayInteractable, createSystem, type Entity } from "@iwsdk/core";
 import { clearAlienAnimations } from "./alienAnimation.js";
 import { clearCombatEffects } from "./combatEffects.js";
+import { clearCommandCenterHud } from "./commandCenterHud.js";
 import { clearCommandCenterAnimations } from "./commandCenterAnimation.js";
 import { clearCraftProductionAnimations } from "./craftProductionAnimation.js";
 import { clearCraftVisualRise } from "./craftVisualRise.js";
@@ -10,6 +11,8 @@ import { clearMeteors } from "./meteorSystem.js";
 import { clearMinerAnimations } from "./minerAnimation.js";
 import { clearUnitSelections, updateCommandGridVisibility } from "./selection.js";
 import { clearTurretAnimations } from "./turretAnimation.js";
+import { resetUnderAttackAlert } from "./underAttackAlert.js";
+import { clearUnderAttackVfx } from "./underAttackVfx.js";
 import { clearUnitAnimations } from "./unitAnimation.js";
 import {
   createScenarioResetDefaults,
@@ -70,12 +73,21 @@ export class ScenarioResetSystem extends createSystem({
     clearMinerAnimations();
     clearTurretAnimations();
     clearUnitAnimations();
+    // Board back to its base position, rim back to Martian brown, banner
+    // hidden, alarm silenced, and every cooldown dropped — a stale entry keyed
+    // on a now-recycled entity index would suppress the next match's alerts.
+    clearCommandCenterHud();
+    clearUnderAttackVfx();
+    resetUnderAttackAlert();
     for (const ring of boardState.selectionRingByUnit.values()) ring.dispose();
     boardState.selectionRingByUnit.clear();
     for (const ring of boardState.attackRangeRingByUnit.values()) ring.dispose();
     boardState.attackRangeRingByUnit.clear();
     for (const ring of boardState.rangeRingByTurret.values()) ring.dispose();
     boardState.rangeRingByTurret.clear();
+    for (const ring of boardState.rangeRingByEnemy.values()) ring.dispose();
+    boardState.rangeRingByEnemy.clear();
+    boardState.selectedEnemy = null;
 
     const staleSites = Array.from(this.queries.sites.entities);
     for (const site of staleSites) {
