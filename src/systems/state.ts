@@ -12,6 +12,7 @@ import {
   STARTING_CRYSTALS,
 } from "./economyConstants.js";
 import { ALIEN_MOVE_SPEED, INITIAL_WAVE_DELAY_SECONDS } from "./waveRules.js";
+import { TUTORIAL_ENABLED } from "./tutorialCatalog.ts";
 
 export const BoardSurface = createComponent("BoardSurface", {});
 
@@ -316,6 +317,12 @@ export const DebugSettings = createComponent("DebugSettings", {
     type: Types.Float32,
     default: MINING_GATHER_TIME_SECONDS,
   },
+  // 0/1 rather than Boolean so it reuses the Settings tab's numeric +/- rows
+  // wholesale — no new markup pattern, no new TabletSystem branch.
+  tutorialEnabled: {
+    type: Types.Float32,
+    default: TUTORIAL_ENABLED ? 1 : 0,
+  },
   underAttackAlertVolume: {
     type: Types.Float32,
     default: UNDER_ATTACK_ALERT_VOLUME,
@@ -344,7 +351,8 @@ export type DebugSettingKey =
   | "craftRacerAttackDamage"
   | "turretAttackDamage"
   | "miningGatherTimeSeconds"
-  | "underAttackAlertVolume";
+  | "underAttackAlertVolume"
+  | "tutorialEnabled";
 
 export const boardState = {
   boardRoot: null as Entity | null,

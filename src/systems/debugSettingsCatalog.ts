@@ -158,4 +158,12 @@ export const DEBUG_SETTINGS_CATALOG: readonly DebugSettingSpec[] = [
     max: 1,
     decimals: 2,
   },
+  {
+    key: "tutorialEnabled",
+    label: "Tutorial",
+    step: 1,
+    min: 0,
+    max: 1,
+    decimals: 0,
+  },
 ];
