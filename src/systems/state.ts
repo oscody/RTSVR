@@ -76,7 +76,9 @@ export const WaveSource = createComponent("WaveSource", {
   waveNumber: { type: Types.Int16, default: 1 },
   timer: { type: Types.Float32, default: INITIAL_WAVE_DELAY_SECONDS },
   stage: { type: Types.String, default: "countdown" },
-  spawnedWaveNumber: { type: Types.Int16, default: 0 },
+  // -1, not 0 — 0 is the tutorial's real wave number, and a default of 0 would
+  // mean "wave 0 has already spawned" before anything had.
+  spawnedWaveNumber: { type: Types.Int16, default: -1 },
   releaseTimer: { type: Types.Float32, default: 0 },
   releasedAlienCount: { type: Types.Int16, default: 0 },
   revision: { type: Types.Int32, default: 0 },

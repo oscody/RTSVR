@@ -124,7 +124,17 @@ export function validateDrills(
       }
     }
 
-    // 3. Racer production and turret construction both need a builder, so the
+    // 3. A drill cannot require the unit it teaches to already be alive. With
+    //    a bare start the player has none, so the drill would open with a
+    //    recovery prompt for something they never owned. Found the moment the
+    //    bare start landed in phase 4.
+    if (drill.create && (drill.keepAlive ?? []).includes(drill.create.kind)) {
+      problems.push(
+        `drill "${drill.id}" keeps alive "${drill.create.kind}", which is the unit it teaches`,
+      );
+    }
+
+    // 4. Racer production and turret construction both need a builder, so the
     //    astronaut drill has to come first. Astronaut production is the one
     //    builder-exempt path, which is what makes a bare start survivable.
     const needsBuilder =
@@ -237,16 +247,217 @@ export function hasDrillStarted(
 }
 
 /**
+ * Has this drill started, given that it may already have?
+ *
+ * `hasDrillStarted` reads live state, and live state can go backwards: the miner
+ * drill counts "on its way" as started, but `hasOrder` clears the instant the
+ * miner arrives, and nothing is banked until the first deposit lands seconds
+ * later. In that window the card reverted from *"It mines and carries it back on
+ * its own"* to *"Click your mining craft, then click the nearest crystals"* —
+ * un-acknowledging the player while they watched their miner do the thing.
+ *
+ * So started is a **latch**: once true for a drill it stays true, and only a new
+ * drill clears it. Pure, with the previous value passed in, so the caller owns
+ * the storage and this stays testable.
+ */
+export function latchDrillStarted(
+  drill: TutorialDrill,
+  snapshot: TutorialSnapshot,
+  wasStarted: boolean,
+): boolean {
+  return wasStarted || hasDrillStarted(drill, snapshot);
+}
+
+/**
+ * How many of wave 0's aliens the tutorial permits to be on the board.
+ *
+ * Every opponent from a **completed** drill counts — those aliens were already
+ * released and may still be walking — plus the current drill's own, once its
+ * trigger has fired. The wave system then releases up to this many and no more.
+ *
+ * Derived from the drill list rather than tracked separately, so adding a drill
+ * with an opponent widens the budget automatically. A hand-maintained counter
+ * would drift the moment someone reordered the script.
+ *
+ * `drillIndex < 0` means the tutorial has finished: everything is permitted,
+ * which is what hands the board back to the normal ladder.
+ */
+export function releaseBudget(
+  drillIndex: number,
+  releaseCurrent: boolean,
+  drills: readonly TutorialDrill[] = TUTORIAL_DRILLS,
+): number {
+  const total = drills.reduce(
+    (sum, drill) => sum + (drill.opponent?.count ?? 0),
+    0,
+  );
+  if (drillIndex < 0) return total;
+
+  let budget = 0;
+  for (let index = 0; index < drills.length && index < drillIndex; index += 1) {
+    budget += drills[index].opponent?.count ?? 0;
+  }
+  if (releaseCurrent) {
+    budget += drills[drillIndex]?.opponent?.count ?? 0;
+  }
+  return budget;
+}
+
+/**
+ * Does the tutorial still need to freeze the wave countdown?
+ *
+ * **Only while nothing is owed yet** — i.e. while the budget is 0. That is Act
+ * 1: the player is mining, and no alien has been earned.
+ *
+ * It must lift the moment the budget opens, because the wave system only
+ * releases aliens once the wave has ACTIVATED, and activation is what the
+ * countdown produces. Holding the countdown through Act 2 as well looks like it
+ * would be the safer, stricter choice; it is actually a deadlock — the budget
+ * opens and nothing is ever released, because the wave is still counting down.
+ * That is exactly what shipped and what the in-app run caught.
+ *
+ * Pacing does not go back to the clock: once active, the wave releases only up
+ * to the budget, which is still driven entirely by the drills.
+ */
+export function tutorialHoldsWaveCountdown(
+  drillIndex: number,
+  budget: number,
+): boolean {
+  return drillIndex >= 0 && budget <= 0;
+}
+
+/** A board coordinate. Duplicated rather than imported to keep this file pure. */
+export interface TutorialTile {
+  x: number;
+  y: number;
+}
+
+/**
+ * Which way an edge lies from the middle of the board.
+ *
+ * Mirrors `edgeCells()` in `waveCatalog.ts`: north is y=0, south is y=last,
+ * west is x=0, east is x=last. If that ever changes, the threat arrow points
+ * the wrong way while everything else keeps working — which is why the test
+ * asserts the pairing rather than trusting the name.
+ */
+export function edgeStep(edge: string): TutorialTile {
+  switch (edge) {
+    case "north":
+      return { x: 0, y: -1 };
+    case "south":
+      return { x: 0, y: 1 };
+    case "west":
+      return { x: -1, y: 0 };
+    default:
+      return { x: 1, y: 0 };
+  }
+}
+
+function clampTile(value: number, gridSize: number): number {
+  return Math.max(0, Math.min(gridSize - 1, Math.round(value)));
+}
+
+/**
+ * The tile the tutorial points at when it says "build on the side they come
+ * from": the base, stepped `steps` tiles toward the incoming edge.
+ *
+ * Clamped to the board, so a base already near the edge yields a tile on the
+ * board rather than off it. Being clamped short is harmless — the arrow is
+ * advisory and the direction still reads.
+ */
+export function threatTileFor(
+  base: TutorialTile,
+  edge: string,
+  steps: number,
+  gridSize: number,
+): TutorialTile {
+  const step = edgeStep(edge);
+  return {
+    x: clampTile(base.x + step.x * steps, gridSize),
+    y: clampTile(base.y + step.y * steps, gridSize),
+  };
+}
+
+/**
+ * Where to stand to get between a threatened unit and what is coming for it:
+ * the midpoint, biased toward the threat so the defender arrives in front of
+ * the unit rather than on top of it.
+ *
+ * A plain midpoint puts the astronaut halfway, which loses the race whenever
+ * the alien is closer than the astronaut — the exact case the drill is about.
+ */
+export function interceptTileFor(
+  unit: TutorialTile,
+  threat: TutorialTile,
+  gridSize: number,
+  bias = 0.65,
+): TutorialTile {
+  return {
+    x: clampTile(unit.x + (threat.x - unit.x) * bias, gridSize),
+    y: clampTile(unit.y + (threat.y - unit.y) * bias, gridSize),
+  };
+}
+
+/**
+ * The board corner nearest a tile — where the tutorial's first alien lands.
+ *
+ * This is the "spawn it in the corner of where the mine is, furthest away from
+ * it" rule, resolved: a corner *of the mine's own side of the board* is on the
+ * miner's side, so the alien walks toward the mining area and the drill's lesson
+ * ("it is heading for your mining craft") is reliable — while a corner is about
+ * as far from the mine as that side of the board goes, which is what buys the
+ * player time to react.
+ *
+ * With the mine at (8, 11) on a 24-grid this is (0, 0): ~13.6 tiles, or about
+ * **24 seconds** of walking at `ALIEN_MOVE_SPEED`. Ties break toward the lower
+ * corner, which only matters for a mine exactly on a centre line.
+ */
+export function nearestCornerTo(
+  tile: TutorialTile,
+  gridSize: number,
+): TutorialTile {
+  const last = Math.max(0, gridSize - 1);
+  const corners: TutorialTile[] = [
+    { x: 0, y: 0 },
+    { x: last, y: 0 },
+    { x: 0, y: last },
+    { x: last, y: last },
+  ];
+  let best = corners[0];
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const corner of corners) {
+    const dx = corner.x - tile.x;
+    const dy = corner.y - tile.y;
+    const distance = dx * dx + dy * dy;
+    if (distance >= bestDistance) continue;
+    bestDistance = distance;
+    best = corner;
+  }
+  return best;
+}
+
+/**
+ * Is the hinted tablet tab lit this instant?
+ *
+ * A square wave, not a fade — see TUTORIAL_TAB_PULSE_SECONDS. Pure so the
+ * duty cycle is testable without a tablet.
+ */
+export function tabPulseOn(elapsedSeconds: number, period: number): boolean {
+  if (period <= 0) return true;
+  return Math.floor(elapsedSeconds / period) % 2 === 0;
+}
+
+/**
  * Which arrow this drill wants right now — the same intro/doing split the card
  * uses, so the words and the pointing never disagree.
  */
 export function arrowTargetFor(
   drill: TutorialDrill,
   snapshot: TutorialSnapshot,
+  /** The caller's latched value — see latchDrillStarted. Omit to read live. */
+  started = hasDrillStarted(drill, snapshot),
 ): ArrowTarget | null {
-  return hasDrillStarted(drill, snapshot)
-    ? drill.arrows.doing
-    : drill.arrows.intro;
+  return started ? drill.arrows.doing : drill.arrows.intro;
 }
 
 /**
@@ -300,8 +511,9 @@ export function canResolveArrow(
 export function arrowProblem(
   drill: TutorialDrill,
   snapshot: TutorialSnapshot,
+  started = hasDrillStarted(drill, snapshot),
 ): string | null {
-  const target = arrowTargetFor(drill, snapshot);
+  const target = arrowTargetFor(drill, snapshot, started);
   // No arrow declared is a choice, not a failure.
   if (!target) return null;
   if (canResolveArrow(target, snapshot)) return null;
@@ -313,6 +525,14 @@ export function arrowProblem(
 
   if (arrowNeedsCommandCenter(target) && !snapshot.commandCenterAlive) {
     return `drill "${drill.id}" points at ${target.kind}, but the command center is gone`;
+  }
+  // Released, but nothing arrived. Until the wave gate exists (phase 4) this is
+  // routine — "release" only unblocks a spawn that nothing is yet performing —
+  // so the message names the actual condition rather than shrugging. Kept as a
+  // warning on purpose: once phase 4 lands, a released opponent that never
+  // appears is a real defect, and this is the line that would report it.
+  if (target.kind === "nearestEnemy" || target.kind === "interceptTile") {
+    return `drill "${drill.id}" points at ${target.kind}, but no enemy is on the board`;
   }
   return `drill "${drill.id}" points at ${target.kind}, which cannot be resolved`;
 }

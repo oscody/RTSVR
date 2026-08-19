@@ -4,8 +4,21 @@ import {
   ALIEN_PATHFINDS_PER_FRAME,
   UNIT_APPROACH_OFFSETS,
   WAVE_PREP_PER_FRAME,
+  TUTORIAL_WAVE_ACTIVATION_LEAD_SECONDS,
 } from "./constants.ts";
 import { ReusableGridPathfinder } from "./navigation.js";
+import {
+  tutorialHoldsCountdown,
+  tutorialReleaseAllowance,
+} from "./tutorialWaveGate.js";
+
+/**
+ * "No wave" — for the preparation sentinels and the spawned-wave marker.
+ *
+ * Must not collide with any real `waveNumber`, which since the tutorial
+ * includes 0. Anything negative works; -1 reads as "none".
+ */
+const NO_WAVE = -1;
 import { createEnemyEntity } from "./structures.js";
 import {
   Building,
@@ -71,7 +84,13 @@ export class WaveSystem extends createSystem({
   private navigationStartIndex = -1;
   private readonly canNavigateForPath = (x: number, y: number): boolean =>
     this.canNavigateAt(x, y, this.navigationStartIndex);
-  private preparedWaveNumber = 0;
+  // -1, not 0. These are "no wave" sentinels, and wave 0 is the tutorial's real
+  // level — with 0 as the sentinel, `preparationFailedWaveNumber === 0` made
+  // prepareWaveIncrementally return before it ever started, and
+  // `preparedWaveNumber === 0` made spawnWaveIfNeeded take the already-prepared
+  // branch with an empty list. Wave 0 spawned nothing, cleared instantly, and
+  // the match silently advanced to wave 1, deleting the whole tutorial level.
+  private preparedWaveNumber = NO_WAVE;
   private pendingSpawns: ResolvedWaveSpawn[] = [];
   private spawnCursor = 0;
   private prepMs = 0;
@@ -79,7 +98,7 @@ export class WaveSystem extends createSystem({
   private slowestBuildAsset = "";
   private slowestBuildName = "";
   private prepSourceRevision = -1;
-  private preparationFailedWaveNumber = 0;
+  private preparationFailedWaveNumber = NO_WAVE;
 
   init(): void {
     this.cleanupFuncs.push(
@@ -113,7 +132,22 @@ export class WaveSystem extends createSystem({
       "countdown") as WaveStage;
     const matchStatus = (source.getValue(MatchState, "status") ??
       "playing") as MatchStatus;
-    const activated = advanceWaveClock(this.clock, delta, matchStatus);
+    // ---- Tutorial hold. The ONLY intrusion into the wave clock. ------------
+    // With the tutorial off, `tutorialHoldsCountdown()` is false and the two
+    // lines below are byte-for-byte today's behaviour.
+    //
+    // The timer parks at a short lead rather than freezing wherever it was, so
+    // that when the tutorial lets go, Act 2 starts within a couple of seconds
+    // instead of waiting out a fresh 30-second countdown. Setting it (rather
+    // than clamping) is idempotent and can never reach 0 while held, which
+    // would activate the wave on the next tick.
+    const held = matchStatus === "playing" && tutorialHoldsCountdown();
+    if (held) this.clock.timer = TUTORIAL_WAVE_ACTIVATION_LEAD_SECONDS;
+    const activated = advanceWaveClock(
+      this.clock,
+      held ? 0 : delta,
+      matchStatus,
+    );
     source.setValue(WaveSource, "timer", this.clock.timer);
     source.setValue(WaveSource, "stage", this.clock.stage);
     if (this.clock.stage === "countdown" && matchStatus === "playing") {
@@ -181,7 +215,10 @@ export class WaveSystem extends createSystem({
   }
 
   private spawnWaveIfNeeded(source: Entity): void {
-    if ((source.getValue(WaveSource, "spawnedWaveNumber") ?? 0) === this.clock.waveNumber) {
+    if (
+      (source.getValue(WaveSource, "spawnedWaveNumber") ?? NO_WAVE) ===
+      this.clock.waveNumber
+    ) {
       return;
     }
     const spec = getWaveSpec(this.clock.waveNumber);
@@ -322,7 +359,7 @@ export class WaveSystem extends createSystem({
   }
 
   private resetWavePreparation(): void {
-    this.preparedWaveNumber = 0;
+    this.preparedWaveNumber = NO_WAVE;
     this.pendingSpawns = [];
     this.spawnCursor = 0;
     this.prepMs = 0;
@@ -330,14 +367,16 @@ export class WaveSystem extends createSystem({
     this.slowestBuildAsset = "";
     this.slowestBuildName = "";
     this.prepSourceRevision = -1;
-    this.preparationFailedWaveNumber = 0;
+    this.preparationFailedWaveNumber = NO_WAVE;
   }
 
   private updateWaveRelease(source: Entity, delta: number): void {
     const spec = getWaveSpec(this.clock.waveNumber);
     if (!spec) return;
     this.tickWaitingReleaseDelays(delta);
-    const waitingReady = this.waitingReadyAliens();
+    const waitingReady = this.waitingReadyAliens(
+      source.getValue(WaveSource, "releasedAlienCount") ?? 0,
+    );
     const state: WaveReleaseState = {
       releaseTimer: source.getValue(WaveSource, "releaseTimer") ?? 0,
       releasedAlienCount: source.getValue(WaveSource, "releasedAlienCount") ?? 0,
@@ -384,15 +423,33 @@ export class WaveSystem extends createSystem({
     }
   }
 
-  private waitingReadyAliens(): Entity[] {
+  /**
+   * The reserve aliens that may be released right now.
+   *
+   * This is the second and last tutorial intrusion: an allowance capping how
+   * many of the reserve are *offered*. `advanceWaveRelease` releases nothing
+   * when the list is empty, so a spent budget stalls the wave without any
+   * change to the release rules themselves. With the tutorial off the allowance
+   * is Infinity and the cap is a no-op.
+   */
+  private waitingReadyAliens(alreadyReleased: number): Entity[] {
+    const allowance = tutorialReleaseAllowance(alreadyReleased);
     this.waitingReadyBuffer.length = 0;
+    if (allowance <= 0) return this.waitingReadyBuffer;
     for (const alien of this.queries.aliens.entities) {
       if ((alien.getValue(Health, "current") ?? 0) <= 0) continue;
       if (alien.getValue(WaveUnit, "stage") !== "waiting") continue;
       if ((alien.getValue(WaveUnit, "releaseDelay") ?? 0) > 0) continue;
       this.waitingReadyBuffer.push(alien);
     }
+    // Sort BEFORE truncating. Entity order is spawn order, which is drill
+    // order — alien, then drake, then mech. Capping the raw query order would
+    // hand the tutorial whichever alien the ECS happened to iterate first, and
+    // the turret drill could find itself facing the mech's opponent early.
     this.waitingReadyBuffer.sort(compareEntityIndex);
+    if (this.waitingReadyBuffer.length > allowance) {
+      this.waitingReadyBuffer.length = allowance;
+    }
     return this.waitingReadyBuffer;
   }
 

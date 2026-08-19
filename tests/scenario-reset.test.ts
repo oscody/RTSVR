@@ -15,7 +15,10 @@ test("scenario reset restores initial economy, statistics, wave, and match value
     waveNumber: 1,
     waveTimer: 3,
     waveStage: "countdown",
-    spawnedWaveNumber: 0,
+    // -1 is "nothing spawned yet". 0 cannot mean that any more: it is the
+    // tutorial's own wave number, and using it as the sentinel made a restarted
+    // tutorial skip spawning entirely.
+    spawnedWaveNumber: -1,
     releaseTimer: 0,
     releasedAlienCount: 0,
     matchStatus: "playing",
@@ -108,6 +111,10 @@ test("restart clears transient state and rebuilds the initial scenario", () => {
   assert.match(source, /"spawnedWaveNumber"/);
   assert.match(source, /"releaseTimer"/);
   assert.match(source, /"releasedAlienCount"/);
-  assert.match(source, /createInitialScenario\(this\.world\)/);
+  // Takes a bareStart option since the tutorial's phase 4 — the assertion is
+  // that reset rebuilds the scenario at all, not the exact argument list.
+  assert.match(source, /createInitialScenario\(this\.world/);
   assert.match(source, /resetTablet\(\)/);
+  // Restart must re-arm the tutorial's own level, not drop back to wave 1.
+  assert.match(source, /TUTORIAL_WAVE_NUMBER/);
 });

@@ -169,7 +169,13 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     id: "astronaut",
     create: { via: "produce", kind: "astronaut" },
     placement: "anywhere",
-    keepAlive: ["miner", "astronaut"],
+    // NOT ["miner", "astronaut"]. A drill cannot demand the unit it is about to
+    // teach: with the bare start the player has no astronaut when this begins,
+    // so keeping one alive read as a LOSS and the drill opened with "Rebuild
+    // your astronaut" for one they never had. Losing it mid-drill needs no
+    // special case either — the card already says "Make an astronaut and put it
+    // in the way", which is the correct instruction either way.
+    keepAlive: ["miner"],
     trigger: { kind: "crystalsAtLeast", amount: 35 },
     // Hunts the miner on purpose: being threatened is the most teachable moment
     // in the tutorial, and it spawns far enough away to leave ~35s to react.
@@ -189,7 +195,11 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     id: "racer",
     create: { via: "produce", kind: "racer" },
     placement: "anywhere",
-    keepAlive: ["miner"],
+    // Racer production requires a BUILDER, so this drill genuinely depends on
+    // the astronaut the previous one taught — unlike that drill, which cannot
+    // depend on the unit it is teaching. Losing the astronaut here needs the
+    // recovery prompt, or the player sits unable to produce with no idea why.
+    keepAlive: ["miner", "astronaut"],
     trigger: { kind: "crystalsAtLeast", amount: 80 },
     opponent: { enemy: "alienDrake", count: 1, spawn: "south", hunts: "commandCenter" },
     arrows: {
@@ -209,7 +219,9 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     // The one drill where direction matters — a turret behind the base never
     // fires. Advisory: the step completes on placement anywhere.
     placement: "towardThreat",
-    keepAlive: ["miner"],
+    // Turret construction needs an astronaut to build it — same dependency as
+    // the racer drill, same reason it must be recoverable.
+    keepAlive: ["miner", "astronaut"],
     trigger: { kind: "crystalsAtLeast", amount: 30 },
     opponent: {
       enemy: "strongAlienMech",

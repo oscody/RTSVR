@@ -30,7 +30,7 @@ import {
   WaveSource,
   boardState,
 } from "./state.js";
-import { waveTotalEnemyCount } from "./waveCatalog.js";
+import { TUTORIAL_WAVE_NUMBER, waveTotalEnemyCount } from "./waveCatalog.js";
 
 /**
  * The always-on readout over the command center: which level you are on, how
@@ -146,7 +146,14 @@ function paint(
   };
 
   write("LEVEL ", labelFont, COMMAND_CENTER_HUD_LABEL_COLOR);
-  write(String(level), valueFont, COMMAND_CENTER_HUD_VALUE_COLOR);
+  // Wave 0 is the tutorial's own level. "LEVEL 0" reads as a bug; the word says
+  // what is actually happening, and its disappearance is the reward for
+  // clearing it.
+  write(
+    level === TUTORIAL_WAVE_NUMBER ? "TUTORIAL" : String(level),
+    valueFont,
+    COMMAND_CENTER_HUD_VALUE_COLOR,
+  );
   gap();
   write("TROOPS ", labelFont, COMMAND_CENTER_HUD_LABEL_COLOR);
   // Remaining AND the level's total. The count alone was ambiguous — "11"

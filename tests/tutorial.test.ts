@@ -17,11 +17,19 @@ import {
   canResolveArrow,
   drillCost,
   drillUnitCanFight,
+  edgeStep,
+  interceptTileFor,
   isDeadEnd,
   hasDrillStarted,
+  latchDrillStarted,
+  nearestCornerTo,
+  releaseBudget,
+  tutorialHoldsWaveCountdown,
   isDrillComplete,
   resolveRecovery,
   shouldReleaseOpponent,
+  tabPulseOn,
+  threatTileFor,
   validateDrills,
   type TutorialSnapshot,
 } from "../src/systems/tutorialRules.ts";
@@ -158,9 +166,14 @@ test("a miner drill given an opponent is rejected, not shipped", () => {
     create: { via: "produce", kind: "miner" },
     opponent: { enemy: "alien", count: 1, spawn: "south" },
   };
+  // Two invariants fire here, not one: a miner cannot attack, AND the fixture
+  // now keeps alive the very unit it creates. Assert the one under test rather
+  // than the count, so adding an invariant does not break unrelated tests.
   const problems = validateDrills([bad]);
-  assert.equal(problems.length, 1);
-  assert.match(problems[0], /cannot attack/);
+  assert.ok(
+    problems.some((problem) => /cannot attack/.test(problem)),
+    problems.join("; "),
+  );
 });
 
 test("a drill released before its unit is affordable is rejected", () => {
@@ -413,7 +426,10 @@ test("losing the miner with crystals prompts a replacement", () => {
 });
 
 test("losing the astronaut with a live miner waits, it does not end the run", () => {
-  const drill = drillById("astronaut");
+  // Checked against the RACER drill, not the astronaut one: a drill cannot
+  // depend on the unit it teaches, so astronaut recovery belongs to the first
+  // drill that inherits an astronaut rather than creating one.
+  const drill = drillById("racer");
   const poor = snapshot({ astronautCount: 0, crystals: 0, minerCount: 1 });
   assert.deepEqual(resolveRecovery(drill, poor), {
     unit: "astronaut",
@@ -421,14 +437,14 @@ test("losing the astronaut with a live miner waits, it does not end the run", ()
   });
   // Crucially: not a dead end. Income is still coming.
   assert.equal(isDeadEnd(poor), false);
-  const progress = advanceTutorial(indexOf("astronaut"), poor, 0);
+  const progress = advanceTutorial(indexOf("racer"), poor, 0);
   assert.equal(progress.deadEnd, false);
   assert.equal(progress.recovery?.unit, "astronaut");
 });
 
 test("losing the astronaut with crystals prompts a replacement", () => {
   const recovery = resolveRecovery(
-    drillById("astronaut"),
+    drillById("racer"),
     snapshot({ astronautCount: 0, crystals: ASTRONAUT_COST }),
   );
   assert.deepEqual(recovery, { unit: "astronaut", affordable: true });
@@ -469,4 +485,271 @@ test("act 1 holds waves, act 2 does not", () => {
       .holdsWaves,
     false,
   );
+});
+
+// ── Phase 3: the pointing layer ─────────────────────────────────────────────
+
+test("edge directions match the spawn geometry in waveCatalog", () => {
+  // waveCatalog's edgeCells() puts north at y=0, south at y=last, west at x=0,
+  // east at x=last. If that flips, the threat arrow points the wrong way and
+  // nothing else breaks — so assert the pairing, not the name.
+  assert.deepEqual(edgeStep("north"), { x: 0, y: -1 });
+  assert.deepEqual(edgeStep("south"), { x: 0, y: 1 });
+  assert.deepEqual(edgeStep("west"), { x: -1, y: 0 });
+  assert.deepEqual(edgeStep("east"), { x: 1, y: 0 });
+});
+
+test("the threat tile sits between the base and the incoming edge", () => {
+  const base = { x: 12, y: 12 };
+  assert.deepEqual(threatTileFor(base, "south", 3, 24), { x: 12, y: 15 });
+  assert.deepEqual(threatTileFor(base, "north", 3, 24), { x: 12, y: 9 });
+  assert.deepEqual(threatTileFor(base, "east", 3, 24), { x: 15, y: 12 });
+  assert.deepEqual(threatTileFor(base, "west", 3, 24), { x: 9, y: 12 });
+});
+
+test("a threat tile is clamped onto the board, never off it", () => {
+  // A base near the rim would otherwise resolve to a tile that does not exist,
+  // and the arrow would hang over empty space outside the play area.
+  assert.deepEqual(threatTileFor({ x: 22, y: 12 }, "east", 3, 24), {
+    x: 23,
+    y: 12,
+  });
+  assert.deepEqual(threatTileFor({ x: 1, y: 1 }, "north", 3, 24), { x: 1, y: 0 });
+});
+
+test("the intercept tile lands in front of the unit, not on top of it", () => {
+  // Biased toward the threat: a plain midpoint loses the race whenever the
+  // alien is closer than the astronaut, which is the case the drill is about.
+  const tile = interceptTileFor({ x: 4, y: 4 }, { x: 14, y: 4 }, 24);
+  assert.equal(tile.y, 4);
+  assert.ok(tile.x > 9, `expected past the midpoint, got ${tile.x}`);
+  assert.ok(tile.x < 14, `expected short of the threat, got ${tile.x}`);
+});
+
+test("an intercept tile is clamped onto the board", () => {
+  const tile = interceptTileFor({ x: 0, y: 0 }, { x: 60, y: 60 }, 24);
+  assert.equal(tile.x, 23);
+  assert.equal(tile.y, 23);
+});
+
+test("the tab pulse is a square wave with an even duty cycle", () => {
+  assert.equal(tabPulseOn(0, 0.5), true);
+  assert.equal(tabPulseOn(0.4, 0.5), true);
+  assert.equal(tabPulseOn(0.6, 0.5), false);
+  assert.equal(tabPulseOn(1.1, 0.5), true);
+  // A zero period must not divide by zero into a stuck-dark tab.
+  assert.equal(tabPulseOn(3, 0), true);
+});
+
+test("every drill's declared arrows are targets the system can resolve", () => {
+  // The system switches exhaustively on ArrowTarget.kind. A drill naming a kind
+  // it does not handle would compile and then silently point at nothing.
+  const known = new Set([
+    "commandCenter",
+    "nearestUnit",
+    "nearestCrystal",
+    "tile",
+    "tabletTab",
+    "nearestEnemy",
+    "threatTile",
+    "interceptTile",
+  ]);
+  for (const drill of TUTORIAL_DRILLS) {
+    for (const target of [drill.arrows.intro, drill.arrows.doing]) {
+      if (!target) continue;
+      assert.ok(
+        known.has(target.kind),
+        `drill "${drill.id}" points at unknown kind "${target.kind}"`,
+      );
+    }
+  }
+});
+
+test("a drill that names a tablet tab names one that exists", () => {
+  // The pulse writes to `tab-<name>`; a typo would be a silent no-op in uikit.
+  const tabs = new Set(["build", "crafts"]);
+  for (const drill of TUTORIAL_DRILLS) {
+    for (const target of [drill.arrows.intro, drill.arrows.doing]) {
+      if (target?.kind !== "tabletTab") continue;
+      assert.ok(tabs.has(target.tab), `drill "${drill.id}" names tab "${target.tab}"`);
+    }
+  }
+});
+
+test("a released opponent that never appears is reported as such", () => {
+  // Distinct from the routine pre-release silence: once the drill has released
+  // its opponent, an empty board is a fact worth naming — and after phase 4 it
+  // is a defect, so the message must not be a generic shrug.
+  const drill = TUTORIAL_DRILLS[indexOf("astronaut")]!;
+  const problem = arrowProblem(
+    drill,
+    snapshot({ crystals: 40, liveEnemyCount: 0 }),
+  );
+  assert.match(String(problem), /no enemy is on the board/);
+});
+
+test("a started drill stays started when live state goes backwards", () => {
+  // The miner drill counts "on its way" as started, but `hasOrder` clears the
+  // instant the miner arrives and nothing is banked until the first deposit
+  // lands. Without the latch the card reverted to "click your mining craft"
+  // while the player watched their miner stand on the crystals.
+  const drill = TUTORIAL_DRILLS[indexOf("mine")]!;
+  const enRoute = snapshot({ ordersIssued: 1, crystalsMined: 0 });
+  const arrived = snapshot({ ordersIssued: 0, crystalsMined: 0 });
+
+  assert.equal(hasDrillStarted(drill, enRoute), true);
+  // The live read really does go backwards — that is the bug being latched out.
+  assert.equal(hasDrillStarted(drill, arrived), false);
+
+  const started = latchDrillStarted(drill, enRoute, false);
+  assert.equal(started, true);
+  assert.equal(latchDrillStarted(drill, arrived, started), true);
+});
+
+test("the latch does not start a drill that has not begun", () => {
+  const drill = TUTORIAL_DRILLS[indexOf("mine")]!;
+  assert.equal(latchDrillStarted(drill, snapshot(), false), false);
+});
+
+test("the arrow follows the latch, not the live read", () => {
+  const drill = TUTORIAL_DRILLS[indexOf("mine")]!;
+  const arrived = snapshot({ ordersIssued: 0, crystalsMined: 0 });
+  // Live: back to the crystals. Latched: still the miner.
+  assert.deepEqual(arrowTargetFor(drill, arrived), { kind: "nearestCrystal" });
+  assert.deepEqual(arrowTargetFor(drill, arrived, true), {
+    kind: "nearestUnit",
+    unit: "miner",
+  });
+});
+
+// ── Phase 4: the wave gate, wave 0, and the bare start ──────────────────────
+
+test("nothing is released before the first combat drill", () => {
+  assert.equal(releaseBudget(indexOf("orient"), false), 0);
+  assert.equal(releaseBudget(indexOf("mine"), false), 0);
+  // Even if a non-combat drill somehow reported a release, it has no opponent
+  // to contribute, so the budget stays shut.
+  assert.equal(releaseBudget(indexOf("mine"), true), 0);
+});
+
+test("a drill's own opponent is released only once its trigger fires", () => {
+  const astronaut = indexOf("astronaut");
+  assert.equal(releaseBudget(astronaut, false), 0);
+  assert.equal(releaseBudget(astronaut, true), 1);
+});
+
+test("the budget accumulates, so an earlier alien still walking is not recalled", () => {
+  // Reaching the racer drill means the astronaut's alien was already released.
+  // Dropping back to 1 here would make the wave system consider it un-released
+  // and hold the drake behind an alien that is already dead.
+  assert.equal(releaseBudget(indexOf("racer"), false), 1);
+  assert.equal(releaseBudget(indexOf("racer"), true), 2);
+  assert.equal(releaseBudget(indexOf("turret"), true), 3);
+});
+
+test("a finished tutorial releases everything and stops holding", () => {
+  const total = TUTORIAL_DRILLS.reduce(
+    (sum, drill) => sum + (drill.opponent?.count ?? 0),
+    0,
+  );
+  assert.equal(releaseBudget(-1, false), total);
+  assert.equal(tutorialHoldsWaveCountdown(-1), false);
+});
+
+test("the countdown holds through Act 1 and lifts when an alien is owed", () => {
+  // Act 1: nothing earned, nothing released, countdown frozen.
+  assert.equal(tutorialHoldsWaveCountdown(indexOf("orient"), 0), true);
+  assert.equal(tutorialHoldsWaveCountdown(indexOf("mine"), 0), true);
+  // The moment the budget opens the hold MUST lift: the wave system only
+  // releases from an active wave, and only the countdown produces activation.
+  // Holding here is a deadlock, not extra safety — the live run proved it.
+  assert.equal(tutorialHoldsWaveCountdown(indexOf("astronaut"), 1), false);
+  // And a finished tutorial never holds.
+  assert.equal(tutorialHoldsWaveCountdown(-1, 3), false);
+});
+
+test("the hold and the budget cannot disagree", () => {
+  // The deadlock in one assertion: any drill with something owed must not hold.
+  for (let drill = 0; drill < TUTORIAL_DRILLS.length; drill += 1) {
+    const budget = releaseBudget(drill, true);
+    if (budget <= 0) continue;
+    assert.equal(
+      tutorialHoldsWaveCountdown(drill, budget),
+      false,
+      `drill ${drill} owes ${budget} aliens but would freeze the countdown`,
+    );
+  }
+});
+
+test("the wave-0 roster has exactly one opponent per combat drill", () => {
+  // The roster is derived from this list; if a drill gains an opponent the wave
+  // must gain an alien, or the player is told to fight something absent.
+  const opponents = TUTORIAL_DRILLS.filter((drill) => drill.opponent);
+  assert.equal(opponents.length, 3);
+  assert.deepEqual(
+    opponents.map((drill) => drill.opponent!.enemy),
+    ["alien", "alienDrake", "strongAlienMech"],
+  );
+  assert.equal(releaseBudget(-1, false), opponents.length);
+});
+
+test("the first alien spawns in the mine's corner", () => {
+  // The mine nearest the base is (8, 11) on the 24-grid, so the corner is the
+  // north-west one — on the miner's side of the board, ~13.6 tiles away, about
+  // 24 seconds of walking at ALIEN_MOVE_SPEED.
+  assert.deepEqual(nearestCornerTo({ x: 8, y: 11 }, 24), { x: 0, y: 0 });
+  assert.deepEqual(nearestCornerTo({ x: 19, y: 17 }, 24), { x: 23, y: 23 });
+  assert.deepEqual(nearestCornerTo({ x: 18, y: 6 }, 24), { x: 23, y: 0 });
+});
+
+test("the spawn corner is always a real tile on the board", () => {
+  for (const tile of [{ x: 0, y: 0 }, { x: 23, y: 23 }, { x: 12, y: 12 }]) {
+    const corner = nearestCornerTo(tile, 24);
+    assert.ok(corner.x === 0 || corner.x === 23);
+    assert.ok(corner.y === 0 || corner.y === 23);
+  }
+});
+
+test("a drill never demands the unit it is about to teach", () => {
+  // The bare start means the player has none of it yet, so requiring one alive
+  // turns the drill's opening card into a recovery prompt for a unit they never
+  // owned. This is the invariant, not just the fix to the one drill that had it.
+  const broken = TUTORIAL_DRILLS.map((drill) =>
+    drill.id === "racer"
+      ? { ...drill, keepAlive: ["miner", "racer"] as readonly string[] }
+      : drill,
+  );
+  const problems = validateDrills(broken);
+  assert.ok(
+    problems.some((problem) => problem.includes("the unit it teaches")),
+    `expected the invariant to bite, got: ${problems.join("; ")}`,
+  );
+  assert.deepEqual(validateDrills(), []);
+});
+
+test("the astronaut drill does not open as a recovery prompt", () => {
+  // The live failure: bare start, no astronaut, drill 3 greeted the player with
+  // "Rebuild your astronaut" instead of teaching them to make their first.
+  const drill = TUTORIAL_DRILLS[indexOf("astronaut")]!;
+  assert.equal(
+    resolveRecovery(drill, snapshot({ minerCount: 1, astronautCount: 0 })),
+    null,
+  );
+});
+
+test("every drill that needs a builder can recover one", () => {
+  // The other half of invariant 3. A drill must not keep alive what it teaches,
+  // but a drill that DEPENDS on an earlier unit must keep that one alive — or
+  // the recovery prompt exists in the rules and fires for nothing.
+  for (const drill of TUTORIAL_DRILLS) {
+    const needsBuilder =
+      drill.create !== null &&
+      drill.create.kind !== "astronaut" &&
+      (drill.create.via === "build" || drill.create.kind === "racer");
+    if (!needsBuilder) continue;
+    assert.ok(
+      (drill.keepAlive ?? []).includes("astronaut"),
+      `drill "${drill.id}" needs a builder but would not prompt to replace one`,
+    );
+  }
 });

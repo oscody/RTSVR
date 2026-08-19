@@ -61,7 +61,11 @@ import {
   TABLET_TAB_INACTIVE_BORDER,
   TABLET_UNIT_BACKGROUND,
   TABLET_Y_OFFSET,
+  TUTORIAL_TAB_PULSE_BACKGROUND,
+  TUTORIAL_TAB_PULSE_BORDER,
+  TUTORIAL_TAB_PULSE_SECONDS,
 } from "./constants.ts";
+import { tabPulseOn } from "./tutorialRules.ts";
 import { getFrameProfileHudLines } from "./frameProfiler.js";
 import {
   clearUnitSelections,
@@ -105,6 +109,21 @@ import {
 // sync with the markup; extra rows are blanked so the strip height is stable.
 const PROFILE_ROW_COUNT = 16;
 
+/**
+ * Which tab the tutorial is currently pointing at, or null.
+ *
+ * A module-level flag rather than a component: it is read once per frame by the
+ * one system that owns the tablet, and nothing else ever needs to see it. The
+ * dependency runs tutorial -> tablet only; the tablet never imports the
+ * tutorial system, so there is no cycle.
+ */
+let tutorialTabHint: string | null = null;
+
+/** Set from TutorialSystem. Pass null to hand the tab back to normal styling. */
+export function setTutorialTabHint(tab: string | null): void {
+  tutorialTabHint = tab;
+}
+
 type UiElement = UIKit.Text & {
   setProperties(properties: Record<string, unknown>): void;
 };
@@ -147,6 +166,9 @@ export class TabletSystem extends createSystem({
   private lastTabletRevision = Number.NaN;
   private lastWaveNumber = Number.NaN;
   private lastWaveStage = "";
+  /** `"<tab>:<lit>"` of the last tutorial pulse write; "" when nothing is lit. */
+  private lastTabHintKey = "";
+  private tabHintClock = 0;
 
   init(): void {
     this.createTablet();
@@ -160,7 +182,7 @@ export class TabletSystem extends createSystem({
     );
   }
 
-  update(): void {
+  update(delta: number): void {
     const tablet = this.tabletEntity;
     const document = this.document;
     if (!tablet || !document) return;
@@ -210,6 +232,9 @@ export class TabletSystem extends createSystem({
       boardState.debugSettings?.getValue(DebugSettings, "revision") ?? 0;
     const performanceRevision =
       performance?.getValue(RuntimePerformance, "revision") ?? 0;
+    // Before the dirty guard below: the pulse changes with time and nothing
+    // else, so anything downstream of that early-out would never animate.
+    this.applyTabHint(delta, tablet.getValue(TabletState, "view") ?? "overview");
     if (
       tabletRevision === this.lastTabletRevision &&
       crystals === this.lastCrystals &&
@@ -696,18 +721,71 @@ export class TabletSystem extends createSystem({
       ["tab-settings", "settings"],
     ];
     for (const [id, tabView] of tabs) {
-      const active = view === tabView;
-      this.setProps(id, `${active}`, {
-        backgroundColor: active
-          ? TABLET_TAB_ACTIVE_BACKGROUND
-          : TABLET_TAB_INACTIVE_BACKGROUND,
-        borderColor:
-          view === tabView
-            ? TABLET_TAB_ACTIVE_BORDER
-            : TABLET_TAB_INACTIVE_BORDER,
-        borderWidth: view === tabView ? 2 : 1,
-      });
+      this.applyTabStyle(id, view === tabView);
     }
+    // A full restyle overwrites whatever the tutorial pulse last wrote, so the
+    // pulse has to forget its state or it would skip the write that puts the
+    // highlight back and stay dark until the next flip.
+    this.lastTabHintKey = "";
+  }
+
+  /** A tab's normal styling. Shared with the tutorial pulse, which restores it. */
+  private applyTabStyle(id: string, active: boolean): void {
+    this.setProps(id, `${active}`, {
+      backgroundColor: active
+        ? TABLET_TAB_ACTIVE_BACKGROUND
+        : TABLET_TAB_INACTIVE_BACKGROUND,
+      borderColor: active
+        ? TABLET_TAB_ACTIVE_BORDER
+        : TABLET_TAB_INACTIVE_BORDER,
+      borderWidth: active ? 2 : 1,
+    });
+  }
+
+  /**
+   * Pulse the tab the tutorial is pointing at.
+   *
+   * The card can say "open the Crafts tab", but on a five-tab strip that is a
+   * reading task. This makes it a looking task.
+   *
+   * Writes only on a state flip — twice a second at most — and always restores
+   * the tab's *normal* styling on the dark half and when the hint clears, so
+   * the tutorial can never leave a tab stuck looking selected.
+   */
+  private applyTabHint(delta: number, view: string): void {
+    const hint = tutorialTabHint;
+    if (!hint) {
+      if (this.lastTabHintKey) {
+        const [previous] = this.lastTabHintKey.split(":");
+        this.applyTabStyle(`tab-${previous}`, view === previous);
+        this.lastTabHintKey = "";
+        this.tabHintClock = 0;
+      }
+      return;
+    }
+
+    this.tabHintClock += Math.max(0, delta);
+    const lit = tabPulseOn(this.tabHintClock, TUTORIAL_TAB_PULSE_SECONDS);
+    const key = `${hint}:${lit}`;
+    if (key === this.lastTabHintKey) return;
+
+    // The tutorial moved its hint to a different tab: hand the old one back
+    // before lighting the new one, or the first stays lit forever.
+    const previous = this.lastTabHintKey.split(":")[0];
+    if (previous && previous !== hint) {
+      this.applyTabStyle(`tab-${previous}`, view === previous);
+    }
+    this.lastTabHintKey = key;
+
+    if (!lit) {
+      this.applyTabStyle(`tab-${hint}`, view === hint);
+      return;
+    }
+    this.setProps(`tab-${hint}`, "tutorial-hint", {
+      backgroundColor: TUTORIAL_TAB_PULSE_BACKGROUND,
+      borderColor: TUTORIAL_TAB_PULSE_BORDER,
+      borderWidth: 3,
+    });
   }
 
   private applySelectedCard(kind: string): void {

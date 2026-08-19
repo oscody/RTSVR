@@ -1,4 +1,6 @@
 import { GRID_SIZE } from "./constants.ts";
+import { TUTORIAL_DRILLS } from "./tutorialCatalog.ts";
+import { tutorialSpawnAnchor } from "./tutorialWaveGate.ts";
 import { enemyFacingYaw } from "./waveRules.ts";
 
 export type EnemyKind = "alien" | "alienDrake" | "strongAlienMech";
@@ -10,6 +12,13 @@ export interface WaveSpawnGroup {
   edges: readonly WaveEdge[];
   minSpacingTiles?: number;
   releaseDelaySeconds?: number;
+  /**
+   * Spawn here specifically, ignoring edge selection. Used by the tutorial,
+   * whose first alien has to arrive from a known place so the drill can promise
+   * the player where to look. Falls back to the edges if the tile is unusable —
+   * an unspawnable tile must not fail a whole wave.
+   */
+  spawnTile?: { x: number; y: number };
 }
 
 export interface WaveThreatBudget {
@@ -178,7 +187,65 @@ export const WAVE_CATALOG: readonly WaveSpec[] = [
   },
 ];
 
+/**
+ * The tutorial's own level. `getWaveSpec()` matches on the `waveNumber` field
+ * rather than an array index, so 0 is a legal, first-class level and clearing it
+ * advances to wave 1 through the existing victory path with no special case.
+ */
+export const TUTORIAL_WAVE_NUMBER = 0;
+
+/** Strictly one alien alive at a time — this is a lesson, not a fight. */
+const TUTORIAL_WAVE_MAX_ACTIVE = 1;
+/**
+ * Long gaps, so there is room to watch what an alien does. Mostly moot: the
+ * tutorial gates releases on the player's crystals, so this only matters if two
+ * opponents ever become releasable at once.
+ */
+const TUTORIAL_WAVE_RELEASE_INTERVAL = 12;
+const TUTORIAL_WAVE_MIN_SPACING = 3;
+
+/**
+ * Wave 0's roster, **derived from `TUTORIAL_DRILLS`** — one opponent per combat
+ * drill, in drill order. Never hand-written: a script and a roster maintained
+ * separately would drift the first time someone reordered a drill, and the
+ * failure mode is a player being asked to fight something that never arrives.
+ *
+ * `farFromMiner` is resolved by the caller through `tutorialSpawnAnchor()`,
+ * which reads the live board. With no anchor (the tutorial is off, or the board
+ * is not built yet) the group falls back to plain edge selection, so this
+ * function is always safe to call.
+ */
+function buildTutorialWaveSpec(): WaveSpec {
+  const anchor = tutorialSpawnAnchor();
+  const groups: WaveSpawnGroup[] = [];
+  for (const drill of TUTORIAL_DRILLS) {
+    const opponent = drill.opponent;
+    if (!opponent) continue;
+    const anchored = opponent.spawn === "farFromMiner";
+    groups.push({
+      enemy: opponent.enemy,
+      count: opponent.count,
+      // "farFromMiner" is not an edge. Without a resolved anchor it degrades to
+      // the south rim, which is where every other tutorial opponent comes from.
+      edges: anchored ? ["south"] : [opponent.spawn as WaveEdge],
+      minSpacingTiles: TUTORIAL_WAVE_MIN_SPACING,
+      ...(anchored && anchor ? { spawnTile: anchor } : {}),
+    });
+  }
+  return {
+    waveNumber: TUTORIAL_WAVE_NUMBER,
+    maxActiveAliens: TUTORIAL_WAVE_MAX_ACTIVE,
+    releaseIntervalSeconds: TUTORIAL_WAVE_RELEASE_INTERVAL,
+    groups,
+  };
+}
+
 export function getWaveSpec(waveNumber: number): WaveSpec | undefined {
+  // Wave 0 is generated, not stored — it depends on the drill list and on where
+  // the mine turned out to be. Keeping it out of WAVE_CATALOG also keeps it
+  // genuinely inert while the tutorial is off: nothing reaches it unless
+  // something deliberately sets `waveNumber` to 0.
+  if (waveNumber === TUTORIAL_WAVE_NUMBER) return buildTutorialWaveSpec();
   return WAVE_CATALOG.find((spec) => spec.waveNumber === waveNumber);
 }
 
@@ -187,6 +254,8 @@ export function hasWaveSpec(waveNumber: number): boolean {
 }
 
 export function getNextWaveSpec(waveNumber: number): WaveSpec | undefined {
+  // WAVE_CATALOG deliberately excludes wave 0, so clearing the tutorial finds
+  // wave 1 here and the normal ladder resumes with no special case.
   return WAVE_CATALOG
     .filter((spec) => spec.waveNumber > waveNumber)
     .sort((left, right) => left.waveNumber - right.waveNumber)[0];
@@ -249,7 +318,15 @@ export function resolveWaveSpawns(
 
   for (let groupIndex = 0; groupIndex < groups.length; groupIndex += 1) {
     const group = groups[groupIndex];
-    const candidates = edgeCandidates(group.edges, gridSize, spec.waveNumber, groupIndex);
+    // A declared tile is tried FIRST, then the normal edge candidates as a
+    // fallback. Prepending rather than replacing matters: a corner the board
+    // happens to have blocked would otherwise fail the whole wave.
+    const candidates = group.spawnTile
+      ? [
+          { edge: nearestEdgeTo(group.spawnTile, gridSize), ...group.spawnTile },
+          ...edgeCandidates(group.edges, gridSize, spec.waveNumber, groupIndex),
+        ]
+      : edgeCandidates(group.edges, gridSize, spec.waveNumber, groupIndex);
     let groupCount = 0;
     for (const candidate of candidates) {
       if (groupCount >= group.count) break;
@@ -354,6 +431,28 @@ function edgeCandidates(
     }
   }
   return candidates;
+}
+
+/**
+ * Which edge a tile sits on, for facing purposes. A corner belongs to two; the
+ * nearer one wins, so the alien is turned inward rather than along the rim.
+ */
+function nearestEdgeTo(
+  tile: { x: number; y: number },
+  gridSize: number,
+): WaveEdge {
+  const last = gridSize - 1;
+  const distances: readonly [WaveEdge, number][] = [
+    ["west", tile.x],
+    ["east", last - tile.x],
+    ["north", tile.y],
+    ["south", last - tile.y],
+  ];
+  let best = distances[0];
+  for (const entry of distances) {
+    if (entry[1] < best[1]) best = entry;
+  }
+  return best[0];
 }
 
 function edgeCells(edge: WaveEdge, gridSize: number): EdgeCandidate[] {

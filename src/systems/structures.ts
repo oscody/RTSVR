@@ -35,6 +35,7 @@ import { attachHealthBar } from "./healthBar.js";
 import { UNIT_BOX_GEOMETRY } from "./sharedGeometry.js";
 import { attachMinerAnimation } from "./minerAnimation.js";
 import { attachTurretAnimation } from "./turretAnimation.js";
+import { isTutorialEnabled } from "./tutorial.js";
 import { attachUnitAnimation } from "./unitAnimation.js";
 import {
   type BoardTerrain,
@@ -313,11 +314,28 @@ export function createEnemyEntity(
   return entity;
 }
 
-export function createInitialScenario(world: World): void {
+/**
+ * Structures the tutorial's bare start leaves out.
+ *
+ * The tutorial teaches the astronaut as its own drill — "your builder, and it
+ * can fight" — which is meaningless if the player already has one standing next
+ * to the base. Starting with only a miner is also what makes the drill ORDER
+ * forced rather than chosen: with 0 crystals and no builder, mining is the only
+ * action available at t=0.
+ */
+const TUTORIAL_OMITTED_STRUCTURES: ReadonlySet<string> = new Set(["AstronautA"]);
+
+export function createInitialScenario(
+  world: World,
+  options: { bareStart?: boolean } = {},
+): void {
   const root = boardState.boardRoot;
   if (!root) throw new Error("Initial scenario requires BoardSystem first");
 
   for (const spec of STRUCTURES) {
+      if (options.bareStart && TUTORIAL_OMITTED_STRUCTURES.has(spec.name)) {
+        continue;
+      }
       const gltf = AssetManager.getGLTF(spec.asset);
       if (!gltf) throw new Error(`${spec.asset} not preloaded`);
       const model = gltf.scene;
@@ -438,6 +456,6 @@ export function createInitialScenario(world: World): void {
 
 export class StructuresSystem extends createSystem({}) {
   init(): void {
-    createInitialScenario(this.world);
+    createInitialScenario(this.world, { bareStart: isTutorialEnabled() });
   }
 }

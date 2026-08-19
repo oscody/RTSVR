@@ -11,7 +11,7 @@ import { clearMeteors } from "./meteorSystem.js";
 import { clearMinerAnimations } from "./minerAnimation.js";
 import { clearUnitSelections, updateCommandGridVisibility } from "./selection.js";
 import { clearTurretAnimations } from "./turretAnimation.js";
-import { resetTutorial } from "./tutorial.js";
+import { isTutorialEnabled, resetTutorial } from "./tutorial.js";
 import { resetUnderAttackAlert } from "./underAttackAlert.js";
 import { clearUnderAttackVfx } from "./underAttackVfx.js";
 import { clearUnitAnimations } from "./unitAnimation.js";
@@ -36,6 +36,7 @@ import {
 } from "./state.js";
 import { createInitialScenario } from "./structures.js";
 import { INITIAL_WAVE_DELAY_SECONDS } from "./waveRules.js";
+import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
 
 const SCENARIO_RESET_DEFAULTS = createScenarioResetDefaults(
   STARTING_CRYSTALS,
@@ -127,7 +128,7 @@ export class ScenarioResetSystem extends createSystem({
     resetBoardTerrain();
     this.hideBoardMarkers();
     this.resetSingletons(source);
-    createInitialScenario(this.world);
+    createInitialScenario(this.world, { bareStart: isTutorialEnabled() });
     this.resetTablet();
   }
 
@@ -170,10 +171,15 @@ export class ScenarioResetSystem extends createSystem({
         (selection.getValue(SelectionState, "revision") ?? 0) + 1,
       );
     }
+    // Restart replays the tutorial, which means restarting at ITS level — not
+    // wave 1. The default stays 1 so a disabled tutorial resets to today's
+    // behaviour exactly.
     source.setValue(
       WaveSource,
       "waveNumber",
-      SCENARIO_RESET_DEFAULTS.waveNumber,
+      isTutorialEnabled()
+        ? TUTORIAL_WAVE_NUMBER
+        : SCENARIO_RESET_DEFAULTS.waveNumber,
     );
     source.setValue(
       WaveSource,

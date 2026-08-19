@@ -409,11 +409,11 @@ export const COMMAND_CENTER_HUD_TROOPS_LOW_RATIO = 0.34;
 export const ENEMY_RANGE_RING_COLOR = 0xa855f7;
 
 // ── Tutorial card ──────────────────────────────────────────────────────────
-// A world-space instruction card at the board's NEAR rim — deliberately not in
-// the stack over the command center, which already carries health bar, threat
-// badge, HUD strip and the under-attack banner. Putting the tutorial there
-// would make it fight the alert banner for the most important real estate at
-// the worst possible moment.
+// A world-space instruction card placed in front of the viewer — deliberately
+// not in the stack over the command center, which already carries health bar,
+// threat badge, HUD strip and the under-attack banner. Putting the tutorial
+// there would make it fight the alert banner for the most important real estate
+// at the worst possible moment.
 //
 // Built like commandCenterHud.ts: one plane, one CanvasTexture, repainted only
 // when the text changes — nine repaints for an entire tutorial.
@@ -421,12 +421,10 @@ export const TUTORIAL_CARD_WIDTH = TILE_SIZE * 5.2;
 export const TUTORIAL_CARD_HEIGHT = TILE_SIZE * 1.45;
 // The card is placed RELATIVE TO THE VIEWER, not at a fixed board position.
 //
-// It has to be, because there is no single spot that works for both viewpoints:
+// It has to be, because there is no fixed spot that serves a player who walks.
 // `world.player` is never moved, so in XR the origin — and therefore the player
-// — sits at world (0,0,0), which is board CENTRE; while the desktop preview
-// camera sits at (2.6, 2.25, 4.25), outside the board looking in. Those are
-// ~4.9 units apart. A card parked at the near rim is across the table from one
-// and off to the side of the other.
+// — starts at world (0,0,0), which is board CENTRE; a card parked at the near
+// rim is 2.5 m away across the table, and moves further the moment they step.
 //
 // So: this far in front of the viewer, this far below eye level, recomputed
 // only when the text changes (never per frame — a card that chases your head is
@@ -460,3 +458,59 @@ export const TUTORIAL_SAMPLE_SECONDS = 0.25;
 // 30 degrees off-axis — the base has to be genuinely in front of them, not just
 // somewhere in peripheral vision, but they do not have to aim at it.
 export const TUTORIAL_GAZE_DOT_MIN = 0.86;
+
+// ---------------------------------------------------------------------------
+// Tutorial arrow — the pointing layer.
+//
+// A CONE, standing point-down over whatever the card is talking about.
+//
+// Deliberately NOT a flat billboarded chevron. The under-attack beacon shipped
+// as a flat quad and was invisible on Quest: edge-on to a standing player a
+// plane is a line, and a desktop camera never reveals it. A cone of revolution
+// has no edge-on angle, so it is readable from every direction a player can
+// stand — which is why there is no billboard constant here. The spin below is
+// for liveliness, not legibility.
+export const TUTORIAL_ARROW_RADIUS = TILE_SIZE * 0.36;
+export const TUTORIAL_ARROW_HEIGHT = TILE_SIZE * 0.85;
+// The card's hue, so "the tutorial is pointing" never reads as a game state —
+// selection rings, range rings and threat badges all own their own colours.
+export const TUTORIAL_ARROW_COLOR = 0x7dd3fc;
+/** Clearance between the cone's tip and the thing it points at. */
+export const TUTORIAL_ARROW_TIP_GAP = TILE_SIZE * 0.5;
+/**
+ * Extra lift for the tablet arrow, so the cone hovers above the panel's top
+ * edge instead of landing on its face.
+ *
+ * `boardState.tablet` is the panel's CENTRE; pointing there put the cone over
+ * the title bar, covering part of the UI the arrow exists to send you to.
+ * Half the panel height clears the top edge.
+ */
+export const TUTORIAL_ARROW_TABLET_LIFT = TABLET_PANEL_MAX_HEIGHT / 2;
+/** Bob amplitude and rate. Motion is what makes a small object findable. */
+export const TUTORIAL_ARROW_BOB = TILE_SIZE * 0.33;
+export const TUTORIAL_ARROW_BOB_HZ = 0.9;
+/** Slow yaw, radians/second, so it reads as a live cue rather than scenery. */
+export const TUTORIAL_ARROW_SPIN = 1.1;
+/**
+ * How far from the base, in tiles, the `threatTile` arrow stands.
+ *
+ * Far enough to read as a direction rather than as part of the base; close
+ * enough that a turret placed there still covers it.
+ */
+export const TUTORIAL_THREAT_TILE_STEPS = 3;
+// The hinted tablet tab alternates between its normal styling and this, at this
+// period. A square wave, not a fade: uikit setProps is a discrete write, and a
+// per-frame colour ramp through it would be the tablet's own frame cost times
+// the pulse rate for no readability gain.
+export const TUTORIAL_TAB_PULSE_SECONDS = 0.55;
+export const TUTORIAL_TAB_PULSE_BACKGROUND = "#0e4a5e";
+export const TUTORIAL_TAB_PULSE_BORDER = "#7dd3fc";
+
+/**
+ * How long the wave countdown parks at while the tutorial holds it.
+ *
+ * Not a freeze-in-place: when the tutorial lets go, Act 2 has to start promptly
+ * rather than waiting out whatever remained of a 30-second countdown. It also
+ * must never be 0, or the wave activates on the next tick while still held.
+ */
+export const TUTORIAL_WAVE_ACTIVATION_LEAD_SECONDS = 2;
