@@ -110,6 +110,21 @@ export const UnderAttackBanner = createComponent("UnderAttackBanner", {
   visible: { type: Types.Boolean, default: false },
 });
 
+// Tutorial progress, exposed as a singleton so it is visible to ecs_query_entity
+// during debugging. Timers and the drill's kill baseline stay private to
+// TutorialSystem rather than being rewritten into ECS every frame.
+export const TutorialState = createComponent("TutorialState", {
+  active: { type: Types.Boolean, default: false },
+  /** Index into TUTORIAL_DRILLS; -1 when inactive or finished. */
+  drill: { type: Types.Int8, default: -1 },
+  title: { type: Types.String, default: "" },
+  body: { type: Types.String, default: "" },
+  /** Set while a lost unit needs replacing; blank otherwise. */
+  recovery: { type: Types.String, default: "" },
+  deadEnd: { type: Types.Boolean, default: false },
+  revision: { type: Types.Int32, default: 0 },
+});
+
 export const ScenarioObject = createComponent("ScenarioObject", {});
 
 export const ResourceNode = createComponent("ResourceNode", {
@@ -371,6 +386,7 @@ export const boardState = {
   matchResultPanel: null as Entity | null,
   underAttackAlert: null as Entity | null, // carries UnderAttackAlertState
   underAttackBanner: null as Entity | null, // command-center warning panel
+  tutorial: null as Entity | null, // carries the TutorialState singleton
   tablet: null as Entity | null,
   commandCenter: null as Entity | null,
   pointerTile: null as BoardCoordinate | null,

@@ -11,9 +11,14 @@ import {
   CRYSTALS_PER_TRIP,
   MINER_COST,
   advanceTutorial,
+  arrowNeedsCommandCenter,
+  arrowProblem,
+  arrowTargetFor,
+  canResolveArrow,
   drillCost,
   drillUnitCanFight,
   isDeadEnd,
+  hasDrillStarted,
   isDrillComplete,
   resolveRecovery,
   shouldReleaseOpponent,
@@ -37,9 +42,19 @@ function snapshot(overrides: Partial<TutorialSnapshot> = {}): TutorialSnapshot {
     matchStatus: "playing",
     stepElapsedSeconds: 0,
     alertRevision: 0,
+    lookingAtCommandCenter: false,
+    commandCenterAlive: true,
     ...overrides,
   };
 }
+
+/** Index of a drill by id. Tests must never hardcode positions — inserting a
+ *  drill (as `orient` was) would silently retarget them. */
+const indexOf = (id: string): number => {
+  const i = TUTORIAL_DRILLS.findIndex((entry) => entry.id === id);
+  assert.ok(i >= 0, `no drill "${id}"`);
+  return i;
+};
 
 const drillById = (id: string): TutorialDrill => {
   const drill = TUTORIAL_DRILLS.find((entry) => entry.id === id);
@@ -73,11 +88,62 @@ test("the default drill list is valid", () => {
   assert.deepEqual(validateDrills(), []);
 });
 
-test("the default order is miner then astronaut then racer then turret", () => {
+test("the tutorial opens by naming the base and closes by signing off", () => {
   assert.deepEqual(
     TUTORIAL_DRILLS.map((drill) => drill.id),
-    ["mine", "astronaut", "racer", "turret"],
+    ["orient", "mine", "astronaut", "racer", "turret", "done"],
   );
+  // The first thing a player is ever told is which thing is theirs.
+  assert.match(TUTORIAL_DRILLS[0].cards.title, /command center/i);
+  assert.equal(TUTORIAL_DRILLS[0].create, null);
+  assert.equal(TUTORIAL_DRILLS[0].opponent, null);
+});
+
+test("a satisfied trigger cannot skip a card before it can be read", () => {
+  const orient = TUTORIAL_DRILLS[0];
+  assert.ok(orient.minSeconds && orient.minSeconds > 0, "orient needs a floor");
+  // Already looking at the base — the trigger is satisfied from frame one.
+  const looking = snapshot({ lookingAtCommandCenter: true });
+  // …but it must still be on screen long enough to read.
+  assert.equal(isDrillComplete(orient, { ...looking, stepElapsedSeconds: 0 }, 0), false);
+  assert.equal(isDrillComplete(orient, { ...looking, stepElapsedSeconds: 1 }, 0), false);
+  assert.equal(
+    isDrillComplete(orient, { ...looking, stepElapsedSeconds: orient.minSeconds! }, 0),
+    true,
+  );
+});
+
+test("the floor is a minimum, not a timer - it never completes on its own", () => {
+  const orient = TUTORIAL_DRILLS[0];
+  // Ten minutes elapsed, still not looking: still incomplete.
+  assert.equal(
+    isDrillComplete(orient, snapshot({ stepElapsedSeconds: 600 }), 0),
+    false,
+  );
+});
+
+test("the orientation beat waits until the player looks at their base", () => {
+  const orient = TUTORIAL_DRILLS[0];
+  // Event, not a timer: no amount of elapsed time completes it on its own.
+  assert.equal(
+    isDrillComplete(orient, snapshot({ stepElapsedSeconds: 600 }), 0),
+    false,
+  );
+  // Looking AND read: both are required.
+  assert.equal(
+    isDrillComplete(
+      orient,
+      snapshot({ lookingAtCommandCenter: true, stepElapsedSeconds: 10 }),
+      0,
+    ),
+    true,
+  );
+});
+
+test("the sign-off does not spawn anything", () => {
+  const done = TUTORIAL_DRILLS[TUTORIAL_DRILLS.length - 1];
+  assert.equal(done.opponent, null);
+  assert.equal(done.create, null);
 });
 
 test("the miner drill has no opponent - it cannot fight", () => {
@@ -130,6 +196,97 @@ test("drill costs match the live catalogs", () => {
   assert.equal(drillCost(drillById("mine")), 0);
 });
 
+// ── Arrow targets (plan tests 19, 19b) ──────────────────────────────────────
+
+test("every drill declares an arrow for both card phases", () => {
+  for (const drill of TUTORIAL_DRILLS) {
+    assert.ok("intro" in drill.arrows, `${drill.id} missing arrows.intro`);
+    assert.ok("doing" in drill.arrows, `${drill.id} missing arrows.doing`);
+  }
+});
+
+test("the arrow follows the card from intro to doing", () => {
+  const mine = drillById("mine");
+  // Asking: point at the crystals.
+  assert.deepEqual(arrowTargetFor(mine, snapshot()), { kind: "nearestCrystal" });
+  // Working: point at the miner doing the work.
+  assert.deepEqual(arrowTargetFor(mine, snapshot({ ordersIssued: 1 })), {
+    kind: "nearestUnit",
+    unit: "miner",
+  });
+});
+
+test("orientation points at the base, which is the whole lesson", () => {
+  assert.deepEqual(arrowTargetFor(TUTORIAL_DRILLS[0], snapshot()), {
+    kind: "commandCenter",
+  });
+});
+
+test("only base-derived targets are flagged as needing the command center", () => {
+  assert.equal(arrowNeedsCommandCenter({ kind: "commandCenter" }), true);
+  assert.equal(arrowNeedsCommandCenter({ kind: "threatTile" }), true);
+  assert.equal(arrowNeedsCommandCenter({ kind: "nearestCrystal" }), false);
+  assert.equal(arrowNeedsCommandCenter({ kind: "nearestEnemy" }), false);
+  assert.equal(arrowNeedsCommandCenter({ kind: "interceptTile" }), false);
+});
+
+test("a base-derived arrow is hidden once the base is gone, never redirected", () => {
+  const dead = snapshot({ commandCenterAlive: false });
+  assert.equal(canResolveArrow({ kind: "commandCenter" }, dead), false);
+  assert.equal(canResolveArrow({ kind: "threatTile" }, dead), false);
+  // Targets that do not depend on the base are unaffected.
+  assert.equal(canResolveArrow({ kind: "nearestCrystal" }, dead), true);
+});
+
+test("enemy-derived arrows are hidden when there is no enemy", () => {
+  assert.equal(
+    canResolveArrow({ kind: "nearestEnemy" }, snapshot({ liveEnemyCount: 0 })),
+    false,
+  );
+  assert.equal(
+    canResolveArrow({ kind: "nearestEnemy" }, snapshot({ liveEnemyCount: 1 })),
+    true,
+  );
+  assert.equal(
+    canResolveArrow({ kind: "interceptTile" }, snapshot({ liveEnemyCount: 0 })),
+    false,
+  );
+});
+
+test("a null target draws nothing", () => {
+  assert.equal(canResolveArrow(null, snapshot()), false);
+});
+
+// ── What gets logged, and what deliberately does not ────────────────────────
+
+test("waiting for an enemy that has not been released is not reported", () => {
+  // The astronaut drill's intro points at nearestEnemy while the alien is still
+  // gated on crystals. That happens on every run — warning about it would train
+  // whoever reads the console to ignore the message.
+  const astronaut = drillById("astronaut");
+  assert.equal(arrowProblem(astronaut, snapshot({ crystals: 0, liveEnemyCount: 0 })), null);
+});
+
+test("a base-derived arrow with no base is reported, and says why", () => {
+  const problem = arrowProblem(
+    TUTORIAL_DRILLS[0],
+    snapshot({ commandCenterAlive: false }),
+  );
+  assert.ok(problem, "expected a reported problem");
+  assert.match(problem, /orient/);
+  assert.match(problem, /command center is gone/);
+});
+
+test("a drill that deliberately has no arrow reports nothing", () => {
+  const done = TUTORIAL_DRILLS[TUTORIAL_DRILLS.length - 1];
+  assert.equal(done.arrows.intro, null);
+  assert.equal(arrowProblem(done, snapshot()), null);
+});
+
+test("a resolvable arrow reports nothing", () => {
+  assert.equal(arrowProblem(drillById("mine"), snapshot()), null);
+});
+
 // ── Release gating (plan tests 13, 21, 32) ──────────────────────────────────
 
 test("four mining trips releases the first alien", () => {
@@ -159,11 +316,36 @@ test("no enemy is released before its counter is affordable", () => {
 
 test("a player who never mines is never attacked", () => {
   // Drill 1 waits indefinitely; nothing is released, so nothing can kill them.
-  const progress = advanceTutorial(0, snapshot({ crystalsMined: 0 }), 0);
-  assert.equal(progress.drill, 0);
+  const mine = indexOf("mine");
+  const progress = advanceTutorial(mine, snapshot({ crystalsMined: 0 }), 0);
+  assert.equal(progress.drill, mine);
   assert.equal(progress.advanced, false);
   assert.equal(progress.releaseOpponent, false);
   assert.equal(progress.holdsWaves, true);
+});
+
+// ── Card feedback: intro -> doing ───────────────────────────────────────────
+
+test("ordering the miner changes the card, even though it does not complete the drill", () => {
+  const mine = drillById("mine");
+  // Nothing done yet: the card still asks for the click.
+  assert.equal(hasDrillStarted(mine, snapshot()), false);
+  // Miner en route — the click is acknowledged before any crystal lands.
+  assert.equal(hasDrillStarted(mine, snapshot({ ordersIssued: 1 })), true);
+  // …and the drill is still NOT complete, which is the point.
+  assert.equal(isDrillComplete(mine, snapshot({ ordersIssued: 1 }), 0), false);
+});
+
+test("a partial haul keeps the card on doing", () => {
+  const mine = drillById("mine");
+  assert.equal(hasDrillStarted(mine, snapshot({ crystalsMined: 10 })), true);
+  assert.equal(isDrillComplete(mine, snapshot({ crystalsMined: 10 }), 0), false);
+});
+
+test("a combat drill starts when its opponent is released", () => {
+  const astronaut = drillById("astronaut");
+  assert.equal(hasDrillStarted(astronaut, snapshot({ crystals: 34 })), false);
+  assert.equal(hasDrillStarted(astronaut, snapshot({ crystals: 35 })), true);
 });
 
 // ── Completion and progression (plan tests 1, 2) ────────────────────────────
@@ -183,7 +365,12 @@ test("kills banked in an earlier drill do not complete the next one", () => {
 
 test("completing the last drill ends the tutorial", () => {
   const last = TUTORIAL_DRILLS.length - 1;
-  const progress = advanceTutorial(last, snapshot({ enemiesKilled: 1 }), 0);
+  // The last drill is the sign-off: a dwell beat, not a fight.
+  const progress = advanceTutorial(
+    last,
+    snapshot({ stepElapsedSeconds: 30 }),
+    0,
+  );
   assert.equal(progress.advanced, true);
   assert.equal(progress.drill, -1);
 });
@@ -209,6 +396,14 @@ test("the only dead end is no miner and no way to buy one", () => {
   assert.equal(isDeadEnd(snapshot({ minerCount: 1, crystals: 0 })), false);
 });
 
+test("losing the command center is a dead end regardless of everything else", () => {
+  // Rich, mining happily, plenty of units — and still over.
+  assert.equal(
+    isDeadEnd(snapshot({ commandCenterAlive: false, minerCount: 3, crystals: 999 })),
+    true,
+  );
+});
+
 test("losing the miner with crystals prompts a replacement", () => {
   const recovery = resolveRecovery(
     drillById("astronaut"),
@@ -226,7 +421,7 @@ test("losing the astronaut with a live miner waits, it does not end the run", ()
   });
   // Crucially: not a dead end. Income is still coming.
   assert.equal(isDeadEnd(poor), false);
-  const progress = advanceTutorial(1, poor, 0);
+  const progress = advanceTutorial(indexOf("astronaut"), poor, 0);
   assert.equal(progress.deadEnd, false);
   assert.equal(progress.recovery?.unit, "astronaut");
 });
@@ -241,7 +436,7 @@ test("losing the astronaut with crystals prompts a replacement", () => {
 
 test("recovery pauses enemy releases so a rebuilding player is not attacked", () => {
   const progress = advanceTutorial(
-    1,
+    indexOf("astronaut"),
     snapshot({ minerCount: 0, crystals: MINER_COST }),
     0,
   );
@@ -251,7 +446,7 @@ test("recovery pauses enemy releases so a rebuilding player is not attacked", ()
 
 test("a dead end reports once and holds waves", () => {
   const progress = advanceTutorial(
-    1,
+    indexOf("astronaut"),
     snapshot({ minerCount: 0, crystals: 0 }),
     0,
   );
@@ -265,8 +460,13 @@ test("a dead end reports once and holds waves", () => {
 // ── Act 1 holds waves (plan acceptance 6) ───────────────────────────────────
 
 test("act 1 holds waves, act 2 does not", () => {
-  // Drill 0 has no opponent: nothing to fight yet.
-  assert.equal(advanceTutorial(0, snapshot(), 0).holdsWaves, true);
-  // Drill 1 has an opponent: waves are live.
-  assert.equal(advanceTutorial(1, snapshot({ astronautCount: 1 }), 0).holdsWaves, false);
+  // Instruction drills have no opponent: nothing to fight yet, so waves stay held.
+  assert.equal(advanceTutorial(indexOf("orient"), snapshot(), 0).holdsWaves, true);
+  assert.equal(advanceTutorial(indexOf("mine"), snapshot(), 0).holdsWaves, true);
+  // The first combat drill releases them.
+  assert.equal(
+    advanceTutorial(indexOf("astronaut"), snapshot({ astronautCount: 1 }), 0)
+      .holdsWaves,
+    false,
+  );
 });

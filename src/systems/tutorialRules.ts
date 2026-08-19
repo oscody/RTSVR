@@ -1,7 +1,11 @@
 import { canUnitAttack } from "./combatRules.ts";
 import { getBuildingSpec } from "./buildingCatalog.ts";
 import { getProductionSpec } from "./craftCatalog.ts";
-import { TUTORIAL_DRILLS, type TutorialDrill } from "./tutorialCatalog.ts";
+import {
+  TUTORIAL_DRILLS,
+  type ArrowTarget,
+  type TutorialDrill,
+} from "./tutorialCatalog.ts";
 
 /**
  * Pure decision layer for the tutorial.
@@ -37,6 +41,10 @@ export interface TutorialSnapshot {
   liveEnemyCount: number;
   matchStatus: string;
   stepElapsedSeconds: number;
+  /** Is the command center currently within the player's view cone? */
+  lookingAtCommandCenter: boolean;
+  /** False once the base is gone. Its own dead end — see isDeadEnd. */
+  commandCenterAlive: boolean;
   /**
    * Monotonic. Read the revision rather than a visible flag so a sighting
    * banner that appeared and expired between two samples is still observed.
@@ -134,11 +142,22 @@ export function validateDrills(
 }
 
 /**
- * Income requires a miner — nothing else mines. So the run is unrecoverable
- * only when there is no miner AND no way to buy one. Every other loss recovers
- * given time, which is why an astronaut death waits rather than ending the run.
+ * The two unrecoverable states.
+ *
+ * 1. **No income, no way to buy income.** Only miners mine, so with no miner and
+ *    fewer crystals than one costs, nothing can ever be built again. Every other
+ *    unit loss recovers given time — which is why an astronaut death waits
+ *    rather than ending the run.
+ * 2. **No command center.** It is the loss condition; there is nothing to
+ *    defend and nothing to produce from.
+ *
+ * The second is belt-and-braces: as of 2026-08-19 losing the base sets
+ * `MatchState.status` to defeat, which takes the tutorial inactive before this
+ * is reached. It is kept because the tutorial samples at 4 Hz and should never
+ * be caught instructing a player to defend a base that no longer exists.
  */
 export function isDeadEnd(snapshot: TutorialSnapshot): boolean {
+  if (!snapshot.commandCenterAlive) return true;
   return snapshot.minerCount === 0 && snapshot.crystals < MINER_COST;
 }
 
@@ -172,6 +191,10 @@ function triggerMet(drill: TutorialDrill, snapshot: TutorialSnapshot): boolean {
       return snapshot.crystalsMined >= drill.trigger.count * CRYSTALS_PER_TRIP;
     case "crystalsAtLeast":
       return snapshot.crystals >= drill.trigger.amount;
+    case "lookedAt":
+      return snapshot.lookingAtCommandCenter;
+    case "dwellSeconds":
+      return snapshot.stepElapsedSeconds >= drill.trigger.seconds;
   }
 }
 
@@ -181,6 +204,117 @@ export function shouldReleaseOpponent(
   snapshot: TutorialSnapshot,
 ): boolean {
   return drill.opponent !== null && triggerMet(drill, snapshot);
+}
+
+/**
+ * Has the player visibly begun this drill? Drives the card from `intro` to
+ * `doing`, so a click that does not complete a step still produces feedback.
+ *
+ * The miner drill is why this exists: it completes at four trips, so ordering
+ * the miner to a crystal patch changes nothing the player can see. Without
+ * this, the first thing a new player ever does is met with silence.
+ */
+export function hasDrillStarted(
+  drill: TutorialDrill,
+  snapshot: TutorialSnapshot,
+): boolean {
+  // A combat drill has "started" once its opponent is on the board.
+  if (drill.opponent) return triggerMet(drill, snapshot);
+  switch (drill.trigger.kind) {
+    case "immediate":
+      return true;
+    case "minerTrips":
+      // Either the miner is on its way, or something has already been banked.
+      return snapshot.ordersIssued > 0 || snapshot.crystalsMined > 0;
+    case "crystalsAtLeast":
+      return snapshot.crystals > 0;
+    case "lookedAt":
+    case "dwellSeconds":
+      // Instruction beats have nothing to "start" — they read the same
+      // throughout, so the card never switches to `doing`.
+      return true;
+  }
+}
+
+/**
+ * Which arrow this drill wants right now — the same intro/doing split the card
+ * uses, so the words and the pointing never disagree.
+ */
+export function arrowTargetFor(
+  drill: TutorialDrill,
+  snapshot: TutorialSnapshot,
+): ArrowTarget | null {
+  return hasDrillStarted(drill, snapshot)
+    ? drill.arrows.doing
+    : drill.arrows.intro;
+}
+
+/**
+ * Does resolving this target require a living command center?
+ *
+ * Both of these derive from the base, and the base can be destroyed — at which
+ * point `boardState.commandCenter` is null. The system must render **no arrow**
+ * rather than resolving to the world origin, which is board centre and would
+ * point confidently at where the base used to be.
+ */
+export function arrowNeedsCommandCenter(target: ArrowTarget): boolean {
+  return target.kind === "commandCenter" || target.kind === "threatTile";
+}
+
+/**
+ * Can this target be pointed at right now? False means draw nothing.
+ *
+ * An arrow aimed at nothing is worse than no arrow: the card still has words,
+ * but a confident pointer at the wrong place actively misleads.
+ */
+export function canResolveArrow(
+  target: ArrowTarget | null,
+  snapshot: TutorialSnapshot,
+): boolean {
+  if (!target) return false;
+  if (arrowNeedsCommandCenter(target) && !snapshot.commandCenterAlive) {
+    return false;
+  }
+  if (target.kind === "nearestEnemy" && snapshot.liveEnemyCount === 0) {
+    return false;
+  }
+  if (target.kind === "interceptTile" && snapshot.liveEnemyCount === 0) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Why the arrow cannot be drawn — a short reason for the log — or null when
+ * there is nothing worth reporting.
+ *
+ * Deliberately quiet about the one routine case: a combat drill's intro points
+ * at `nearestEnemy` *before* its opponent has been released, which happens on
+ * every single run. Warning about that would train whoever reads the console to
+ * ignore the message, and the one time it mattered they would.
+ *
+ * What is left is genuinely worth seeing: a base-derived arrow with no base, or
+ * a target that should have resolved and did not — which usually means the
+ * drill declares the wrong target for what is on the board.
+ */
+export function arrowProblem(
+  drill: TutorialDrill,
+  snapshot: TutorialSnapshot,
+): string | null {
+  const target = arrowTargetFor(drill, snapshot);
+  // No arrow declared is a choice, not a failure.
+  if (!target) return null;
+  if (canResolveArrow(target, snapshot)) return null;
+
+  const awaitingRelease =
+    (target.kind === "nearestEnemy" || target.kind === "interceptTile") &&
+    !shouldReleaseOpponent(drill, snapshot);
+  if (awaitingRelease) return null;
+
+  if (arrowNeedsCommandCenter(target) && !snapshot.commandCenterAlive) {
+    return `drill "${drill.id}" points at ${target.kind}, but the command center is gone`;
+  }
+  return `drill "${drill.id}" points at ${target.kind}, which cannot be resolved`;
 }
 
 /**
@@ -196,6 +330,9 @@ export function isDrillComplete(
   snapshot: TutorialSnapshot,
   enemiesKilledAtDrillStart: number,
 ): boolean {
+  // A card nobody had time to read taught nothing, however satisfied its
+  // trigger is. This is a floor on display time, not a timer that completes.
+  if (snapshot.stepElapsedSeconds < (drill.minSeconds ?? 0)) return false;
   if (!drill.opponent) return triggerMet(drill, snapshot);
   return (
     snapshot.enemiesKilled - enemiesKilledAtDrillStart >= drill.opponent.count

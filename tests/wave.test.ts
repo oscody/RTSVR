@@ -15,6 +15,7 @@ import {
   alienFacingYaw,
   enemyFacingYaw,
   isAdjacentToFootprint,
+  resolveMatchAfterCommandCenterLoss,
   resolveMatchAfterFriendlyElimination,
   resolveMatchAfterWaveCleared,
   resolveWaveClearOutcome,
@@ -207,4 +208,17 @@ test("staged wave release refills one reserve early after active deaths", () => 
     1,
   );
   assert.deepEqual(state, { releaseTimer: 8, releasedAlienCount: 4 });
+});
+
+test("losing the command center ends the match on its own", () => {
+  // Before 2026-08-19 this returned "playing" while any friendly survived, so a
+  // player could lose their base and keep going — contradicting the game's own
+  // stated loss condition.
+  assert.equal(resolveMatchAfterCommandCenterLoss("playing"), "defeat");
+});
+
+test("a finished match is not re-decided by a late command-center loss", () => {
+  assert.equal(resolveMatchAfterCommandCenterLoss("victory"), "victory");
+  assert.equal(resolveMatchAfterCommandCenterLoss("defeat"), "defeat");
+  assert.equal(resolveMatchAfterCommandCenterLoss("restarting"), "restarting");
 });

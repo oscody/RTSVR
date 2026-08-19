@@ -27,6 +27,7 @@ import { SkySystem } from "./systems/skySystem.js";
 import { StructuresSystem } from "./systems/structures.js";
 import { TabletSystem } from "./systems/tablet.js";
 import { TurretAnimationSystem } from "./systems/turretAnimation.js";
+import { TutorialSystem } from "./systems/tutorial.js";
 import { UnderAttackAlertSystem } from "./systems/underAttackAlert.js";
 import { UnderAttackAudioSystem } from "./systems/underAttackAudio.js";
 import { UnderAttackBannerSystem } from "./systems/underAttackBanner.js";
@@ -124,6 +125,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(UnderAttackBannerSystem)
     .registerSystem(UnderAttackAudioSystem)
     .registerSystem(CommandCenterHudSystem)
+    .registerSystem(TutorialSystem)
     .registerSystem(AlienAnimationSystem)
     .registerSystem(CommandCenterAnimationSystem)
     .registerSystem(TurretAnimationSystem)

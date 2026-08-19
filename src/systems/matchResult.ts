@@ -84,10 +84,16 @@ export class MatchResultSystem extends createSystem({
       text: victory ? "LEVEL 1 COMPLETE" : "COMMAND CENTER LOST",
       color: victory ? "#86efac" : "#fca5a5",
     });
+    // Two ways to lose, and they want different words: the title says
+    // "COMMAND CENTER LOST" either way, so the body has to say which happened.
+    const baseAlive =
+      boardState.waveSource?.getValue(MatchState, "commandCenterAlive") ?? true;
     this.element("result-body")?.setProperties({
       text: victory
         ? `Wave ${waveNumber} cleared. All aliens were defeated.`
-        : "All friendly forces were destroyed.",
+        : baseAlive
+          ? "All friendly forces were destroyed."
+          : "Your command center was destroyed.",
     });
   }
 

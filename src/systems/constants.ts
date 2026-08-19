@@ -407,3 +407,56 @@ export const COMMAND_CENTER_HUD_TROOPS_LOW_RATIO = 0.34;
 // Purple rather than the friendly rings' red — it is a danger zone, not one of
 // your own weapons. Same hue as the alien melee bursts.
 export const ENEMY_RANGE_RING_COLOR = 0xa855f7;
+
+// ── Tutorial card ──────────────────────────────────────────────────────────
+// A world-space instruction card at the board's NEAR rim — deliberately not in
+// the stack over the command center, which already carries health bar, threat
+// badge, HUD strip and the under-attack banner. Putting the tutorial there
+// would make it fight the alert banner for the most important real estate at
+// the worst possible moment.
+//
+// Built like commandCenterHud.ts: one plane, one CanvasTexture, repainted only
+// when the text changes — nine repaints for an entire tutorial.
+export const TUTORIAL_CARD_WIDTH = TILE_SIZE * 5.2;
+export const TUTORIAL_CARD_HEIGHT = TILE_SIZE * 1.45;
+// The card is placed RELATIVE TO THE VIEWER, not at a fixed board position.
+//
+// It has to be, because there is no single spot that works for both viewpoints:
+// `world.player` is never moved, so in XR the origin — and therefore the player
+// — sits at world (0,0,0), which is board CENTRE; while the desktop preview
+// camera sits at (2.6, 2.25, 4.25), outside the board looking in. Those are
+// ~4.9 units apart. A card parked at the near rim is across the table from one
+// and off to the side of the other.
+//
+// So: this far in front of the viewer, this far below eye level, recomputed
+// only when the text changes (never per frame — a card that chases your head is
+// hard to read and harder to ignore).
+export const TUTORIAL_CARD_DISTANCE = 1.35;
+export const TUTORIAL_CARD_DROP = 0.58;
+// Leash. The card stays put while the viewer is near it and roughly facing it,
+// and re-places when either stops being true. Without this it is placed once per
+// text change and never again — which breaks the moment the viewpoint jumps, as
+// it does on entering XR (desktop camera is outside the board; the XR player is
+// at board centre, ~4.9 units away). Cheap: a few vector ops per frame.
+export const TUTORIAL_CARD_MAX_DISTANCE = 2.4;
+export const TUTORIAL_CARD_MIN_DISTANCE = 0.45;
+// Dot product of view-forward against the direction to the card, both flattened.
+// ~0.3 is about 70 degrees off-axis — generous, so small head turns do not move it.
+export const TUTORIAL_CARD_FACING_MIN = 0.3;
+export const TUTORIAL_CARD_TEXTURE_WIDTH = 1024;
+export const TUTORIAL_CARD_TEXTURE_HEIGHT = 272;
+export const TUTORIAL_CARD_BACKGROUND = "rgba(10, 18, 24, 0.9)";
+// The tutorial gets a hue of its own, distinct from every gameplay marker, so
+// "the tutorial is telling you something" never reads as a game state.
+export const TUTORIAL_CARD_BORDER = "#7dd3fc";
+export const TUTORIAL_CARD_TITLE_COLOR = "#7dd3fc";
+export const TUTORIAL_CARD_BODY_COLOR = "#e8f4f8";
+export const TUTORIAL_CARD_STEP_COLOR = "#7c93a1";
+// Rules run at 4 Hz — nothing here needs 72 Hz, and the counts are the only
+// mildly expensive reads.
+export const TUTORIAL_SAMPLE_SECONDS = 0.25;
+// Gaze test for the orientation beat: cos of the half-angle between where the
+// player is looking and the direction to their command center. ~0.86 is about
+// 30 degrees off-axis — the base has to be genuinely in front of them, not just
+// somewhere in peripheral vision, but they do not have to aim at it.
+export const TUTORIAL_GAZE_DOT_MIN = 0.86;

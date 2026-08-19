@@ -11,6 +11,7 @@ import { clearMeteors } from "./meteorSystem.js";
 import { clearMinerAnimations } from "./minerAnimation.js";
 import { clearUnitSelections, updateCommandGridVisibility } from "./selection.js";
 import { clearTurretAnimations } from "./turretAnimation.js";
+import { resetTutorial } from "./tutorial.js";
 import { resetUnderAttackAlert } from "./underAttackAlert.js";
 import { clearUnderAttackVfx } from "./underAttackVfx.js";
 import { clearUnitAnimations } from "./unitAnimation.js";
@@ -77,6 +78,8 @@ export class ScenarioResetSystem extends createSystem({
     // hidden, alarm silenced, and every cooldown dropped — a stale entry keyed
     // on a now-recycled entity index would suppress the next match's alerts.
     clearCommandCenterHud();
+    // Restart replays the tutorial from drill 1 while it is enabled.
+    resetTutorial();
     clearUnderAttackVfx();
     resetUnderAttackAlert();
     for (const ring of boardState.selectionRingByUnit.values()) ring.dispose();

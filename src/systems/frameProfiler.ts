@@ -34,6 +34,10 @@ const UNIT_ROW = ["UnitAnim", "Mining", "MinerAnim"] as const;
 const PRODUCTION_ROW = ["Construction", "CraftProduction", "CraftVisualRise"] as const;
 const WORLD_ROW = ["Level", "Audio", "Follow", "Board", "Sky", "Structures"] as const;
 const SESSION_ROW = ["Performance", "Interaction", "Meteor", "MatchResult", "ScenarioReset"] as const;
+// Named so the tutorial's cost has a deliberate home rather than landing in the
+// leftover bucket, which was one entry away from spilling past the tablet's
+// 16-row cap (tablet.ts PROFILE_ROW_COUNT) and being silently dropped on device.
+const TUTORIAL_ROW = ["Tutorial", "CommandCenterHud"] as const;
 const HUD_ROWS: readonly (readonly string[])[] = [
   PREPARATION_ROW,
   CORE_ROW,
@@ -44,6 +48,7 @@ const HUD_ROWS: readonly (readonly string[])[] = [
   PRODUCTION_ROW,
   WORLD_ROW,
   SESSION_ROW,
+  TUTORIAL_ROW,
 ];
 // Whole-frame decomposition. The per-system rows only cover system.update();
 // the actual frame also spends time in renderer.render() and in

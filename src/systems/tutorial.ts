@@ -1,15 +1,113 @@
-import { DebugSettings, boardState } from "./state.js";
-import { TUTORIAL_ENABLED } from "./tutorialCatalog.ts";
+import {
+  CanvasTexture,
+  Mesh,
+  MeshBasicMaterial,
+  PlaneGeometry,
+  Vector3,
+  VisibilityState,
+  createSystem,
+  type Object3D,
+} from "@iwsdk/core";
+import {
+  TUTORIAL_CARD_BACKGROUND,
+  TUTORIAL_CARD_BODY_COLOR,
+  TUTORIAL_CARD_BORDER,
+  TUTORIAL_CARD_HEIGHT,
+  TUTORIAL_CARD_STEP_COLOR,
+  TUTORIAL_CARD_TEXTURE_HEIGHT,
+  TUTORIAL_CARD_TEXTURE_WIDTH,
+  TUTORIAL_CARD_TITLE_COLOR,
+  TUTORIAL_CARD_DISTANCE,
+  TUTORIAL_CARD_DROP,
+  TUTORIAL_CARD_FACING_MIN,
+  TUTORIAL_CARD_MAX_DISTANCE,
+  TUTORIAL_CARD_MIN_DISTANCE,
+  TUTORIAL_CARD_WIDTH,
+  TUTORIAL_GAZE_DOT_MIN,
+  TUTORIAL_SAMPLE_SECONDS,
+} from "./constants.ts";
+import { makeNonInteractive } from "./sharedGeometry.js";
+import {
+  Building,
+  ConstructionSite,
+  CraftProductionSite,
+  DebugSettings,
+  Enemy,
+  GameState,
+  GameStats,
+  Health,
+  MatchState,
+  TutorialState,
+  Unit,
+  UnderAttackAlertState,
+  boardState,
+} from "./state.js";
+import {
+  TUTORIAL_DRILLS,
+  TUTORIAL_ENABLED,
+  type TutorialDrill,
+} from "./tutorialCatalog.ts";
+import {
+  advanceTutorial,
+  arrowProblem,
+  hasDrillStarted,
+  type TutorialSnapshot,
+} from "./tutorialRules.ts";
 
 /**
- * Tutorial runtime.
+ * Tutorial runtime — the world-facing half. All decisions live in
+ * `tutorialRules.ts`; this samples the world, hands the rules a snapshot, and
+ * renders the result.
  *
  * Design: `RTSVR_repos/devlog/plan/2026-08-09-Tutorial-System-Plan.md`.
  *
- * Phase 2 grows this into `TutorialSystem` (state singleton, card, arrow, wave
- * gate). Today it is only the enabled check, so the Settings-tab toggle has
- * something to drive.
+ * Phase 2 scope: the instruction card only. The arrow, the wave gate, wave 0
+ * and the bare-start scenario change are later phases, so today the tutorial
+ * narrates a normal match rather than directing one.
  */
+
+let cardMesh: Mesh | null = null;
+let cardMaterial: MeshBasicMaterial | null = null;
+let cardTexture: CanvasTexture | null = null;
+let cardContext: CanvasRenderingContext2D | null = null;
+let pooledRoot: Object3D | null = null;
+
+/** Index into TUTORIAL_DRILLS; -1 once finished. */
+let drillIndex = 0;
+/** Kills already banked when the current drill began — see isDrillComplete. */
+let killsAtDrillStart = 0;
+let sampleClock = 0;
+/** Seconds the current drill has been showing — drives the dwell triggers. */
+let drillElapsed = 0;
+/** Last text painted, so a repaint only happens when the words change. */
+let paintedTitle = "";
+let paintedBody = "";
+/** Last arrow problem reported, so a sustained one logs once, not at 4 Hz. */
+let reportedArrowProblem = "";
+
+// Reused every sample — never allocated in update().
+const snapshot: TutorialSnapshot = {
+  selectedUnitCount: 0,
+  ordersIssued: 0,
+  crystals: 0,
+  crystalsMined: 0,
+  minerCount: 0,
+  astronautCount: 0,
+  constructionSiteCount: 0,
+  turretCount: 0,
+  enemiesKilled: 0,
+  liveEnemyCount: 0,
+  matchStatus: "playing",
+  stepElapsedSeconds: 0,
+  alertRevision: 0,
+  lookingAtCommandCenter: false,
+  commandCenterAlive: true,
+};
+const tmpAnchor = new Vector3();
+const tmpCamera = new Vector3();
+const tmpForward = new Vector3();
+const tmpCardWorld = new Vector3();
+const tmpToCard = new Vector3();
 
 /**
  * Is the tutorial switched on right now?
@@ -30,4 +128,464 @@ export function isTutorialEnabled(): boolean {
   );
   if (setting === undefined || setting === null) return TUTORIAL_ENABLED;
   return setting >= 0.5;
+}
+
+/** Back to drill 1. Called by scenario reset — restart replays the tutorial. */
+export function resetTutorial(): void {
+  drillIndex = 0;
+  killsAtDrillStart = 0;
+  sampleClock = 0;
+  drillElapsed = 0;
+  paintedTitle = "";
+  paintedBody = "";
+  reportedArrowProblem = "";
+  if (cardMesh) cardMesh.visible = false;
+  const state = boardState.tutorial;
+  if (!state) return;
+  state.setValue(TutorialState, "active", false);
+  state.setValue(TutorialState, "drill", -1);
+  state.setValue(TutorialState, "recovery", "");
+  state.setValue(TutorialState, "deadEnd", false);
+  bumpRevision(state);
+}
+
+function bumpRevision(state: NonNullable<typeof boardState.tutorial>): void {
+  state.setValue(
+    TutorialState,
+    "revision",
+    (state.getValue(TutorialState, "revision") ?? 0) + 1,
+  );
+}
+
+/**
+ * Wrap text to the card width. Called only on a repaint — nine times across an
+ * entire tutorial — so measureText per word is affordable here.
+ */
+function wrapLines(
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string[] {
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && context.measureText(candidate).width > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function paintCard(title: string, body: string, step: string): void {
+  const context = cardContext;
+  if (!context || !cardTexture) return;
+  const width = TUTORIAL_CARD_TEXTURE_WIDTH;
+  const height = TUTORIAL_CARD_TEXTURE_HEIGHT;
+  context.clearRect(0, 0, width, height);
+
+  context.beginPath();
+  context.roundRect(3, 3, width - 6, height - 6, 22);
+  context.fillStyle = TUTORIAL_CARD_BACKGROUND;
+  context.fill();
+  context.lineWidth = 4;
+  context.strokeStyle = TUTORIAL_CARD_BORDER;
+  context.stroke();
+
+  const pad = width * 0.045;
+  context.textBaseline = "top";
+  context.textAlign = "left";
+
+  context.font = `600 ${Math.round(height * 0.13)}px sans-serif`;
+  context.fillStyle = TUTORIAL_CARD_STEP_COLOR;
+  context.fillText(step, pad, height * 0.11);
+
+  context.font = `bold ${Math.round(height * 0.2)}px sans-serif`;
+  context.fillStyle = TUTORIAL_CARD_TITLE_COLOR;
+  context.fillText(title, pad, height * 0.26);
+
+  context.font = `${Math.round(height * 0.15)}px sans-serif`;
+  context.fillStyle = TUTORIAL_CARD_BODY_COLOR;
+  let y = height * 0.55;
+  for (const line of wrapLines(context, body, width - pad * 2)) {
+    context.fillText(line, pad, y);
+    y += height * 0.19;
+  }
+
+  cardTexture.needsUpdate = true;
+}
+
+export class TutorialSystem extends createSystem({
+  units: { required: [Unit, Health] },
+  buildings: { required: [Building, Health] },
+  sites: { required: [ConstructionSite] },
+  craftSites: { required: [CraftProductionSite] },
+  enemies: { required: [Enemy, Health] },
+}) {
+  init(): void {
+    const state = this.world
+      .createTransformEntity(undefined, { persistent: true })
+      .addComponent(TutorialState);
+    state.object3D!.name = "TutorialState";
+    boardState.tutorial = state;
+
+    // Restart the tutorial when the player actually puts the headset on.
+    //
+    // Without this it runs during the 2D preview and burns through steps before
+    // anyone is in VR: the desktop camera faces the base, so orientation
+    // completes in seconds and the player arrives in the headset already on
+    // "Mine your first crystals", never having been shown their command center.
+    //
+    // Only NonImmersive -> Visible resets. VisibleBlurred -> Visible is the
+    // headset being taken off and put back on mid-session; restarting the
+    // tutorial there would punish someone for adjusting the strap.
+    let previous = this.world.visibilityState.peek();
+    this.cleanupFuncs.push(
+      this.world.visibilityState.subscribe((next) => {
+        const entering =
+          previous === VisibilityState.NonImmersive &&
+          next === VisibilityState.Visible;
+        previous = next;
+        if (entering) resetTutorial();
+      }),
+    );
+  }
+
+  update(delta: number): void {
+    // The tutorial is a VR experience and only runs in one.
+    //
+    // In the 2D preview the camera already faces the base, so it would advance
+    // through orientation and into mining before anyone puts the headset on —
+    // and the card is placed relative to a viewpoint the player will never
+    // occupy. Running it there teaches nobody and only burns the script.
+    //
+    // VisibleBlurred (headset off the face, or focus lost) is deliberately
+    // excluded too: nothing should advance while the player cannot see it.
+    if (this.world.visibilityState.peek() !== VisibilityState.Visible) {
+      this.goDormant();
+      return;
+    }
+    const enabled = isTutorialEnabled();
+    if (!enabled) {
+      this.goDormant();
+      return;
+    }
+    if (!this.ensureCard()) return;
+
+    // 4 Hz. Nothing here needs frame-rate responsiveness, and the counts below
+    // are the only mildly expensive reads.
+    const step = Math.max(0, delta);
+    drillElapsed += step;
+    sampleClock += step;
+    if (sampleClock >= TUTORIAL_SAMPLE_SECONDS) {
+      sampleClock = 0;
+      this.evaluate();
+    }
+    this.keepCardInView();
+  }
+
+  /**
+   * Re-place the card only when it has drifted out of comfortable view.
+   *
+   * The card is normally placed once per text change and left alone — a panel
+   * welded to the head is hard to read and impossible to ignore. But "once per
+   * text change" alone is not enough: entering XR moves the viewpoint from the
+   * desktop preview camera (outside the board) to the XR origin (board centre),
+   * several metres in a single frame, with no text change to trigger a re-place.
+   * The card would simply be left behind — which is exactly what happened.
+   *
+   * So: leave it alone while the viewer is near it and facing it; otherwise
+   * bring it back. Handles entering XR, walking away, and turning around.
+   */
+  private keepCardInView(): void {
+    const mesh = cardMesh;
+    if (!mesh?.visible) return;
+
+    this.camera.getWorldPosition(tmpCamera);
+    mesh.getWorldPosition(tmpCardWorld);
+
+    tmpToCard.copy(tmpCardWorld).sub(tmpCamera);
+    const distance = tmpToCard.length();
+    if (distance > TUTORIAL_CARD_MAX_DISTANCE || distance < TUTORIAL_CARD_MIN_DISTANCE) {
+      this.placeCard();
+      return;
+    }
+
+    this.camera.getWorldDirection(tmpForward);
+    tmpForward.y = 0;
+    tmpToCard.y = 0;
+    if (tmpForward.lengthSq() < 1e-6 || tmpToCard.lengthSq() < 1e-6) return;
+    tmpForward.normalize();
+    tmpToCard.normalize();
+    if (tmpForward.dot(tmpToCard) < TUTORIAL_CARD_FACING_MIN) this.placeCard();
+  }
+
+  /**
+   * Park the card and mark the singleton inactive — once, not per frame.
+   *
+   * The flag matters beyond tidiness: `TutorialState` is what anyone inspecting
+   * a live session reads, and leaving `active: true` while nothing is running
+   * would send them looking for a bug that is not there.
+   */
+  private goDormant(): void {
+    if (cardMesh?.visible) cardMesh.visible = false;
+    const state = boardState.tutorial;
+    if (!state) return;
+    if (!(state.getValue(TutorialState, "active") ?? false)) return;
+    state.setValue(TutorialState, "active", false);
+    bumpRevision(state);
+  }
+
+  private evaluate(): void {
+    this.fillSnapshot();
+    const before = drillIndex;
+    const progress = advanceTutorial(drillIndex, snapshot, killsAtDrillStart);
+
+    if (progress.advanced) {
+      drillIndex = progress.drill;
+      killsAtDrillStart = snapshot.enemiesKilled;
+      // A new drill starts its own dwell clock.
+      drillElapsed = 0;
+    }
+
+    const state = boardState.tutorial;
+    const active = progress.drill >= 0;
+    if (cardMesh) cardMesh.visible = active;
+
+    if (!active) {
+      if (state && (state.getValue(TutorialState, "active") ?? false)) {
+        state.setValue(TutorialState, "active", false);
+        state.setValue(TutorialState, "drill", -1);
+        bumpRevision(state);
+      }
+      return;
+    }
+
+    const drill = TUTORIAL_DRILLS[progress.drill];
+    let title: string;
+    let body: string;
+    if (progress.deadEnd) {
+      title = "Tutorial over";
+      body = snapshot.commandCenterAlive
+        ? "Your mining craft was lost and there is nothing left to rebuild it with. Restart to try again."
+        : "Your command center is gone. Restart to try again.";
+    } else if (progress.recovery) {
+      title = progress.recovery.unit === "miner" ? "Rebuild your miner" : "Rebuild your astronaut";
+      body = progress.recovery.affordable
+        ? progress.recovery.unit === "miner"
+          ? "Your mining craft is gone. Make another — it is your only income."
+          : "You have lost your astronaut. Produce another."
+        : "Keep mining — you will be able to replace it shortly.";
+    } else {
+      // A short heading, and a body that switches from `intro` to `doing` once
+      // this drill's opponent is on the board — so the words track what is
+      // actually happening rather than narrating a fixed script.
+      title = drill.cards.title;
+      body = hasDrillStarted(drill, snapshot)
+        ? drill.cards.doing
+        : drill.cards.intro;
+    }
+
+    if (title !== paintedTitle || body !== paintedBody) {
+      paintedTitle = title;
+      paintedBody = body;
+      paintCard(title, body, `${progress.drill + 1} / ${TUTORIAL_DRILLS.length}`);
+      // New words, new placement: put the card wherever the player is looking
+      // now. Between changes it stays exactly where it was.
+      this.placeCard();
+    }
+
+    this.reportArrowProblem(drill);
+
+    if (!state) return;
+    const changed =
+      before !== progress.drill ||
+      (state.getValue(TutorialState, "active") ?? false) !== true ||
+      (state.getValue(TutorialState, "deadEnd") ?? false) !== progress.deadEnd;
+    state.setValue(TutorialState, "active", true);
+    state.setValue(TutorialState, "drill", progress.drill);
+    state.setValue(TutorialState, "title", title);
+    state.setValue(TutorialState, "body", body);
+    state.setValue(TutorialState, "recovery", progress.recovery?.unit ?? "");
+    state.setValue(TutorialState, "deadEnd", progress.deadEnd);
+    if (changed) bumpRevision(state);
+  }
+
+  /** Mutates the shared snapshot in place — no allocation. */
+  private fillSnapshot(): void {
+    let miners = 0;
+    let astronauts = 0;
+    let selected = 0;
+    for (const unit of this.queries.units.entities) {
+      if ((unit.getValue(Health, "current") ?? 0) <= 0) continue;
+      const kind = unit.getValue(Unit, "kind");
+      if (kind === "miner") miners += 1;
+      else if (kind === "astronaut") astronauts += 1;
+      if (unit.getValue(Unit, "hasOrder") ?? false) selected += 1;
+    }
+    let turrets = 0;
+    for (const building of this.queries.buildings.entities) {
+      if ((building.getValue(Health, "current") ?? 0) <= 0) continue;
+      if (building.getValue(Building, "kind") === "turret") turrets += 1;
+    }
+    let liveEnemies = 0;
+    for (const enemy of this.queries.enemies.entities) {
+      if ((enemy.getValue(Health, "current") ?? 0) > 0) liveEnemies += 1;
+    }
+
+    snapshot.minerCount = miners;
+    snapshot.astronautCount = astronauts;
+    snapshot.turretCount = turrets;
+    snapshot.liveEnemyCount = liveEnemies;
+    snapshot.selectedUnitCount = boardState.selectedUnits.size;
+    snapshot.ordersIssued = selected;
+    snapshot.constructionSiteCount =
+      this.queries.sites.entities.size + this.queries.craftSites.entities.size;
+    snapshot.crystals = boardState.gameState?.getValue(GameState, "crystals") ?? 0;
+    snapshot.crystalsMined =
+      boardState.gameStats?.getValue(GameStats, "crystalsMined") ?? 0;
+    snapshot.enemiesKilled =
+      boardState.gameStats?.getValue(GameStats, "enemiesKilled") ?? 0;
+    snapshot.matchStatus =
+      boardState.waveSource?.getValue(MatchState, "status") ?? "playing";
+    snapshot.alertRevision =
+      boardState.underAttackAlert?.getValue(UnderAttackAlertState, "revision") ?? 0;
+    snapshot.stepElapsedSeconds = drillElapsed;
+    snapshot.lookingAtCommandCenter = this.isLookingAtCommandCenter();
+    snapshot.commandCenterAlive =
+      boardState.waveSource?.getValue(MatchState, "commandCenterAlive") ?? true;
+  }
+
+  /**
+   * Log an unresolvable arrow once per occurrence.
+   *
+   * Guarded on the message text rather than a boolean so a *different* problem
+   * still gets through, while the same one repeating at 4 Hz does not. Cleared
+   * when the arrow resolves again, so a recurrence is reported afresh.
+   */
+  private reportArrowProblem(drill: TutorialDrill): void {
+    const problem = arrowProblem(drill, snapshot);
+    if (!problem) {
+      reportedArrowProblem = "";
+      return;
+    }
+    if (problem === reportedArrowProblem) return;
+    reportedArrowProblem = problem;
+    console.warn(`[Tutorial] no arrow: ${problem}`);
+  }
+
+  /**
+   * Is the command center inside the player's view cone?
+   *
+   * Drives the orientation beat, which completes on this rather than a timer:
+   * from the default XR position the base is behind the player, so a dwell
+   * would expire while they were looking at empty terrain and the tutorial
+   * would move on having taught nothing.
+   *
+   * Flattened to the ground plane — looking over or under the base still counts
+   * as facing it, which matters on a table-height board where a standing player
+   * looks down.
+   */
+  private isLookingAtCommandCenter(): boolean {
+    const holder = boardState.commandCenter?.object3D ?? null;
+    // No base to find (destroyed, or not yet built): never stall the tutorial.
+    if (!holder) return true;
+
+    this.camera.getWorldPosition(tmpCamera);
+    holder.getWorldPosition(tmpCardWorld);
+    tmpToCard.copy(tmpCardWorld).sub(tmpCamera);
+    tmpToCard.y = 0;
+    this.camera.getWorldDirection(tmpForward);
+    tmpForward.y = 0;
+    if (tmpToCard.lengthSq() < 1e-6 || tmpForward.lengthSq() < 1e-6) return true;
+    return tmpForward.normalize().dot(tmpToCard.normalize()) >= TUTORIAL_GAZE_DOT_MIN;
+  }
+
+  /**
+   * Put the card a comfortable reading distance in front of the viewer and turn
+   * it to face them.
+   *
+   * Called only when the text changes — roughly nine times in a whole tutorial
+   * — not every frame. A card welded to the head is hard to read while moving
+   * and impossible to look away from; one that is placed where you are looking
+   * and then stays put is neither. Same reasoning as the under-attack banner,
+   * which samples its position once per raise.
+   *
+   * Deliberately NOT a fixed board position: see TUTORIAL_CARD_DISTANCE for why
+   * no single spot suits both the XR player (board centre) and the desktop
+   * preview camera (outside the board).
+   */
+  private placeCard(): void {
+    const mesh = cardMesh;
+    const rootObject = boardState.boardRoot?.object3D;
+    if (!mesh || !rootObject) return;
+
+    this.camera.getWorldPosition(tmpCamera);
+    // Forward, flattened to the ground plane: the card should sit in front of
+    // the viewer, never pitched up at the ceiling or down at their feet.
+    this.camera.getWorldDirection(tmpForward);
+    tmpForward.y = 0;
+    if (tmpForward.lengthSq() < 1e-6) tmpForward.set(0, 0, -1);
+    tmpForward.normalize();
+
+    tmpAnchor
+      .copy(tmpCamera)
+      .addScaledVector(tmpForward, TUTORIAL_CARD_DISTANCE);
+    tmpAnchor.y = tmpCamera.y - TUTORIAL_CARD_DROP;
+
+    // The mesh hangs off the board root, so convert into that space.
+    rootObject.worldToLocal(tmpAnchor);
+    mesh.position.copy(tmpAnchor);
+    // Yaw-only turn back toward the viewer.
+    mesh.rotation.set(0, Math.atan2(-tmpForward.x, -tmpForward.z), 0);
+  }
+
+  private ensureCard(): boolean {
+    const root = boardState.boardRoot;
+    const rootObject = root?.object3D ?? null;
+    if (!root || !rootObject) return false;
+    if (pooledRoot === rootObject && cardMesh) return true;
+    if (typeof document === "undefined") return false;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = TUTORIAL_CARD_TEXTURE_WIDTH;
+    canvas.height = TUTORIAL_CARD_TEXTURE_HEIGHT;
+    const context = canvas.getContext("2d");
+    if (!context) return false;
+    cardContext = context;
+
+    cardTexture = new CanvasTexture(canvas);
+    cardTexture.anisotropy = 4;
+    cardMaterial = new MeshBasicMaterial({
+      map: cardTexture,
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    cardMesh = new Mesh(
+      new PlaneGeometry(TUTORIAL_CARD_WIDTH, TUTORIAL_CARD_HEIGHT),
+      cardMaterial,
+    );
+    makeNonInteractive(cardMesh);
+    cardMesh.name = "TutorialCard";
+    cardMesh.visible = false;
+    cardMesh.frustumCulled = false;
+    // Its own draw-call category, so the tutorial's cost is visible in the
+    // profiler's Draw line rather than hidden in the 100-mesh "static" bucket.
+    cardMesh.userData.drawCat = "tutorial";
+    this.world.createTransformEntity(cardMesh, { parent: root });
+    pooledRoot = rootObject;
+    // Seed a sane placement so the first frame it becomes visible is already in
+    // front of the viewer, rather than at the board origin for a quarter second.
+    this.placeCard();
+    // A fresh canvas starts blank — force the next evaluate() to paint.
+    paintedTitle = "";
+    paintedBody = "";
+    return true;
+  }
 }

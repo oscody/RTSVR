@@ -56,6 +56,7 @@ import {
   INITIAL_WAVE_DELAY_SECONDS,
   enemyFacingYaw,
   isAdjacentToFootprint,
+  resolveMatchAfterCommandCenterLoss,
   resolveMatchAfterFriendlyElimination,
   resolveWaveClearOutcome,
   type MatchStatus,
@@ -327,6 +328,15 @@ export class CombatSystem extends createSystem({
     const source = boardState.waveSource;
     if (!source) return;
     source.setValue(MatchState, "commandCenterAlive", false);
+    // Losing the base ends the match outright — it is the loss condition, not a
+    // setback. Previously the match continued as long as any unit survived.
+    source.setValue(
+      MatchState,
+      "status",
+      resolveMatchAfterCommandCenterLoss(
+        (source.getValue(MatchState, "status") ?? "playing") as MatchStatus,
+      ),
+    );
     source.setValue(
       MatchState,
       "revision",
@@ -337,7 +347,7 @@ export class CombatSystem extends createSystem({
     tablet.setValue(
       TabletState,
       "status",
-      "Command center destroyed - aliens are attacking remaining forces",
+      "Command center destroyed - match over",
     );
     tablet.setValue(TabletState, "statusKind", "error");
     tablet.setValue(

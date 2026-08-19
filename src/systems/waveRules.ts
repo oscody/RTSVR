@@ -145,6 +145,22 @@ export function isAdjacentToFootprint(
   return Math.abs(point.x - nearestX) + Math.abs(point.y - nearestY) === 1;
 }
 
+/**
+ * Losing the command center ends the match, immediately and on its own.
+ *
+ * It did not, until 2026-08-19: `markCommandCenterDestroyed` flipped
+ * `commandCenterAlive` but left `status` alone, and defeat only fired once
+ * EVERY friendly was gone. So a player could lose their base and keep playing
+ * with a lone astronaut — while the UI told them "COMMAND CENTER LOST" and the
+ * tutorial's own opening line promised "lose it and the match ends".
+ */
+export function resolveMatchAfterCommandCenterLoss(
+  current: MatchStatus,
+): MatchStatus {
+  if (current !== "playing") return current;
+  return "defeat";
+}
+
 export function resolveMatchAfterFriendlyElimination(
   current: MatchStatus,
   remainingFriendlyTargets: number,
