@@ -34,7 +34,8 @@ import {
   METEOR_TRAIL_LENGTH,
   METEOR_TRAIL_THICKNESS,
 } from "./constants.ts";
-import { MatchState, boardState, getTerrainAt } from "./state.js";
+import { MatchState, WaveSource, boardState, getTerrainAt } from "./state.js";
+import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
 
 // One synchronized batch: the rocks float, fall together, rest, then vanish and
 // the cycle restarts. "idle" is the gap between cycles.
@@ -261,11 +262,25 @@ export class MeteorSystem extends createSystem({}) {
   update(delta: number): void {
     if (!ensurePool()) return;
 
-    // Stop the shower when the match is over (victory/defeat/restarting). Clear
-    // any in-flight rocks once; the cycle resumes when play restarts.
-    const status =
-      boardState.waveSource?.getValue(MatchState, "status") ?? "playing";
-    if (status !== "playing") {
+    // Stop the shower when the match is over (victory/defeat/restarting), and
+    // for the whole of the tutorial level. Clear any in-flight rocks once; the
+    // cycle resumes when play restarts, or when wave 0 is cleared and the
+    // normal ladder begins.
+    //
+    // The tutorial's entire job is directing attention: a bobbing cone points
+    // at one thing and the card names it. Rocks streaking down with additive
+    // trails and impact flashes are a competing motion cue, several times a
+    // minute, aimed at nothing. Ambient spectacle is right for a normal match
+    // and wrong while someone is being taught.
+    //
+    // Keyed on the WAVE NUMBER rather than on the tutorial gate, so the shower
+    // returns the moment wave 0 is cleared rather than staying off for the rest
+    // of the session — and so a disabled tutorial, which never reaches wave 0,
+    // is untouched without this file knowing anything about the tutorial.
+    const source = boardState.waveSource;
+    const status = source?.getValue(MatchState, "status") ?? "playing";
+    const waveNumber = source?.getValue(WaveSource, "waveNumber") ?? 1;
+    if (status !== "playing" || waveNumber === TUTORIAL_WAVE_NUMBER) {
       if (phase !== "idle") clearMeteors();
       return;
     }

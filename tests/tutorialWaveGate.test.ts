@@ -97,3 +97,13 @@ test("the first alien's spawn tile follows the anchor", () => {
   assert.equal(getWaveSpec(0)!.groups![2].spawnTile, undefined);
   clearTutorialWaveGate();
 });
+
+test("no normal wave shares the tutorial's wave number", () => {
+  // The meteor shower (and anything else keyed on "are we on the tutorial
+  // level") suppresses itself when waveNumber === TUTORIAL_WAVE_NUMBER. If a
+  // catalog wave ever took 0, it would silently lose its ambient effects.
+  for (let wave = 1; wave <= 12; wave += 1) {
+    assert.notEqual(getWaveSpec(wave)?.waveNumber, 0);
+  }
+  assert.equal(getWaveSpec(0)?.waveNumber, 0);
+});
