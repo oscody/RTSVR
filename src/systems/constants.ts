@@ -40,13 +40,14 @@ export const PLAYER_SPAWN = [0, 0, 0.83] as const;
  * - At 37 degrees elevation: horizontal 4.2*cos37 = 3.36, rise 4.2*sin37 = 2.53.
  * - Azimuth 30 degrees off +Z: x = 3.36*sin30 = 1.68, z = 3.36*cos30 = 2.91.
  *
- * **Known: the tablet sits in this sight line.** It parks to the player's right
- * and is only ~1.7 m from them since PLAYER_SPAWN moved in, which puts it 58% of
- * the way to the base along a +x view ray — about 15 degrees off, so it covers
- * the near half of the board in the 2D preview. Mirroring the azimuth to -x
- * would move it to 27 degrees and clear the subject, at no cost to elevation,
- * range or framing. Deliberately NOT done: the owner asked for the preview pose
- * to stay as authored, and this only affects the browser view, never a headset.
+ * **The tablet used to sit in this sight line; it no longer does.** Parked at the
+ * player's right hand it drifted into the middle of the preview as PLAYER_SPAWN
+ * moved in, and by z = 0.83 it covered the command center outright. Mirroring
+ * this azimuth would have cleared it, and was rejected — the preview camera was
+ * not what the owner asked to change. Fixed on the tablet's side instead: it now
+ * carries a second, preview-only pose (`TABLET_DESKTOP_POSITION`) that is clear
+ * of the base and square-on to this camera. **That pose is derived from the
+ * values here**, so retuning this camera means re-deriving that position.
  *
  * **37 degrees is a deliberate choice, not a default.** It is the classic RTS
  * three-quarter angle: steep enough that the far rim reads, shallow enough that
@@ -346,7 +347,43 @@ export const TABLET_PLAYER_Z_OFFSET = -0.09;
 export const TABLET_ASSUMED_EYE_HEIGHT = 1.7;
 export const TABLET_EYE_DROP = 0.14;
 export const TABLET_Y_OFFSET = 0.78;
-export const TABLET_ROTATION = [-0.16, 0.25, 0] as const;
+/**
+ * Where the tablet parks in the 2D preview, in BOARD-LOCAL space.
+ *
+ * The VR pose above is authored for a player standing at `PLAYER_SPAWN` with the
+ * panel at their right hand. The preview camera looks at the board from outside
+ * and above, so that same pose shows the tablet edge-on and — since the spawn
+ * moved in close to the base — squarely on top of the command center.
+ *
+ * This is a second pose for the browser: turned to face the camera (computed,
+ * not authored — see `applyTabletPose`) and moved clear of the base. Derived
+ * from the camera basis rather than eyeballed, so it can be re-derived if
+ * `DESKTOP_CAMERA` changes — it is the point **2.3 m** from the camera, **22
+ * degrees** off the direction to the base, rotated 18 degrees from "right"
+ * toward "down".
+ *
+ * Those three numbers are the whole trade:
+ * - **2.3 m** rather than the 3.40 m first tried. Apparent width 17.3 degrees
+ *   against 11.8 — about half again as large, and legible in a browser window.
+ * - **22 degrees off-axis** clears the base by 7.7 degrees once the tablet's own
+ *   width is counted. It cannot go much lower without the two touching, and it
+ *   is worth keeping low: how sheared the panel looks is set by this angle, NOT
+ *   by the distance. A square-on panel far off the optical axis still projects
+ *   as a trapezoid, and the wider the browser window, the stronger that is.
+ * - Distance affects size; the angle affects skew. Moving it closer does not
+ *   straighten it.
+ *
+ * Preview only. Entering XR always restores the VR pose.
+ */
+export const TABLET_DESKTOP_POSITION = [1.63, 1.22, 1.16] as const;
+// REMOVED 2026-08-20 — the tablet's facing is derived, not authored.
+//
+// This tilt left the panel 95.7 degrees off the direction to the viewer in VR:
+// all but edge-on, the one orientation a flat panel cannot be read from. It
+// survived a long time because the number looked innocuous and nothing ever
+// measured it against where the player actually stands. Both poses now aim at a
+// point — the player's head in VR, `DESKTOP_CAMERA` in the browser — so neither
+// can drift out of true when the viewpoint moves. See `applyTabletPose`.
 
 export const CRAFT_PRODUCTION_BUILDING_KINDS = [
   "command-center",

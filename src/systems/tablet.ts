@@ -2,14 +2,18 @@ import {
   BoxGeometry,
   Entity,
   Group,
+  Matrix4,
   Mesh,
   MeshStandardMaterial,
+  Object3D,
   OneHandGrabbable,
   PanelDocument,
   PanelUI,
   RayInteractable,
   UIKit,
   UIKitDocument,
+  Vector3,
+  VisibilityState,
   createSystem,
 } from "@iwsdk/core";
 import { BUILDING_CATALOG, getBuildingSpec } from "./buildingCatalog.js";
@@ -32,7 +36,10 @@ import {
   TABLET_CARD_BORDER,
   BOARD_Y,
   PLAYER_SPAWN,
+  DESKTOP_CAMERA,
+  DESKTOP_CAMERA_TARGET,
   TABLET_ASSUMED_EYE_HEIGHT,
+  TABLET_DESKTOP_POSITION,
   TABLET_EYE_DROP,
   TABLET_PLAYER_X_OFFSET,
   TABLET_PLAYER_Z_OFFSET,
@@ -52,7 +59,6 @@ import {
   TABLET_LOCKED_UNIT_BORDER,
   TABLET_PANEL_MAX_HEIGHT,
   TABLET_PANEL_MAX_WIDTH,
-  TABLET_ROTATION,
   TABLET_SCREEN_Z_OFFSET,
   TABLET_SELECTED_BUILD_BORDER,
   TABLET_SELECTED_CRAFT_BORDER,
@@ -157,6 +163,12 @@ export function setTutorialAllowedKind(kind: string | null): void {
 /** Bumped whenever the lock changes, so the repaint guard can see it. */
 let tutorialLockRevision = 0;
 
+/** The tablet's frame, so the pose can be re-applied on a session change. */
+let tabletShell: Group | null = null;
+const tmpAimTarget = new Vector3();
+const tmpAimEye = new Vector3();
+const tmpAim = new Matrix4();
+
 /** Is this build/craft kind currently offerable? */
 function tutorialAllows(kind: string): boolean {
   return tutorialAllowedKind === null || tutorialAllowedKind === kind;
@@ -228,6 +240,15 @@ export class TabletSystem extends createSystem({
 
   init(): void {
     this.createTablet();
+    // The tablet needs two poses, not one. Authored for a player's right hand,
+    // it is edge-on and over the command center when the browser camera looks at
+    // the board from outside — so the preview gets its own placement, swapped on
+    // the session boundary rather than tested every frame.
+    this.cleanupFuncs.push(
+      this.world.visibilityState.subscribe((state) => {
+        this.applyTabletPose(state !== VisibilityState.NonImmersive);
+      }),
+    );
     this.cleanupFuncs.push(
       this.queries.tablets.subscribe("qualify", (entity) => {
         this.tabletEntity = entity;
@@ -591,18 +612,107 @@ export class TabletSystem extends createSystem({
     }
     tablet.object3D!.name = "RTSVRTabletScreen";
     tablet.object3D!.position.z = TABLET_SCREEN_Z_OFFSET;
-    // Parked beside the PLAYER, converted into board-local space because the
-    // shell hangs off `BoardRoot`. Anchoring it to the command center is what
-    // put it 2.72 m away the moment the rig moved off board centre — the tablet
-    // is something you hold, so it belongs where your hands are, not where your
-    // base is.
-    shell.object3D!.position.set(
-      PLAYER_SPAWN[0] + TABLET_PLAYER_X_OFFSET,
-      PLAYER_SPAWN[1] + TABLET_ASSUMED_EYE_HEIGHT - TABLET_EYE_DROP - BOARD_Y,
-      PLAYER_SPAWN[2] + TABLET_PLAYER_Z_OFFSET,
+    tabletShell = shell.object3D as Group;
+    // Startup is always non-immersive, so this lands on the preview pose first
+    // and the subscription below swaps it the moment a session begins.
+    this.applyTabletPose(
+      this.world.visibilityState.peek() !== VisibilityState.NonImmersive,
     );
-    shell.object3D!.rotation.set(...TABLET_ROTATION);
     boardState.tablet = tablet;
+  }
+
+  /**
+   * Put the tablet in its VR pose or its 2D-preview pose.
+   *
+   * **The VR pose always wins on entering a session**, even if the player had
+   * grabbed the tablet and moved it — it is `OneHandGrabbable` with `rotate` and
+   * `translate`, so it can be anywhere. Deliberate: a panel left floating over
+   * the far rim is one you would have to walk around the board to fetch, and
+   * predictable beats sticky for the thing you read your resources off.
+   *
+   * The preview facing is COMPUTED, not authored. `lookAt` on a non-camera
+   * object points its **+Z** at the target — the panel's readable face — and it
+   * resolves the parent transform itself, which matters because the shell hangs
+   * off `BoardRoot`. Deriving it means the tablet keeps facing the camera if
+   * `DESKTOP_CAMERA` is ever retuned, with nothing to keep in sync by hand.
+   */
+  private applyTabletPose(immersive: boolean): void {
+    const shell = tabletShell;
+    if (!shell) return;
+    const root = boardState.boardRoot?.object3D;
+    if (!root) return;
+    if (immersive) {
+      shell.position.set(
+        PLAYER_SPAWN[0] + TABLET_PLAYER_X_OFFSET,
+        PLAYER_SPAWN[1] + TABLET_ASSUMED_EYE_HEIGHT - TABLET_EYE_DROP - BOARD_Y,
+        PLAYER_SPAWN[2] + TABLET_PLAYER_Z_OFFSET,
+      );
+      // Aimed at the player's head, not set from a constant.
+      //
+      // `TABLET_ROTATION` was an authored tilt that had never been pointed at
+      // anybody: it left the panel **95.7 degrees** off the direction to the
+      // viewer — very nearly edge-on, which is the one orientation a flat panel
+      // cannot be read from. It survived because the number looked innocuous
+      // and nothing measured it.
+      //
+      // Derived from `PLAYER_SPAWN`, so it stays correct through any further
+      // move of the standing position — the same reason the tablet's *position*
+      // is anchored there.
+      this.aimShellAt(
+        shell,
+        root,
+        tmpAimTarget.set(
+          PLAYER_SPAWN[0],
+          PLAYER_SPAWN[1] + TABLET_ASSUMED_EYE_HEIGHT,
+          PLAYER_SPAWN[2],
+        ),
+      );
+      return;
+    }
+    shell.position.set(...TABLET_DESKTOP_POSITION);
+    // Parallel to the camera's IMAGE PLANE — not aimed at the camera's position.
+    //
+    // These are different orientations and only one of them looks straight. A
+    // plane parallel to the image plane projects to a scaled rectangle: no
+    // shear, edges square to the screen. A plane whose normal points AT an
+    // off-axis camera is "facing" it in the geometric sense and still renders
+    // visibly slanted, because its up vector does not project to vertical.
+    // Here the two differ by 22 degrees of normal and 17.9 of up, which is
+    // exactly the tilt that reads as wrong.
+    //
+    // Aiming at the point is right in VR, where the viewer moves their head and
+    // there is no fixed frame to be square to. In a browser window there is.
+    root.updateMatrixWorld(true);
+    root.worldToLocal(tmpAimTarget.set(...DESKTOP_CAMERA));
+    root.worldToLocal(tmpAimEye.set(...DESKTOP_CAMERA_TARGET));
+    // `Matrix4.lookAt(eye, target, up)` builds +Z = normalize(eye - target) and
+    // +Y = up-made-perpendicular. Passing the CAMERA as eye and ITS target as
+    // target therefore reproduces the camera's own basis — which is precisely
+    // "parallel to the image plane". The panel's own position is irrelevant to
+    // that, and is deliberately not used.
+    tmpAim.lookAt(tmpAimTarget, tmpAimEye, shell.up);
+    shell.quaternion.setFromRotationMatrix(tmpAim);
+  }
+
+  /**
+   * Turn the tablet's readable face toward a world-space point.
+   *
+   * **Aims in the PARENT's frame, not in world space.** `Object3D.lookAt` reads
+   * the object's own `matrixWorld`, which is not current right after writing
+   * `position` — IWSDK's transform sync has not run. It therefore treats the
+   * board-LOCAL position as a world one, 0.78 m too low, and over-pitches by
+   * 9.3 degrees. That looked plausible, which is the dangerous kind of wrong.
+   *
+   * BoardRoot carries no rotation and no scale, so converting the target into
+   * board space and aiming there is exactly equivalent — and depends on no
+   * matrix being up to date. Mirrors three's own `lookAt`, which puts **+Z**
+   * through the target for non-camera objects; +Z is the readable face.
+   */
+  private aimShellAt(shell: Group, root: Object3D, worldTarget: Vector3): void {
+    root.updateMatrixWorld(true);
+    root.worldToLocal(worldTarget);
+    tmpAim.lookAt(worldTarget, shell.position, shell.up);
+    shell.quaternion.setFromRotationMatrix(tmpAim);
   }
 
   private bind(document: UIKitDocument, tablet: Entity): void {
