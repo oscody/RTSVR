@@ -4,6 +4,7 @@ import { getProductionSpec } from "./craftCatalog.ts";
 import {
   TUTORIAL_DRILLS,
   type ArrowTarget,
+  type DrillPhase,
   type TutorialDrill,
   type TutorialPath,
 } from "./tutorialCatalog.ts";
@@ -230,11 +231,79 @@ export function gazeRequirement(drill: TutorialDrill): number {
  * Both are ordinary `ArrowTarget`s, so the path renderer reuses the resolvers
  * the arrows already have — adding a route to a drill is a data change.
  */
-export function pathFor(
+/**
+ * Which moment of the drill we are in.
+ *
+ * `meet` is the beat between "the thing arrived" and "now deal with it". Only
+ * drills that declare one have it; the rest run `intro -> doing` exactly as
+ * before, so adding the phase changed no existing drill's behaviour.
+ *
+ * Pure, with both latches passed in — the caller owns the storage, same as
+ * `latchDrillStarted`.
+ */
+export function drillPhase(
   drill: TutorialDrill,
-  started = false,
-): TutorialPath | null {
-  return started ? drill.path.doing : drill.path.intro;
+  started: boolean,
+  met: boolean,
+): DrillPhase {
+  if (!started) return "intro";
+  if (drill.meet && !met) return "meet";
+  return "doing";
+}
+
+/** The paths this drill wants drawn in the given phase. */
+export function pathsFor(
+  drill: TutorialDrill,
+  phase: DrillPhase,
+): readonly TutorialPath[] {
+  return drill.path[phase];
+}
+
+/**
+ * What the focus effect (dim, spotlight, ring) is aimed at right now, if
+ * anything.
+ *
+ * Two sources, and they never overlap: a `meet` beat rings the thing that just
+ * arrived, and a `lookedAt` trigger rings the thing the drill is about. One
+ * function so the system has a single question to ask.
+ */
+export function focusTargetFor(
+  drill: TutorialDrill,
+  phase: DrillPhase,
+): ArrowTarget | null {
+  if (phase === "meet" && drill.meet) return drill.meet.gaze;
+  if (drill.trigger.kind === "lookedAt") return drill.trigger.target;
+  return null;
+}
+
+/** How long the player must look, for whichever focus is active. */
+export function focusRequirement(
+  drill: TutorialDrill,
+  phase: DrillPhase,
+): number {
+  if (phase === "meet" && drill.meet) return Math.max(0, drill.meet.seconds);
+  return gazeRequirement(drill);
+}
+
+/**
+ * Has the meet beat been satisfied? Latched by the caller, like `started`.
+ *
+ * A drill with no meet beat is trivially met, which is what makes `intro ->
+ * doing` still work for every instruction drill.
+ */
+export function latchDrillMet(
+  drill: TutorialDrill,
+  gazeProgressSeconds: number,
+  wasMet: boolean,
+): boolean {
+  if (!drill.meet) return true;
+  return wasMet || gazeProgressSeconds >= Math.max(0, drill.meet.seconds);
+}
+
+/** The card body for a phase. `meet` falls back to `intro` if left blank. */
+export function cardBodyFor(drill: TutorialDrill, phase: DrillPhase): string {
+  if (phase === "meet") return drill.cards.meet || drill.cards.intro;
+  return phase === "doing" ? drill.cards.doing : drill.cards.intro;
 }
 
 export function gazeTargetFor(drill: TutorialDrill): ArrowTarget | null {
@@ -551,9 +620,15 @@ const NO_ARROWS: readonly ArrowTarget[] = [];
 export function arrowTargetsFor(
   drill: TutorialDrill,
   snapshot: TutorialSnapshot,
-  started = hasDrillStarted(drill, snapshot),
+  startedOrPhase: boolean | DrillPhase = hasDrillStarted(drill, snapshot),
 ): readonly ArrowTarget[] {
-  const declared = started ? drill.arrows.doing : drill.arrows.intro;
+  const phase: DrillPhase =
+    typeof startedOrPhase === "boolean"
+      ? startedOrPhase
+        ? "doing"
+        : "intro"
+      : startedOrPhase;
+  const declared = drill.arrows[phase];
   if (!declared) return NO_ARROWS;
   return Array.isArray(declared) ? declared : [declared as ArrowTarget];
 }

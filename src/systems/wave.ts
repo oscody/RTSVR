@@ -7,6 +7,7 @@ import {
   TUTORIAL_WAVE_ACTIVATION_LEAD_SECONDS,
 } from "./constants.ts";
 import { ReusableGridPathfinder } from "./navigation.js";
+import { isTutorialFrozen } from "./tutorialFreeze.js";
 import {
   tutorialHoldsCountdown,
   tutorialReleaseAllowance,
@@ -65,6 +66,41 @@ function compareEntityIndex(left: Entity, right: Entity): number {
   return left.index - right.index;
 }
 
+/**
+ * The remaining tiles of an alien's route, from where it has got to.
+ *
+ * Exported so the tutorial can draw the red path along the route the alien will
+ * ACTUALLY take. A straight line would be a drawing of a route it will not walk,
+ * which is worse than no path — and unlike friendly units, aliens really do
+ * path around obstacles.
+ *
+ * Reads from `cursor`, so "the path disappears behind the unit" is free. Fills
+ * a caller-owned array to keep this allocation-free on a per-frame path, and
+ * returns how many entries are valid.
+ *
+ * **Re-read it every frame.** Routes are re-derived on `ALIEN_REPATH_DELAY`; a
+ * cached copy keeps pointing along the old route, which is invisible until
+ * something blocks the way and then points confidently through a wall.
+ */
+export function alienRouteTiles(
+  alienIndex: number,
+  out: { x: number; y: number }[],
+): number {
+  const route = routeRegistry?.get(alienIndex);
+  if (!route) return 0;
+  let count = 0;
+  for (let step = route.cursor; step < route.length && count < out.length; step += 1) {
+    const cell = route.steps[step];
+    out[count].x = cell % GRID_SIZE;
+    out[count].y = Math.floor(cell / GRID_SIZE);
+    count += 1;
+  }
+  return count;
+}
+
+/** Set by WaveSystem.init so the accessor above can see the live routes. */
+let routeRegistry: Map<number, AlienRoute> | null = null;
+
 export class WaveSystem extends createSystem({
   sources: { required: [WaveSource, MatchState] },
   aliens: { required: [Enemy, WaveUnit, CombatState, Health] },
@@ -101,6 +137,7 @@ export class WaveSystem extends createSystem({
   private preparationFailedWaveNumber = NO_WAVE;
 
   init(): void {
+    routeRegistry = this.routeByAlien;
     this.cleanupFuncs.push(
       this.queries.aliens.subscribe(
         "qualify",
@@ -176,7 +213,9 @@ export class WaveSystem extends createSystem({
       if ((alien.getValue(Health, "current") ?? 0) <= 0) continue;
       if (alien.getValue(WaveUnit, "stage") === "waiting") continue;
       if (alien.getValue(WaveUnit, "hasWaypoint") ?? false) {
-        this.advanceAlien(alien, delta);
+        // Tutorial freeze: hold position rather than merely slowing. One of
+        // three reads that must agree — see tutorialFreeze.ts.
+        if (!isTutorialFrozen()) this.advanceAlien(alien, delta);
         continue;
       }
 

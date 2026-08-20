@@ -12,6 +12,7 @@ import {
   ALIEN_MOVE_CLIPS,
   ANIMATION_CROSS_FADE_SECONDS,
 } from "./constants.ts";
+import { isTutorialFrozen } from "./tutorialFreeze.js";
 import { CombatState, Enemy, Health, WaveUnit } from "./state.js";
 
 type AlienAnimationState = "idle" | "move" | "attack";
@@ -112,7 +113,11 @@ export class AlienAnimationSystem extends createSystem({
   private readonly liveAnimatedAliens = new Set<number>();
 
   update(delta: number): void {
-    const frameDelta = Math.max(0, delta);
+    // Tutorial freeze: the mixers stop with the movement. Third of three reads
+    // (see tutorialFreeze.ts) and NOT optional — holding position while the
+    // clips keep playing leaves aliens marching on the spot, which reads as a
+    // bug rather than as frozen time.
+    const frameDelta = isTutorialFrozen() ? 0 : Math.max(0, delta);
     this.liveAnimatedAliens.clear();
     for (const alien of this.queries.aliens.entities) {
       const controller = controllers.get(alien.index);

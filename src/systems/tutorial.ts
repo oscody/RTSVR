@@ -57,6 +57,7 @@ import {
   Unit,
   UnderAttackAlertState,
   WaveSource,
+  WaveUnit,
   boardState,
 } from "./state.js";
 import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
@@ -76,9 +77,14 @@ import {
 import {
   attachTutorialPathWorld,
   clearTutorialPath,
+  hideAllTutorialPaths,
   hideTutorialPath,
   showTutorialPath,
+  showTutorialRoute,
+  tickTutorialPaths,
 } from "./tutorialPath.js";
+import { setTutorialFreeze } from "./tutorialFreeze.js";
+import { alienRouteTiles } from "./wave.js";
 import {
   attachTutorialRingWorld,
   clearTutorialRing,
@@ -98,7 +104,9 @@ import {
   TUTORIAL_DRILLS,
   TUTORIAL_ENABLED,
   type ArrowTarget,
+  type DrillPhase,
   type TutorialDrill,
+  type TutorialPath,
 } from "./tutorialCatalog.ts";
 import {
   advanceTutorial,
@@ -107,11 +115,14 @@ import {
   canResolveArrow,
   advanceGazeProgress,
   gazeFraction,
-  gazeRequirement,
-  gazeTargetFor,
   interceptTileFor,
+  cardBodyFor,
+  drillPhase,
+  focusRequirement,
+  focusTargetFor,
+  latchDrillMet,
   latchDrillStarted,
-  pathFor,
+  pathsFor,
   nearestCornerTo,
   releaseBudget,
   tutorialHoldsWaveCountdown,
@@ -162,6 +173,15 @@ let activeTabHint: string | null = null;
  * latchDrillStarted. Cleared when the drill changes.
  */
 let drillStarted = false;
+/**
+ * Whether the current drill's meet beat is satisfied. A second latch of the
+ * same shape as `drillStarted` — the player has looked at what arrived.
+ */
+let drillMet = false;
+/** The phase the last sample settled on, so per-frame work agrees with it. */
+let activePhase: DrillPhase = "intro";
+/** Route scratch for the red path — reused, never allocated per frame. */
+const routeTiles = Array.from({ length: 64 }, () => ({ x: 0, y: 0 }));
 /**
  * Where the first alien lands: the board corner nearest the mine. Resolved once
  * per match from the live board — crystals are hand-placed and never move, so
@@ -332,6 +352,9 @@ export function resetTutorial(): void {
   resolvableTargets.length = 0;
   activeArrowTargets = resolvableTargets;
   drillStarted = false;
+  drillMet = false;
+  activePhase = "intro";
+  setTutorialFreeze(false);
   gazeProgress = 0;
   lastPublishedGaze = -1;
   clearTutorialRing();
@@ -561,17 +584,67 @@ export class TutorialSystem extends createSystem({
    * journey to describe, and chevrons under a stationary unit read as a glitch.
    */
   private updatePath(delta: number): void {
+    tickTutorialPaths(delta);
     const drill = drillIndex >= 0 ? TUTORIAL_DRILLS[drillIndex] : undefined;
-    const path = drill ? pathFor(drill, drillStarted) : null;
-    if (
-      !path ||
-      !this.resolveArrowTarget(path.from, tmpPathFrom) ||
-      !this.resolveArrowTarget(path.to, tmpPathTo)
-    ) {
-      hideTutorialPath();
+    if (!drill) {
+      hideAllTutorialPaths();
       return;
     }
-    showTutorialPath(tmpPathFrom, tmpPathTo, delta);
+    let drewFriendly = false;
+    let drewHostile = false;
+    for (const path of pathsFor(drill, activePhase)) {
+      if (!this.drawPath(path)) continue;
+      if (path.style === "hostile") drewHostile = true;
+      else drewFriendly = true;
+    }
+    if (!drewFriendly) hideTutorialPath("friendly");
+    if (!drewHostile) hideTutorialPath("hostile");
+  }
+
+  /** One path. Returns whether anything was actually drawn. */
+  private drawPath(path: TutorialPath): boolean {
+    if (!this.resolveArrowTarget(path.from, tmpPathFrom)) return false;
+
+    // A hostile path follows the alien's REAL route — it is a forecast, and
+    // aliens genuinely walk around obstacles, so a straight line would draw a
+    // route they will not take. Re-read every frame: routes are re-derived
+    // periodically, and a cached one points confidently through a wall.
+    if (path.style === "hostile") {
+      const alien = this.nearestEnemyEntity();
+      if (alien) {
+        const count = alienRouteTiles(alien.index, routeTiles);
+        if (count > 0) {
+          showTutorialRoute("hostile", tmpPathFrom, routeTiles, count);
+          return true;
+        }
+      }
+    }
+
+    // Friendly units move straight at their order tile, so a segment is correct
+    // rather than a compromise. Also the fallback for an alien with no route
+    // yet — a straight hint beats nothing.
+    if (!this.resolveArrowTarget(path.to, tmpPathTo)) return false;
+    showTutorialPath(path.style, tmpPathFrom, tmpPathTo);
+    return true;
+  }
+
+  private nearestEnemyEntity(): Entity | null {
+    if (!this.worldOfEntity(boardState.commandCenter, tmpFrom)) {
+      this.camera.getWorldPosition(tmpFrom);
+    }
+    let best = Number.POSITIVE_INFINITY;
+    let found: Entity | null = null;
+    for (const enemy of this.queries.enemies.entities) {
+      if (!this.isEnemyOnBoard(enemy)) continue;
+      const object = enemy.object3D;
+      if (!object) continue;
+      object.getWorldPosition(tmpScan);
+      const distance = tmpScan.distanceToSquared(tmpFrom);
+      if (distance >= best) continue;
+      best = distance;
+      found = enemy;
+    }
+    return found;
   }
 
 
@@ -585,14 +658,18 @@ export class TutorialSystem extends createSystem({
    */
   private updateGazeRing(delta: number): void {
     const drill = drillIndex >= 0 ? TUTORIAL_DRILLS[drillIndex] : undefined;
-    const target = drill ? gazeTargetFor(drill) : null;
-    if (!drill || !target) {
+    const target = drill ? focusTargetFor(drill, activePhase) : null;
+    // A meet beat holds the world still; a `lookedAt` beat has nothing to hold.
+    const freezing = activePhase === "meet" && !!drill?.meet;
+    // Once a meet beat is satisfied the focus lifts entirely — the drill has
+    // moved on to "now deal with it", and a ring still burning on the alien
+    // would be telling the player to keep looking instead of acting.
+    const finishedMeeting = activePhase === "doing" && !!drill?.meet;
+    if (!drill || !target || finishedMeeting) {
       gazeProgress = 0;
       focusResolved = false;
       hideTutorialRing();
       this.publishGaze(0);
-      // Whoever dims must restore. This is the path taken every time a gaze
-      // beat completes, so it is the one that matters most.
       this.clearFocus();
       return;
     }
@@ -602,13 +679,13 @@ export class TutorialSystem extends createSystem({
     focusResolved = this.resolveArrowTarget(target, tmpFocus);
     const subject = this.objectOfArrowTarget(target);
 
-    // The world dims while the tutorial is waiting on the player's attention.
-    // The card, cone and ring are `toneMapped: false` and do not dim with it,
-    // which is what supplies the contrast.
     this.setWorldDim(TUTORIAL_DIM_FACTOR);
     setSpotlightSubject(subject, focusResolved ? tmpFocus : null, 1);
+    // The freeze ends when the ring fills — a gate the player releases by
+    // looking, not a cutscene that ends on a timer.
+    setTutorialFreeze(freezing);
 
-    const required = gazeRequirement(drill);
+    const required = focusRequirement(drill, activePhase);
     gazeProgress = advanceGazeProgress(
       gazeProgress,
       this.isLookingAt(focusResolved ? tmpFocus : null),
@@ -621,9 +698,6 @@ export class TutorialSystem extends createSystem({
       hideTutorialRing();
       return;
     }
-    // The ring lies on the GROUND around the subject, so it takes the subject's
-    // own position and sizes itself to the subject's footprint — a 3-tile
-    // building and a 1-tile alien need very different radii.
     const fraction = gazeFraction(gazeProgress, required);
     showTutorialRing(tmpFocus, fraction, subjectRingRadius(subject));
     this.publishGaze(fraction);
@@ -633,6 +707,10 @@ export class TutorialSystem extends createSystem({
   private clearFocus(): void {
     this.setWorldDim(1);
     setSpotlightSubject(null, null, 0);
+    // Whoever freezes must thaw. This path is taken on dormancy, on the
+    // settings toggle and on restart — every way of leaving a meet beat
+    // without finishing it.
+    setTutorialFreeze(false);
   }
 
   /**
@@ -679,7 +757,7 @@ export class TutorialSystem extends createSystem({
     let best = Number.POSITIVE_INFINITY;
     let found: Object3D | null = null;
     for (const enemy of this.queries.enemies.entities) {
-      if ((enemy.getValue(Health, "current") ?? 0) <= 0) continue;
+      if (!this.isEnemyOnBoard(enemy)) continue;
       const object = enemy.object3D;
       if (!object) continue;
       object.getWorldPosition(tmpScan);
@@ -930,7 +1008,29 @@ export class TutorialSystem extends createSystem({
     }
   }
 
-  /** Nearest live enemy to the base — the one that matters, not the closest one. */
+  /**
+   * Is this enemy actually ON the board?
+   *
+   * A wave's reserve is alive but `waiting` — built during the countdown,
+   * detached and invisible until released. Counting reserves as "the nearest
+   * enemy" pointed the meet beat's ring, and the red route, at the mech waiting
+   * on the south rim instead of the alien that had just landed.
+   *
+   * Same class of bug as the tablet's `Enemies alive`, and the same rule: alive
+   * AND released.
+   */
+  private isEnemyOnBoard(enemy: Entity): boolean {
+    if ((enemy.getValue(Health, "current") ?? 0) <= 0) return false;
+    if (
+      enemy.hasComponent(WaveUnit) &&
+      enemy.getValue(WaveUnit, "stage") === "waiting"
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  /** Nearest released enemy to the base — the one that matters. */
   private worldOfNearestEnemy(out: Vector3): boolean {
     if (!this.worldOfEntity(boardState.commandCenter, tmpFrom)) {
       this.camera.getWorldPosition(tmpFrom);
@@ -938,7 +1038,7 @@ export class TutorialSystem extends createSystem({
     let best = Number.POSITIVE_INFINITY;
     let found = false;
     for (const enemy of this.queries.enemies.entities) {
-      if ((enemy.getValue(Health, "current") ?? 0) <= 0) continue;
+      if (!this.isEnemyOnBoard(enemy)) continue;
       const object = enemy.object3D;
       if (!object) continue;
       object.getWorldPosition(tmpScan);
@@ -1095,7 +1195,7 @@ export class TutorialSystem extends createSystem({
     activeArrowTargets = resolvableTargets;
     hideTutorialArrow();
     hideTutorialRing();
-    hideTutorialPath();
+    hideAllTutorialPaths();
     // Dormant means the headset is off or the tutorial is disabled — either way
     // the player must not be left in a darkened world with no explanation.
     this.setWorldDim(1);
@@ -1145,6 +1245,7 @@ export class TutorialSystem extends createSystem({
       // own gaze ring.
       drillElapsed = 0;
       drillStarted = false;
+      drillMet = false;
       gazeProgress = 0;
     }
 
@@ -1170,6 +1271,10 @@ export class TutorialSystem extends createSystem({
 
     const drill = TUTORIAL_DRILLS[progress.drill];
     drillStarted = latchDrillStarted(drill, snapshot, drillStarted);
+    // The meet latch closes when the gaze ring fills, which is also what lifts
+    // the freeze — one condition, so the two can never disagree.
+    drillMet = latchDrillMet(drill, gazeProgress, drillMet);
+    activePhase = drillPhase(drill, drillStarted, drillMet);
     let title: string;
     let body: string;
     if (progress.deadEnd) {
@@ -1189,7 +1294,7 @@ export class TutorialSystem extends createSystem({
       // this drill's opponent is on the board — so the words track what is
       // actually happening rather than narrating a fixed script.
       title = drill.cards.title;
-      body = drillStarted ? drill.cards.doing : drill.cards.intro;
+      body = cardBodyFor(drill, activePhase);
     }
 
     if (title !== paintedTitle || body !== paintedBody) {
@@ -1242,7 +1347,7 @@ export class TutorialSystem extends createSystem({
     }
     let liveEnemies = 0;
     for (const enemy of this.queries.enemies.entities) {
-      if ((enemy.getValue(Health, "current") ?? 0) > 0) liveEnemies += 1;
+      if (this.isEnemyOnBoard(enemy)) liveEnemies += 1;
     }
 
     snapshot.minerCount = miners;
@@ -1291,7 +1396,7 @@ export class TutorialSystem extends createSystem({
     // nothing is worse than no arrow: the card still has words, but a confident
     // pointer at the wrong place actively misleads.
     resolvableTargets.length = 0;
-    for (const candidate of arrowTargetsFor(drill, snapshot, drillStarted)) {
+    for (const candidate of arrowTargetsFor(drill, snapshot, activePhase)) {
       if (canResolveArrow(candidate, snapshot)) resolvableTargets.push(candidate);
     }
     activeArrowTargets = resolvableTargets;
@@ -1317,7 +1422,7 @@ export class TutorialSystem extends createSystem({
    * when the arrow resolves again, so a recurrence is reported afresh.
    */
   private reportArrowProblem(drill: TutorialDrill): void {
-    const problem = arrowProblem(drill, snapshot, drillStarted);
+    const problem = arrowProblem(drill, snapshot, activePhase !== "intro");
     if (!problem) {
       reportedArrowProblem = "";
       return;

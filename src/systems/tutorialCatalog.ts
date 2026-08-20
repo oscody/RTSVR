@@ -29,11 +29,28 @@ export const TUTORIAL_ENABLED = true;
  * must resolve to "no target" in that case rather than falling back to the
  * origin — see `arrowNeedsCommandCenter`.
  */
+/**
+ * Which side a path belongs to. Red is theirs, blue is yours — the whole colour
+ * language, and enough for a player to read "something is coming HERE, put
+ * something THERE" with no text at all.
+ */
+export type PathStyle = "friendly" | "hostile";
+
 /** Two ends of a ground route. See `TutorialDrill.path`. */
 export interface TutorialPath {
+  style: PathStyle;
   from: ArrowTarget;
   to: ArrowTarget;
 }
+
+/**
+ * The three moments of a drill.
+ *
+ * `meet` only exists for drills that declare one — it is the beat between "the
+ * thing has arrived" and "now deal with it", which is where the world freezes
+ * and the player is asked to actually look at what turned up.
+ */
+export type DrillPhase = "intro" | "meet" | "doing";
 
 /** One target, several, or none. See `TutorialDrill.arrows`. */
 export type ArrowTargets = ArrowTarget | readonly ArrowTarget[] | null;
@@ -123,7 +140,23 @@ export interface TutorialDrill {
    * `title` is a 2-4 word heading; the sentences go in the body lines. Reading
    * is expensive in a headset, so the heading has to be glanceable on its own.
    */
-  cards: { title: string; intro: string; doing: string; cleared: string };
+  cards: {
+    title: string;
+    intro: string;
+    /** Shown while the world is frozen and the player is looking. */
+    meet: string;
+    doing: string;
+    cleared: string;
+  };
+  /**
+   * The meet beat: freeze the world, ring the thing that just arrived, and wait
+   * for the player to look at it.
+   *
+   * null means the drill has no such beat and runs `intro -> doing` as before.
+   * Every combat drill declares one; instruction drills do not, because nothing
+   * arrives during them.
+   */
+  meet: { gaze: ArrowTarget; seconds: number } | null;
   /**
    * A flowing ground path between two things — see `tutorialPath.ts`.
    *
@@ -138,7 +171,11 @@ export interface TutorialDrill {
    * is going"). See "forecast or instruction?" in the plan — they answer
    * different questions and only one of them has to match real movement.
    */
-  path: { intro: TutorialPath | null; doing: TutorialPath | null };
+  path: {
+    intro: readonly TutorialPath[];
+    meet: readonly TutorialPath[];
+    doing: readonly TutorialPath[];
+  };
   /**
    * Where to point, per card phase — mirroring `cards`, because the script
    * genuinely needs two: "Build tab, THEN the tile you should place on".
@@ -148,7 +185,7 @@ export interface TutorialDrill {
    * relationship rather than a place — "send this unit to that patch" is two
    * subjects, and one cone can only ever say half of it.
    */
-  arrows: { intro: ArrowTargets; doing: ArrowTargets };
+  arrows: { intro: ArrowTargets; meet: ArrowTargets; doing: ArrowTargets };
 }
 
 /**
@@ -168,23 +205,26 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     create: null,
     placement: null,
     // Event, not a timer. A dwell expires whether or not the player ever found
-    // their base — and from the default XR position the base is BEHIND them, so
-    // a timer would routinely elapse while they stare at empty terrain. This
-    // completes only once they have actually turned and looked at it.
+    // their base; this completes only once they have actually looked at it, and
+    // the gaze ring draws that clock.
     trigger: { kind: "lookedAt", target: { kind: "commandCenter" } },
-    // Nothing to travel yet — this beat is about noticing, not moving.
-    path: { intro: null, doing: null },
-    // Long enough to read two lines. Without it, anyone already facing their
-    // base skips the only step that explains what it is.
+    // Long enough to read two lines, spent in LOOKING rather than in elapsed
+    // time. Without it, anyone already facing their base skips the only step
+    // that explains what it is.
     minSeconds: 4,
+    // No meet beat: nothing arrives during orientation.
+    meet: null,
     opponent: null,
+    path: { intro: [], meet: [], doing: [] },
     arrows: {
       intro: { kind: "commandCenter" },
+      meet: null,
       doing: { kind: "commandCenter" },
     },
     cards: {
       title: "This is your command center",
       intro: "Lose it and the match ends. Everything else you build is there to protect it.",
+      meet: "",
       doing: "Lose it and the match ends. Everything else you build is there to protect it.",
       cleared: "",
     },
@@ -198,33 +238,38 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     // Four trips = 40 crystals, which is what an astronaut (35) costs plus
     // change. Completing this releases the first alien.
     trigger: { kind: "minerTrips", count: 4 },
-    // The whole lesson, drawn: this craft goes to that patch — and back again,
-    // because `unitDestination` follows the mining cycle rather than a fixed
-    // tile.
+    meet: null,
+    // The miner cannot attack, so this drill must have no opponent.
+    opponent: null,
     path: {
       // Before the player acts: where to SEND it. An instruction — it predicts
       // nothing, so it does not have to match any movement.
-      intro: {
-        from: { kind: "nearestUnit", unit: "miner" },
-        to: { kind: "nearestCrystal" },
-      },
-      // Once it is working: where it is actually going, which follows the
-      // mining cycle out and back. A forecast, and it matches.
-      doing: {
-        from: { kind: "nearestUnit", unit: "miner" },
-        to: { kind: "unitDestination", unit: "miner" },
-      },
+      intro: [
+        {
+          style: "friendly",
+          from: { kind: "nearestUnit", unit: "miner" },
+          to: { kind: "nearestCrystal" },
+        },
+      ],
+      meet: [],
+      // Once it is working: where it is actually going, out and back with the
+      // mining cycle. A forecast, and it matches.
+      doing: [
+        {
+          style: "friendly",
+          from: { kind: "nearestUnit", unit: "miner" },
+          to: { kind: "unitDestination", unit: "miner" },
+        },
+      ],
     },
-    // The miner cannot attack, so this drill must have no opponent.
-    opponent: null,
-    // BOTH, in both phases: this drill is about a relationship — that craft
-    // goes to those crystals — and a single cone can only ever name one end of
-    // it. The miner first, because it is the thing the player has to click.
+    // BOTH ends of the relationship, in both phases: one cone can only ever
+    // name half of "that craft goes to those crystals".
     arrows: {
       intro: [
         { kind: "nearestUnit", unit: "miner" },
         { kind: "nearestCrystal" },
       ],
+      meet: null,
       doing: [
         { kind: "nearestUnit", unit: "miner" },
         { kind: "nearestCrystal" },
@@ -233,6 +278,7 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     cards: {
       title: "Mine your first crystals",
       intro: "Those blue crystals are your income. Click your mining craft, then click the nearest crystals.",
+      meet: "",
       doing: "It mines and carries it back on its own. Watch the gem count climb.",
       cleared: "That is your economy. It keeps running while you fight.",
     },
@@ -241,33 +287,47 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     id: "astronaut",
     create: { via: "produce", kind: "astronaut" },
     placement: "anywhere",
-    // NOT ["miner", "astronaut"]. A drill cannot demand the unit it is about to
-    // teach: with the bare start the player has no astronaut when this begins,
-    // so keeping one alive read as a LOSS and the drill opened with "Rebuild
-    // your astronaut" for one they never had. Losing it mid-drill needs no
-    // special case either — the card already says "Make an astronaut and put it
-    // in the way", which is the correct instruction either way.
+    // NOT ["miner", "astronaut"]: a drill cannot demand the unit it teaches.
     keepAlive: ["miner"],
     trigger: { kind: "crystalsAtLeast", amount: 35 },
-    // "Put it in the way" as a route rather than a sentence. An INSTRUCTION
-    // path: it predicts nothing, so a straight line is simply correct.
-    path: {
-      intro: null, // nothing to send yet — the astronaut does not exist
-      doing: {
-        from: { kind: "nearestUnit", unit: "astronaut" },
-        to: { kind: "interceptTile" },
-      },
-    },
+    meet: { gaze: { kind: "nearestEnemy" }, seconds: 3 },
     // Hunts the miner on purpose: being threatened is the most teachable moment
-    // in the tutorial, and it spawns far enough away to leave ~35s to react.
+    // in the tutorial, and it spawns far enough away to leave ~24s to react.
     opponent: { enemy: "alien", count: 1, spawn: "farFromMiner", hunts: "miner" },
+    path: {
+      intro: [],
+      // While frozen: its route to your miner, in red. The threat, drawn.
+      meet: [
+        {
+          style: "hostile",
+          from: { kind: "nearestEnemy" },
+          to: { kind: "nearestUnit", unit: "miner" },
+        },
+      ],
+      // Then both: what is coming, and where to put the answer.
+      doing: [
+        {
+          style: "hostile",
+          from: { kind: "nearestEnemy" },
+          to: { kind: "nearestUnit", unit: "miner" },
+        },
+        {
+          style: "friendly",
+          from: { kind: "nearestUnit", unit: "astronaut" },
+          to: { kind: "interceptTile" },
+        },
+      ],
+    },
     arrows: {
-      intro: { kind: "nearestEnemy" },
-      doing: { kind: "interceptTile" },
+      intro: { kind: "nearestUnit", unit: "miner" },
+      meet: { kind: "nearestEnemy" },
+      // "Put it there, to stop that" — the tile, and the thing.
+      doing: [{ kind: "interceptTile" }, { kind: "nearestEnemy" }],
     },
     cards: {
       title: "Defend your miner",
-      intro: "An alien has landed. It is heading for your mining craft.",
+      intro: "Your crystals are stacking up. Something will come for them.",
+      meet: "An alien has landed. It is heading for your mining craft.",
       doing: "Amber means spotted. Make an astronaut and put it in the way.",
       cleared: "Astronauts fight, and they build. You will need one for what is next.",
     },
@@ -276,27 +336,43 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     id: "racer",
     create: { via: "produce", kind: "racer" },
     placement: "anywhere",
-    // Racer production requires a BUILDER, so this drill genuinely depends on
-    // the astronaut the previous one taught — unlike that drill, which cannot
-    // depend on the unit it is teaching. Losing the astronaut here needs the
-    // recovery prompt, or the player sits unable to produce with no idea why.
+    // Racer production requires a BUILDER, so this drill depends on the
+    // astronaut the previous one taught.
     keepAlive: ["miner", "astronaut"],
     trigger: { kind: "crystalsAtLeast", amount: 80 },
-    path: {
-      intro: null,
-      doing: {
-        from: { kind: "nearestUnit", unit: "racer" },
-        to: { kind: "nearestEnemy" },
-      },
-    },
+    meet: { gaze: { kind: "nearestEnemy" }, seconds: 3 },
     opponent: { enemy: "alienDrake", count: 1, spawn: "south", hunts: "commandCenter" },
+    path: {
+      intro: [],
+      meet: [
+        {
+          style: "hostile",
+          from: { kind: "nearestEnemy" },
+          to: { kind: "commandCenter" },
+        },
+      ],
+      doing: [
+        {
+          style: "hostile",
+          from: { kind: "nearestEnemy" },
+          to: { kind: "commandCenter" },
+        },
+        {
+          style: "friendly",
+          from: { kind: "nearestUnit", unit: "racer" },
+          to: { kind: "nearestEnemy" },
+        },
+      ],
+    },
     arrows: {
       intro: { kind: "tabletTab", tab: "crafts" },
-      doing: { kind: "nearestEnemy" },
+      meet: { kind: "nearestEnemy" },
+      doing: [{ kind: "interceptTile" }, { kind: "nearestEnemy" }],
     },
     cards: {
       title: "Meet the flyer",
       intro: "Something is flying in.",
+      meet: "A drake. It is going straight for your command center.",
       doing: "Racing craft are fast. Produce one and send it at the flyer.",
       cleared: "Different enemies want different answers.",
     },
@@ -307,29 +383,55 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     // The one drill where direction matters — a turret behind the base never
     // fires. Advisory: the step completes on placement anywhere.
     placement: "towardThreat",
-    // Turret construction needs an astronaut to build it — same dependency as
-    // the racer drill, same reason it must be recoverable.
+    // Turret construction needs an astronaut to build it.
     keepAlive: ["miner", "astronaut"],
     trigger: { kind: "crystalsAtLeast", amount: 30 },
-    // From the base out toward the threat: "build on the side they come from".
-    path: {
-      intro: { from: { kind: "commandCenter" }, to: { kind: "threatTile" } },
-      doing: { from: { kind: "commandCenter" }, to: { kind: "threatTile" } },
-    },
+    meet: { gaze: { kind: "nearestEnemy" }, seconds: 3 },
     opponent: {
       enemy: "strongAlienMech",
       count: 1,
       spawn: "south",
       hunts: "commandCenter",
     },
+    path: {
+      // From the base out toward the threat: "build on the side they come from".
+      intro: [
+        {
+          style: "friendly",
+          from: { kind: "commandCenter" },
+          to: { kind: "threatTile" },
+        },
+      ],
+      meet: [
+        {
+          style: "hostile",
+          from: { kind: "nearestEnemy" },
+          to: { kind: "commandCenter" },
+        },
+      ],
+      doing: [
+        {
+          style: "hostile",
+          from: { kind: "nearestEnemy" },
+          to: { kind: "commandCenter" },
+        },
+        {
+          style: "friendly",
+          from: { kind: "commandCenter" },
+          to: { kind: "threatTile" },
+        },
+      ],
+    },
     arrows: {
       intro: { kind: "tabletTab", tab: "build" },
-      doing: { kind: "threatTile" },
+      meet: { kind: "nearestEnemy" },
+      doing: [{ kind: "threatTile" }, { kind: "nearestEnemy" }],
     },
     cards: {
       title: "Build a turret",
       intro: "Turrets fight on their own. Build one on the side the aliens come from.",
-      doing: "It fires by itself. Here comes the big one — help it out.",
+      meet: "A war machine — heavier than anything you have faced.",
+      doing: "Your turret fires by itself. Help it finish this one.",
       cleared: "Wave cleared. Crystals keep coming, the waves get bigger. Good luck.",
     },
   },
@@ -340,13 +442,15 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     create: null,
     placement: null,
     trigger: { kind: "dwellSeconds", seconds: 8 },
-    path: { intro: null, doing: null },
+    meet: null,
     opponent: null,
+    path: { intro: [], meet: [], doing: [] },
     // Nothing left to point at — the tutorial is handing over.
-    arrows: { intro: null, doing: null },
+    arrows: { intro: null, meet: null, doing: null },
     cards: {
       title: "Wave cleared",
       intro: "Crystals keep coming and the waves get bigger. Good luck.",
+      meet: "",
       doing: "Crystals keep coming and the waves get bigger. Good luck.",
       cleared: "",
     },

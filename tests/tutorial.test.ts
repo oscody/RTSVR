@@ -27,7 +27,10 @@ import {
   isDeadEnd,
   hasDrillStarted,
   latchDrillStarted,
-  pathFor,
+  pathsFor,
+  drillPhase,
+  focusTargetFor,
+  latchDrillMet,
   nearestCornerTo,
   releaseBudget,
   tutorialHoldsWaveCountdown,
@@ -632,13 +635,91 @@ test("the latch does not start a drill that has not begun", () => {
   assert.equal(latchDrillStarted(drill, snapshot(), false), false);
 });
 
-test("the arrow follows the latch, not the live read", () => {
-  // The mine drill now points at both ends in both phases, so this is checked
-  // on the racer drill, whose phases genuinely differ.
+test("the arrow follows the phase, not the live read", () => {
+  // Checked on the racer drill, whose three phases genuinely differ — the mine
+  // drill points at both ends throughout, so it could not catch a regression.
   const drill = TUTORIAL_DRILLS[indexOf("racer")]!;
   const idle = snapshot({ crystals: 0 });
-  assert.deepEqual(arrowTargetFor(drill, idle), { kind: "tabletTab", tab: "crafts" });
-  assert.deepEqual(arrowTargetFor(drill, idle, true), { kind: "nearestEnemy" });
+  assert.deepEqual(arrowTargetsFor(drill, idle, "intro")[0], {
+    kind: "tabletTab",
+    tab: "crafts",
+  });
+  // The meet beat points at what just arrived...
+  assert.deepEqual(arrowTargetsFor(drill, idle, "meet")[0], {
+    kind: "nearestEnemy",
+  });
+  // ...and then at where to answer it, plus the thing itself.
+  const doing = arrowTargetsFor(drill, idle, "doing").map((t) => t.kind);
+  assert.deepEqual(doing, ["interceptTile", "nearestEnemy"]);
+});
+
+// ── Step 3: the meet beat ───────────────────────────────────────────────────
+
+test("a combat drill goes intro -> meet -> doing", () => {
+  const drill = TUTORIAL_DRILLS[indexOf("astronaut")]!;
+  assert.equal(drillPhase(drill, false, false), "intro");
+  // Opponent released, not yet looked at.
+  assert.equal(drillPhase(drill, true, false), "meet");
+  // Looked at.
+  assert.equal(drillPhase(drill, true, true), "doing");
+});
+
+test("a drill with no meet beat still runs intro -> doing", () => {
+  // Adding the phase must not have changed any existing drill's behaviour.
+  for (const id of ["orient", "mine", "done"]) {
+    const drill = TUTORIAL_DRILLS[indexOf(id)]!;
+    assert.equal(drill.meet, null);
+    assert.equal(drillPhase(drill, false, false), "intro");
+    // `met` is irrelevant when there is no meet beat.
+    assert.equal(drillPhase(drill, true, false), "doing");
+  }
+});
+
+test("the meet latch closes on accumulated looking", () => {
+  const drill = TUTORIAL_DRILLS[indexOf("astronaut")]!;
+  const need = drill.meet!.seconds;
+  assert.equal(latchDrillMet(drill, 0, false), false);
+  assert.equal(latchDrillMet(drill, need - 0.01, false), false);
+  assert.equal(latchDrillMet(drill, need, false), true);
+  // Latched: looking away afterwards does not re-freeze the world.
+  assert.equal(latchDrillMet(drill, 0, true), true);
+});
+
+test("every combat drill has a meet beat, and it rings the enemy", () => {
+  // The decision was "all three alien types", so this is the invariant rather
+  // than three separate assertions that could drift apart.
+  for (const drill of TUTORIAL_DRILLS) {
+    if (!drill.opponent) continue;
+    assert.ok(drill.meet, `drill "${drill.id}" has an opponent but no meet beat`);
+    assert.equal(drill.meet!.gaze.kind, "nearestEnemy");
+    assert.ok(drill.meet!.seconds > 0);
+  }
+});
+
+test("the focus follows the phase", () => {
+  // During a meet beat the ring is on the alien; afterwards there is no focus,
+  // because a ring still burning would say "keep looking" instead of "act".
+  const drill = TUTORIAL_DRILLS[indexOf("astronaut")]!;
+  assert.equal(focusTargetFor(drill, "meet")?.kind, "nearestEnemy");
+  assert.equal(focusTargetFor(drill, "intro"), null);
+  assert.equal(focusTargetFor(drill, "doing"), null);
+  // The orientation beat's focus comes from its trigger instead.
+  const orient = TUTORIAL_DRILLS[indexOf("orient")]!;
+  assert.equal(focusTargetFor(orient, "intro")?.kind, "commandCenter");
+});
+
+test("every combat drill draws the threat in red and the answer in blue", () => {
+  for (const drill of TUTORIAL_DRILLS) {
+    if (!drill.opponent) continue;
+    const meet = pathsFor(drill, "meet");
+    assert.ok(
+      meet.some((p) => p.style === "hostile"),
+      `drill "${drill.id}" should show the threat while the player looks at it`,
+    );
+    const doing = pathsFor(drill, "doing").map((p) => p.style);
+    assert.ok(doing.includes("hostile"), `drill "${drill.id}" lost the threat path`);
+    assert.ok(doing.includes("friendly"), `drill "${drill.id}" lost the answer path`);
+  }
 });
 
 // ── Phase 4: the wave gate, wave 0, and the bare start ──────────────────────
@@ -929,22 +1010,26 @@ test("a drill's path is declared, not coded", () => {
   // adding a route to a drill is a catalog edit.
   const mine = TUTORIAL_DRILLS[indexOf("mine")]!;
   // Before acting: an INSTRUCTION, "send it there".
-  assert.equal(pathFor(mine, false)?.to.kind, "nearestCrystal");
+  assert.equal(pathsFor(mine, "intro")[0]?.to.kind, "nearestCrystal");
   // Once working: a FORECAST that follows the mining cycle out and back.
-  assert.equal(pathFor(mine, true)?.to.kind, "unitDestination");
+  assert.equal(pathsFor(mine, "doing")[0]?.to.kind, "unitDestination");
 
-  // Instruction paths on the combat drills — where to send the unit you just
-  // made, which is the thing a sentence explains worst.
-  assert.equal(pathFor(TUTORIAL_DRILLS[indexOf("astronaut")]!, true)?.to.kind, "interceptTile");
-  assert.equal(pathFor(TUTORIAL_DRILLS[indexOf("racer")]!, true)?.to.kind, "nearestEnemy");
-  assert.equal(pathFor(TUTORIAL_DRILLS[indexOf("turret")]!, true)?.to.kind, "threatTile");
+  // The combat drills draw both sides at once: the threat in red, the answer
+  // in blue. That pairing is the whole point of the colour language.
+  const astronaut = pathsFor(TUTORIAL_DRILLS[indexOf("astronaut")]!, "doing");
+  assert.equal(astronaut.length, 2);
+  assert.deepEqual(
+    astronaut.map((p) => p.style).sort(),
+    ["friendly", "hostile"],
+  );
+  assert.equal(astronaut.find((p) => p.style === "friendly")?.to.kind, "interceptTile");
 });
 
 test("instruction beats declare no path", () => {
   // Nothing is travelling during orientation or the sign-off.
   for (const id of ["orient", "done"]) {
-    for (const started of [false, true]) {
-      assert.equal(pathFor(TUTORIAL_DRILLS[indexOf(id)]!, started), null);
+    for (const phase of ["intro", "meet", "doing"] as const) {
+      assert.equal(pathsFor(TUTORIAL_DRILLS[indexOf(id)]!, phase).length, 0);
     }
   }
 });
@@ -964,14 +1049,14 @@ test("every path endpoint is a target the system can resolve", () => {
     "unitDestination",
   ]);
   for (const drill of TUTORIAL_DRILLS) {
-    for (const started of [false, true]) {
-    const path = pathFor(drill, started);
-    if (!path) continue;
+    for (const phase of ["intro", "meet", "doing"] as const) {
+    for (const path of pathsFor(drill, phase)) {
     for (const end of [path.from, path.to]) {
       assert.ok(
         known.has(end.kind),
         `drill "${drill.id}" path names unknown kind "${end.kind}"`,
       );
+    }
     }
     }
   }

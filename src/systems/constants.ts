@@ -713,7 +713,15 @@ export const TUTORIAL_PATH_SPEED = 0.22;
  */
 export const TUTORIAL_PATH_SIZE = TILE_SIZE * 0.17;
 export const TUTORIAL_PATH_Y_OFFSET = 0.03;
+/** Blue is yours. */
 export const TUTORIAL_PATH_COLOR = 0x7dd3fc;
+/**
+ * Red is theirs.
+ *
+ * The whole colour language of the tutorial's ground cues: a player can read
+ * "something is coming HERE, put something THERE" without any text at all.
+ */
+export const TUTORIAL_PATH_HOSTILE_COLOR = 0xff5a4a;
 export const TUTORIAL_PATH_OPACITY = 0.85;
 /**
  * Do not draw a path shorter than this.

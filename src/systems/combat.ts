@@ -62,6 +62,7 @@ import {
   type MatchStatus,
   type WaveStage,
 } from "./waveRules.js";
+import { isTutorialFrozen } from "./tutorialFreeze.js";
 import { getNextWaveSpec } from "./waveCatalog.js";
 
 export class CombatSystem extends createSystem({
@@ -82,6 +83,9 @@ export class CombatSystem extends createSystem({
   };
 
   update(delta: number): void {
+    // Tutorial freeze: nothing lands a hit while the world is held. Second of
+    // three reads — see tutorialFreeze.ts.
+    if (isTutorialFrozen()) return;
     for (const attacker of this.queries.attackers.entities) {
       const spec = currentUnitAttackSpec(
         attacker.getValue(Unit, "kind") ?? "rover",
