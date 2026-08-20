@@ -30,7 +30,12 @@ import { DEBUG_SETTINGS_CATALOG } from "./debugSettingsCatalog.js";
 import { updateHealthBar } from "./healthBar.js";
 import {
   TABLET_CARD_BORDER,
-  TABLET_COMMAND_CENTER_X_OFFSET,
+  BOARD_Y,
+  PLAYER_SPAWN,
+  TABLET_ASSUMED_EYE_HEIGHT,
+  TABLET_EYE_DROP,
+  TABLET_PLAYER_X_OFFSET,
+  TABLET_PLAYER_Z_OFFSET,
   TABLET_EMPTY_UNIT_BACKGROUND,
   TABLET_EMPTY_UNIT_BORDER,
   TABLET_FRAME_COLOR,
@@ -586,11 +591,15 @@ export class TabletSystem extends createSystem({
     }
     tablet.object3D!.name = "RTSVRTabletScreen";
     tablet.object3D!.position.z = TABLET_SCREEN_Z_OFFSET;
-    const commandCenter = boardState.commandCenter?.object3D;
+    // Parked beside the PLAYER, converted into board-local space because the
+    // shell hangs off `BoardRoot`. Anchoring it to the command center is what
+    // put it 2.72 m away the moment the rig moved off board centre — the tablet
+    // is something you hold, so it belongs where your hands are, not where your
+    // base is.
     shell.object3D!.position.set(
-      (commandCenter?.position.x ?? 0) + TABLET_COMMAND_CENTER_X_OFFSET,
-      TABLET_Y_OFFSET,
-      commandCenter?.position.z ?? 0,
+      PLAYER_SPAWN[0] + TABLET_PLAYER_X_OFFSET,
+      PLAYER_SPAWN[1] + TABLET_ASSUMED_EYE_HEIGHT - TABLET_EYE_DROP - BOARD_Y,
+      PLAYER_SPAWN[2] + TABLET_PLAYER_Z_OFFSET,
     );
     shell.object3D!.rotation.set(...TABLET_ROTATION);
     boardState.tablet = tablet;

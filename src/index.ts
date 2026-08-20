@@ -33,6 +33,7 @@ import { UnderAttackAudioSystem } from "./systems/underAttackAudio.js";
 import { UnderAttackBannerSystem } from "./systems/underAttackBanner.js";
 import { UnderAttackVfxSystem } from "./systems/underAttackVfx.js";
 import { UnitAnimationSystem } from "./systems/unitAnimation.js";
+import { placeViewpoint } from "./systems/viewpoint.js";
 import { WaveSystem } from "./systems/wave.js";
 
 const assets: AssetManifest = {
@@ -99,12 +100,16 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
   },
   render: {
     defaultLighting: true,
-    camera: {
-      position: [2.6, 2.25, 4.25],
-      lookAt: [0, 0.8, 0],
-    },
+    // No `camera` block: the preview pose is owned by `placeViewpoint()` below,
+    // together with the player rig it is parented to. This block runs during
+    // World.create, before the rig has moved, so it cannot be the owner.
   },
 }).then((world) => {
+  // Before any system runs: the player stands beside the board rather than
+  // inside their own command center, and the preview camera is placed relative
+  // to that rig. Systems that measure against the viewer read the right pose
+  // from their first update.
+  placeViewpoint(world);
   // Collapse each GLB's kit-bashed parts into one mesh per (rigid group,
   // material) BEFORE any system clones an asset, so every instance inherits it.
   optimizeLoadedAssets(Object.keys(assets), true);

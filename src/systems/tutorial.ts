@@ -27,6 +27,7 @@ import {
   TUTORIAL_CARD_MAX_DISTANCE,
   TUTORIAL_CARD_MIN_DISTANCE,
   TUTORIAL_CARD_BOARD_CLEARANCE,
+  TUTORIAL_CARD_SUBJECT_CLEARANCE,
   TUTORIAL_CARD_VIEW_ANGLE_MIN,
   TUTORIAL_CARD_WIDTH,
   TUTORIAL_GAZE_DOT_MIN,
@@ -1582,6 +1583,27 @@ export class TutorialSystem extends createSystem({
       tmpCamera.y - TUTORIAL_CARD_DROP,
       tmpBoardTop.y + TUTORIAL_CARD_BOARD_CLEARANCE,
     );
+    // ...and never over the command center. Same shape as the clamp above — a
+    // floor, not a placement — but measured against the BASE rather than the
+    // ground, because at the current standing distance the base fills the lower
+    // half of the view and the card lives above it.
+    //
+    // Measured, not assumed: `cameraY - DROP` follows the eye while the base
+    // stays put, so a shorter player's card slides down behind it. Reading the
+    // real top is what makes this hold for any height.
+    //
+    // The top of the stack over the base is the LEVEL/TROOPS/GEMS strip, not the
+    // building — so this reads the same accessor the `commandCenter` arrow does,
+    // and one source of truth means moving the strip moves the card with it.
+    // `subjectTopWorldY(commandCenter)` was tried first and measured well below
+    // the strip, which left the clamp silently inert.
+    const subjectTop = commandCenterHudTopWorldY();
+    if (subjectTop !== null) {
+      tmpAnchor.y = Math.max(
+        tmpAnchor.y,
+        subjectTop + TUTORIAL_CARD_SUBJECT_CLEARANCE + TUTORIAL_CARD_HEIGHT / 2,
+      );
+    }
 
     // The mesh hangs off the board root, so convert into that space.
     rootObject.worldToLocal(tmpAnchor);

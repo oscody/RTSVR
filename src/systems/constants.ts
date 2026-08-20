@@ -2,6 +2,71 @@ export const GRID_SIZE = 24;
 export const TILE_SIZE = 0.18;
 export const BOARD_Y = 0.78;
 
+// ── Viewpoint ───────────────────────────────────────────────────────────────
+//
+// Where the player stands, and where the 2D preview camera sits. Both live here
+// because they are COUPLED: `world.camera` is a child of `world.player`, so the
+// desktop pose has to be expressed relative to the rig. Applied together by
+// `placeViewpoint()` in `viewpoint.ts` — see that file for why `render.camera`
+// in `index.ts` cannot own the camera any more.
+//
+/**
+ * Where the player stands, in world space.
+ *
+ * The board's south rim is z = +2.16 and the base fronts +Z, so this parks the
+ * player a normal table-standing gap off the near edge, looking north across
+ * the board at their own command center.
+ *
+ * **Before this existed the rig sat at the origin, which is board CENTRE** — the
+ * player stood *inside* their own base with a 4.32 m table at waist height all
+ * around them. That single defect is what forced the tutorial card's distance
+ * leash, facing leash and ground clamp into existence, and it is why step 1's
+ * gaze cone was measuring "are you facing roughly south-west" rather than "have
+ * you found your base".
+ *
+ * No rotation is needed: three.js forward is -Z, and a player at +Z looking
+ * toward the origin is already facing the board.
+ */
+export const PLAYER_SPAWN = [0, 0, 0.83] as const;
+/**
+ * The 2D preview camera, in WORLD space. `placeViewpoint()` converts it to
+ * rig-local, because authoring it relative to a rig that moves is how the two
+ * drift apart.
+ *
+ * Derived rather than guessed, so it can be retuned the same way:
+ * - The board silhouette at a 30 degrees azimuth is ~5.6 m wide.
+ * - hFOV = 2*atan(tan(25 degrees) * 16/9) = 79.6 degrees.
+ * - To fill ~80% of that: slant range = 2.8 / tan(39.8 degrees) ~= 4.2 m.
+ * - At 37 degrees elevation: horizontal 4.2*cos37 = 3.36, rise 4.2*sin37 = 2.53.
+ * - Azimuth 30 degrees off +Z: x = 3.36*sin30 = 1.68, z = 3.36*cos30 = 2.91.
+ *
+ * **Known: the tablet sits in this sight line.** It parks to the player's right
+ * and is only ~1.7 m from them since PLAYER_SPAWN moved in, which puts it 58% of
+ * the way to the base along a +x view ray — about 15 degrees off, so it covers
+ * the near half of the board in the 2D preview. Mirroring the azimuth to -x
+ * would move it to 27 degrees and clear the subject, at no cost to elevation,
+ * range or framing. Deliberately NOT done: the owner asked for the preview pose
+ * to stay as authored, and this only affects the browser view, never a headset.
+ *
+ * **37 degrees is a deliberate choice, not a default.** It is the classic RTS
+ * three-quarter angle: steep enough that the far rim reads, shallow enough that
+ * the board still looks like an object on a table rather than a map. The
+ * inherited pose was 16.4 degrees, which foreshortened a 4.32 m board to ~1.2 m
+ * of apparent depth and rendered the far rim 2.5x smaller than the near one —
+ * worst exactly where the pressure comes from in a four-sided defense game.
+ *
+ * If the diorama feel turns out to matter more than rim legibility, the same
+ * derivation at 25 degrees gives `[1.85, 2.75, 3.20]`.
+ */
+export const DESKTOP_CAMERA = [1.7, 3.5, 2.9] as const;
+/**
+ * Aim at the command center's MASS, not at the ground plane it stands on.
+ *
+ * The inherited target was y = 0.8 — the board surface — which sat the subject
+ * low in frame. `BOARD_Y + 0.17` is roughly the middle of the base.
+ */
+export const DESKTOP_CAMERA_TARGET = [0, 0.95, 0] as const;
+
 export const UNIT_MOVE_SPEED = 0.35;
 export const UNIT_ARRIVAL_EPSILON = 0.005;
 
@@ -258,7 +323,28 @@ export const TABLET_HANDLE_X_OFFSET = 0.382;
 export const TABLET_PANEL_MAX_WIDTH = 0.66;
 export const TABLET_PANEL_MAX_HEIGHT = 0.51;
 export const TABLET_SCREEN_Z_OFFSET = 0.002;
-export const TABLET_COMMAND_CENTER_X_OFFSET = 0.72;
+/**
+ * Where the tablet parks, as an offset from the PLAYER — not from the base.
+ *
+ * It used to be authored against the command center (`x + 0.72`, board centre
+ * z), which worked only because the player also stood at board centre. Moving
+ * the rig to the south rim put the tablet **2.72 m away** — visible, rayable,
+ * and completely out of grab reach for a `OneHandGrabbable` panel.
+ *
+ * These numbers preserve the pose the tablet has always had *relative to the
+ * viewer* — 0.63 m to the right, 0.14 m below eyeline, 0.09 m forward — so it
+ * lands at the same 0.65 m it was always at, just beside the new standing
+ * position. Anchoring to the player is also the honest statement: this is a
+ * thing you hold, so what matters is where your hands are.
+ *
+ * Eye height is assumed, not measured, because the pose is applied once at
+ * startup before any headset pose exists. A grabbable panel forgives a few
+ * centimetres; a fixed one would not.
+ */
+export const TABLET_PLAYER_X_OFFSET = 0.63;
+export const TABLET_PLAYER_Z_OFFSET = -0.09;
+export const TABLET_ASSUMED_EYE_HEIGHT = 1.7;
+export const TABLET_EYE_DROP = 0.14;
 export const TABLET_Y_OFFSET = 0.78;
 export const TABLET_ROTATION = [-0.16, 0.25, 0] as const;
 
@@ -417,25 +503,43 @@ export const ENEMY_RANGE_RING_COLOR = 0xa855f7;
 //
 // Built like commandCenterHud.ts: one plane, one CanvasTexture, repainted only
 // when the text changes — nine repaints for an entire tutorial.
-export const TUTORIAL_CARD_WIDTH = TILE_SIZE * 5.2;
-export const TUTORIAL_CARD_HEIGHT = TILE_SIZE * 1.7;
+// Retuned 2026-08-20, when PLAYER_SPAWN moved in to z = 1.75.
+//
+// The card is SMALLER and NEARER than it was, which leaves its apparent size
+// unchanged — 39.2 degrees wide and 13.3 degrees tall, against 39.3 x 13.2
+// before. Same texture, same pixel budget, same legibility.
+//
+// What changed is where it sits in the view, and that is the whole point. With
+// the player 2.64 m from the base the card spanned 16.0-27.3 degrees below eye
+// while the base spanned 4.3-23.9, and the two barely cleared. Standing 0.8 m
+// closer swings the base's foot down to 23.9 degrees and the card covered its
+// lower half — the card was hiding the thing it was naming. Nearer and lower
+// puts the card's top edge at 27.0 degrees, below the base's foot with about
+// 3 degrees to spare, and still 10.8 cm clear of the board surface.
+export const TUTORIAL_CARD_WIDTH = TILE_SIZE * 3.49;
+export const TUTORIAL_CARD_HEIGHT = TILE_SIZE * 1.14;
 // The card is placed RELATIVE TO THE VIEWER, not at a fixed board position.
 //
 // It has to be, because there is no fixed spot that serves a player who walks.
-// `world.player` is never moved, so in XR the origin — and therefore the player
-// — starts at world (0,0,0), which is board CENTRE; a card parked at the near
-// rim is 2.5 m away across the table, and moves further the moment they step.
+//
+// **Amended 2026-08-20.** This used to read "`world.player` is never moved, so
+// the player starts at board CENTRE". That is no longer true — `PLAYER_SPAWN`
+// puts them at the south rim looking in, which is what the leash below was
+// really compensating for. The viewer-relative placement stays: a player who
+// steps sideways still needs the card to come with them, and the desktop and XR
+// viewpoints still differ (by ~2.5 m now rather than ~4.9 m).
 //
 // So: this far in front of the viewer, this far below eye level, recomputed
 // only when the text changes (never per frame — a card that chases your head is
 // hard to read and harder to ignore).
-export const TUTORIAL_CARD_DISTANCE = 1.35;
-export const TUTORIAL_CARD_DROP = 0.58;
+export const TUTORIAL_CARD_DISTANCE = 0.88;
+export const TUTORIAL_CARD_DROP = 0.0;
 // Leash. The card stays put while the viewer is near it and roughly facing it,
 // and re-places when either stops being true. Without this it is placed once per
 // text change and never again — which breaks the moment the viewpoint jumps, as
-// it does on entering XR (desktop camera is outside the board; the XR player is
-// at board centre, ~4.9 units away). Cheap: a few vector ops per frame.
+// it does on entering XR (the desktop camera and the XR head are ~2.5 m apart
+// since PLAYER_SPAWN landed; it was ~4.9 m before). Cheap: a few vector ops per
+// frame.
 export const TUTORIAL_CARD_MAX_DISTANCE = 2.4;
 export const TUTORIAL_CARD_MIN_DISTANCE = 0.45;
 // Dot product of view-forward against the direction to the card, both flattened.
@@ -457,7 +561,26 @@ export const TUTORIAL_CARD_VIEW_ANGLE_MIN = 0.6;
 // table-height board, crouching, or simply being short. On Quest the card sank
 // to its mid-line and the body text was under the terrain. Must clear half the
 // card's own height plus a visible gap.
-export const TUTORIAL_CARD_BOARD_CLEARANCE = TILE_SIZE * 1.6;
+//
+// Retuned with the card 2026-08-20: this is HALF THE CARD'S HEIGHT plus the
+// same ~0.135 m gap it always had, so a smaller card gets a proportionally
+// smaller floor. It matters more than it looks — the clamp, not `_DROP`, is
+// what actually decides the card's height in practice, so leaving it at the old
+// value silently pinned the card 5 cm too high and ate most of the clearance
+// over the base that the retune was for.
+export const TUTORIAL_CARD_BOARD_CLEARANCE = TILE_SIZE * 1.32;
+// Gap between the card's lower edge and the top of the command center.
+//
+// The board clamp above is a floor against the *ground*; this is a floor
+// against the *base*, and it exists because PLAYER_SPAWN now stands the player
+// 0.92 m away, where the command center fills 8-42 degrees below eyeline and
+// there is no room left underneath it. The card sits above the base instead.
+//
+// A fixed drop cannot hold that on its own, because it tracks the EYE while the
+// base does not move: at a 1.6 m eye the card cleared by 1.7 degrees, and at
+// 1.5 m it landed under the base's top edge and covered the very thing the
+// opening card names. Measuring the subject is what makes it height-proof.
+export const TUTORIAL_CARD_SUBJECT_CLEARANCE = TILE_SIZE * 0.33;
 export const TUTORIAL_CARD_TEXTURE_WIDTH = 1024;
 export const TUTORIAL_CARD_TEXTURE_HEIGHT = 320;
 /** Colour of the card's "saving toward" progress line. */
