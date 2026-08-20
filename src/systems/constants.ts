@@ -682,3 +682,43 @@ export const TUTORIAL_ARROW_BOB_PHASE = 1.15;
  * headroom for anything else that needs to sit between them later.
  */
 export const TUTORIAL_CUE_RENDER_ORDER = UNDER_ATTACK_BANNER_RENDER_ORDER + 10;
+
+// ---------------------------------------------------------------------------
+// Living Path — flowing chevrons from a unit to where it is going.
+//
+// A STRAIGHT segment, deliberately. `MovementSystem` interpolates friendly units
+// directly toward their order tile (`movement.ts`: "Travel is intentionally
+// direct and collision-free … until pathfinding is introduced"), so a curved
+// path would be a drawing of a route the unit will not take — worse than no path
+// at all. Aliens DO run a real pathfinder; their path can curve, and that is a
+// separate future item.
+export const TUTORIAL_PATH_POOL = 16;
+/**
+ * World spacing between chevrons. Constant, so the path does not compress.
+ *
+ * One tile apart. Widened deliberately as the glyph shrank: a dense trail of
+ * tiny marks reads as noise, where a few well-separated ones read as a route.
+ * Fewer glyphs is also less to draw and less to look at during a lesson.
+ */
+export const TUTORIAL_PATH_SPACING = TILE_SIZE * 1.0;
+/** How fast the chevrons flow toward the destination, world units per second. */
+export const TUTORIAL_PATH_SPEED = 0.22;
+/**
+ * Half-width of a chevron. Every other dimension of the glyph derives from it.
+ *
+ * The concept art draws an OPEN chevron — a `>` with the middle cut out — not a
+ * filled triangle. That matters more than the size does: a solid triangle at
+ * this scale reads as a blob, and a row of blobs reads as debris rather than as
+ * direction.
+ */
+export const TUTORIAL_PATH_SIZE = TILE_SIZE * 0.17;
+export const TUTORIAL_PATH_Y_OFFSET = 0.03;
+export const TUTORIAL_PATH_COLOR = 0x7dd3fc;
+export const TUTORIAL_PATH_OPACITY = 0.85;
+/**
+ * Do not draw a path shorter than this.
+ *
+ * A unit all but arrived would otherwise get one or two chevrons jittering on
+ * top of it, which reads as a glitch rather than as direction.
+ */
+export const TUTORIAL_PATH_MIN_LENGTH = TILE_SIZE * 1.2;

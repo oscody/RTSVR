@@ -6,6 +6,7 @@ import {
   Vector3,
   VisibilityState,
   createSystem,
+  type Entity,
   type Object3D,
 } from "@iwsdk/core";
 import {
@@ -51,6 +52,7 @@ import {
   GameStats,
   Health,
   MatchState,
+  MinerState,
   TutorialState,
   Unit,
   UnderAttackAlertState,
@@ -71,6 +73,12 @@ import {
   setTutorialWaveGate,
   type TutorialSpawnAnchor,
 } from "./tutorialWaveGate.js";
+import {
+  attachTutorialPathWorld,
+  clearTutorialPath,
+  hideTutorialPath,
+  showTutorialPath,
+} from "./tutorialPath.js";
 import {
   attachTutorialRingWorld,
   clearTutorialRing,
@@ -197,6 +205,9 @@ const tmpForward = new Vector3();
 const tmpCardWorld = new Vector3();
 const tmpToCard = new Vector3();
 const tmpArrow = new Vector3();
+/** Living Path endpoints. Owner: updatePath. */
+const tmpPathFrom = new Vector3();
+const tmpPathTo = new Vector3();
 /** Reused every sample — the resolvable subset of the drill's declared arrows. */
 const resolvableTargets: ArrowTarget[] = [];
 /** Where the focus effect is centred. Owner: updateGazeRing. */
@@ -323,6 +334,7 @@ export function resetTutorial(): void {
   gazeProgress = 0;
   lastPublishedGaze = -1;
   clearTutorialRing();
+  clearTutorialPath();
   setEnvironmentDim(1);
   setBoardDim(1);
   clearSpotlightSubject();
@@ -455,6 +467,7 @@ export class TutorialSystem extends createSystem({
     attachTutorialArrowWorld(this.world);
     attachTutorialRingWorld(this.world);
     attachTutorialSpotlight(this.world);
+    attachTutorialPathWorld(this.world);
 
     // Restart the tutorial when the player actually puts the headset on.
     //
@@ -527,6 +540,67 @@ export class TutorialSystem extends createSystem({
     // 4 Hz it would visibly stutter behind one.
     this.updateArrow(step);
     this.updateGazeRing(step);
+    this.updatePath(step);
+  }
+
+  /**
+   * Draw the miner's journey while the mining drill is running.
+   *
+   * Two cases, and the distinction matters (see "forecast or instruction?" in
+   * the plan):
+   *
+   *  - **Forecast** — the miner is walking. The path must match where it will
+   *    actually go, which for a friendly unit is a straight line, because
+   *    `MovementSystem` interpolates straight at the order tile.
+   *  - **Instruction** — the miner is idle and the player has not ordered it
+   *    yet. The path then says "send it there", which predicts nothing, so a
+   *    straight line is simply correct.
+   *
+   * Standing still mid-cycle (gathering, depositing) gets no path: there is no
+   * journey to describe, and chevrons under a stationary unit read as a glitch.
+   */
+  private updatePath(delta: number): void {
+    const drill = drillIndex >= 0 ? TUTORIAL_DRILLS[drillIndex] : undefined;
+    if (!drill || drill.id !== "mine") {
+      hideTutorialPath();
+      return;
+    }
+    const miner = this.nearestMinerEntity();
+    if (!miner?.object3D) {
+      hideTutorialPath();
+      return;
+    }
+    miner.object3D.getWorldPosition(tmpPathFrom);
+
+    const stage = miner.getValue(MinerState, "stage") ?? "idle";
+    let toX = -1;
+    let toY = -1;
+    if (stage === "toResource") {
+      toX = miner.getValue(MinerState, "approachX") ?? -1;
+      toY = miner.getValue(MinerState, "approachY") ?? -1;
+    } else if (stage === "toBase") {
+      toX = miner.getValue(MinerState, "depositX") ?? -1;
+      toY = miner.getValue(MinerState, "depositY") ?? -1;
+    } else if (stage === "idle") {
+      // Not ordered yet: show where it SHOULD go. This is the instruction case.
+      if (crystalTileX >= 0) {
+        toX = crystalTileX;
+        toY = crystalTileY;
+      }
+    }
+    if (toX < 0 || toY < 0 || !this.worldOfTile(toX, toY, tmpPathTo)) {
+      hideTutorialPath();
+      return;
+    }
+    showTutorialPath(tmpPathFrom, tmpPathTo, delta);
+  }
+
+  private nearestMinerEntity(): Entity | null {
+    for (const unit of this.queries.units.entities) {
+      if ((unit.getValue(Health, "current") ?? 0) <= 0) continue;
+      if (unit.getValue(Unit, "kind") === "miner") return unit;
+    }
+    return null;
   }
 
   /**
@@ -1006,6 +1080,7 @@ export class TutorialSystem extends createSystem({
     activeArrowTargets = resolvableTargets;
     hideTutorialArrow();
     hideTutorialRing();
+    hideTutorialPath();
     // Dormant means the headset is off or the tutorial is disabled — either way
     // the player must not be left in a darkened world with no explanation.
     this.setWorldDim(1);
