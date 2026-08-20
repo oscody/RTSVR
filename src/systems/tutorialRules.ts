@@ -5,6 +5,7 @@ import {
   TUTORIAL_DRILLS,
   type ArrowTarget,
   type TutorialDrill,
+  type TutorialPath,
 } from "./tutorialCatalog.ts";
 
 /**
@@ -223,6 +224,19 @@ export function gazeRequirement(drill: TutorialDrill): number {
  * an object — so pointing the dim, the light and the ring at an alien instead of
  * the base is a data change, not a code change.
  */
+/**
+ * The two ends of this drill's ground path, or null if it declares none.
+ *
+ * Both are ordinary `ArrowTarget`s, so the path renderer reuses the resolvers
+ * the arrows already have — adding a route to a drill is a data change.
+ */
+export function pathFor(
+  drill: TutorialDrill,
+  started = false,
+): TutorialPath | null {
+  return started ? drill.path.doing : drill.path.intro;
+}
+
 export function gazeTargetFor(drill: TutorialDrill): ArrowTarget | null {
   return drill.trigger.kind === "lookedAt" ? drill.trigger.target : null;
 }

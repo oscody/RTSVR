@@ -111,6 +111,7 @@ import {
   gazeTargetFor,
   interceptTileFor,
   latchDrillStarted,
+  pathFor,
   nearestCornerTo,
   releaseBudget,
   tutorialHoldsWaveCountdown,
@@ -561,47 +562,18 @@ export class TutorialSystem extends createSystem({
    */
   private updatePath(delta: number): void {
     const drill = drillIndex >= 0 ? TUTORIAL_DRILLS[drillIndex] : undefined;
-    if (!drill || drill.id !== "mine") {
-      hideTutorialPath();
-      return;
-    }
-    const miner = this.nearestMinerEntity();
-    if (!miner?.object3D) {
-      hideTutorialPath();
-      return;
-    }
-    miner.object3D.getWorldPosition(tmpPathFrom);
-
-    const stage = miner.getValue(MinerState, "stage") ?? "idle";
-    let toX = -1;
-    let toY = -1;
-    if (stage === "toResource") {
-      toX = miner.getValue(MinerState, "approachX") ?? -1;
-      toY = miner.getValue(MinerState, "approachY") ?? -1;
-    } else if (stage === "toBase") {
-      toX = miner.getValue(MinerState, "depositX") ?? -1;
-      toY = miner.getValue(MinerState, "depositY") ?? -1;
-    } else if (stage === "idle") {
-      // Not ordered yet: show where it SHOULD go. This is the instruction case.
-      if (crystalTileX >= 0) {
-        toX = crystalTileX;
-        toY = crystalTileY;
-      }
-    }
-    if (toX < 0 || toY < 0 || !this.worldOfTile(toX, toY, tmpPathTo)) {
+    const path = drill ? pathFor(drill, drillStarted) : null;
+    if (
+      !path ||
+      !this.resolveArrowTarget(path.from, tmpPathFrom) ||
+      !this.resolveArrowTarget(path.to, tmpPathTo)
+    ) {
       hideTutorialPath();
       return;
     }
     showTutorialPath(tmpPathFrom, tmpPathTo, delta);
   }
 
-  private nearestMinerEntity(): Entity | null {
-    for (const unit of this.queries.units.entities) {
-      if ((unit.getValue(Health, "current") ?? 0) <= 0) continue;
-      if (unit.getValue(Unit, "kind") === "miner") return unit;
-    }
-    return null;
-  }
 
   /**
    * Fill the gaze ring while the player is on target, drain it when they are
@@ -819,7 +791,50 @@ export class TutorialSystem extends createSystem({
         return this.worldOfThreatTile(out);
       case "interceptTile":
         return this.worldOfInterceptTile(out);
+      case "unitDestination":
+        return this.worldOfUnitDestination(target.unit, out);
     }
+  }
+
+  /**
+   * Where a unit is currently headed, or false if it is going nowhere.
+   *
+   * Two sources, in priority order:
+   *
+   *  1. An explicit order (`Unit.orderX/orderY`) — works for every unit type.
+   *  2. A miner's mining cycle, which moves it without an order the player
+   *     gave: out to `approachX/Y`, back to `depositX/Y`. Standing still
+   *     mid-cycle (gathering, depositing) resolves to nothing, because there is
+   *     no journey to draw and a path under a stationary unit reads as a glitch.
+   *
+   * Deliberately general rather than miner-specific: one declaration then
+   * serves "the miner shuttles to the crystals" and "your astronaut is walking
+   * to the tile you picked" alike.
+   */
+  private worldOfUnitDestination(kind: string, out: Vector3): boolean {
+    const unit = this.nearestUnitEntity(kind);
+    if (!unit) return false;
+    if (unit.getValue(Unit, "hasOrder") ?? false) {
+      const x = unit.getValue(Unit, "orderX") ?? -1;
+      const y = unit.getValue(Unit, "orderY") ?? -1;
+      if (x >= 0 && y >= 0) return this.worldOfTile(x, y, out);
+    }
+    if (!unit.hasComponent(MinerState)) return false;
+    const stage = unit.getValue(MinerState, "stage") ?? "idle";
+    const field = stage === "toResource" ? "approach" : stage === "toBase" ? "deposit" : null;
+    if (!field) return false;
+    const x = unit.getValue(MinerState, `${field}X` as "approachX") ?? -1;
+    const y = unit.getValue(MinerState, `${field}Y` as "approachY") ?? -1;
+    if (x < 0 || y < 0) return false;
+    return this.worldOfTile(x, y, out);
+  }
+
+  private nearestUnitEntity(kind: string): Entity | null {
+    for (const unit of this.queries.units.entities) {
+      if ((unit.getValue(Health, "current") ?? 0) <= 0) continue;
+      if (unit.getValue(Unit, "kind") === kind) return unit;
+    }
+    return null;
   }
 
   private worldOfEntity(

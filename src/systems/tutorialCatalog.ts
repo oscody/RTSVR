@@ -29,6 +29,12 @@ export const TUTORIAL_ENABLED = true;
  * must resolve to "no target" in that case rather than falling back to the
  * origin — see `arrowNeedsCommandCenter`.
  */
+/** Two ends of a ground route. See `TutorialDrill.path`. */
+export interface TutorialPath {
+  from: ArrowTarget;
+  to: ArrowTarget;
+}
+
 /** One target, several, or none. See `TutorialDrill.arrows`. */
 export type ArrowTargets = ArrowTarget | readonly ArrowTarget[] | null;
 
@@ -42,7 +48,17 @@ export type ArrowTarget =
   /** Base tile stepped toward the incoming spawn edge. */
   | { kind: "threatTile" }
   /** Between a threatened unit and whatever threatens it. */
-  | { kind: "interceptTile" };
+  | { kind: "interceptTile" }
+  /**
+   * Wherever this unit is currently headed.
+   *
+   * Deliberately general rather than miner-specific: any ordered unit resolves
+   * through `Unit.orderX/orderY`, and a miner mid-cycle resolves through its
+   * mining stage. That is what lets one path declaration serve "the miner goes
+   * to the crystals and back" and "your astronaut is walking to the tile you
+   * picked" without either being special-cased.
+   */
+  | { kind: "unitDestination"; unit: string };
 
 /**
  * One drill is the whole "meet a unit, make one, use it" loop:
@@ -109,6 +125,21 @@ export interface TutorialDrill {
    */
   cards: { title: string; intro: string; doing: string; cleared: string };
   /**
+   * A flowing ground path between two things — see `tutorialPath.ts`.
+   *
+   * Both ends are ordinary `ArrowTarget`s, so any drill can draw a route
+   * between anything the tutorial can already point at. Hidden automatically
+   * when either end cannot be resolved, so a drill may declare a path for a
+   * unit the player has not built yet.
+   *
+   * Split by card phase, exactly like `cards` and `arrows`, because the two
+   * phases usually want different KINDS of path: before the player acts it is
+   * an instruction ("send it there"), afterwards a forecast ("this is where it
+   * is going"). See "forecast or instruction?" in the plan — they answer
+   * different questions and only one of them has to match real movement.
+   */
+  path: { intro: TutorialPath | null; doing: TutorialPath | null };
+  /**
    * Where to point, per card phase — mirroring `cards`, because the script
    * genuinely needs two: "Build tab, THEN the tile you should place on".
    * `hasDrillStarted()` picks which. null means point at nothing.
@@ -141,6 +172,8 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     // a timer would routinely elapse while they stare at empty terrain. This
     // completes only once they have actually turned and looked at it.
     trigger: { kind: "lookedAt", target: { kind: "commandCenter" } },
+    // Nothing to travel yet — this beat is about noticing, not moving.
+    path: { intro: null, doing: null },
     // Long enough to read two lines. Without it, anyone already facing their
     // base skips the only step that explains what it is.
     minSeconds: 4,
@@ -165,6 +198,23 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     // Four trips = 40 crystals, which is what an astronaut (35) costs plus
     // change. Completing this releases the first alien.
     trigger: { kind: "minerTrips", count: 4 },
+    // The whole lesson, drawn: this craft goes to that patch — and back again,
+    // because `unitDestination` follows the mining cycle rather than a fixed
+    // tile.
+    path: {
+      // Before the player acts: where to SEND it. An instruction — it predicts
+      // nothing, so it does not have to match any movement.
+      intro: {
+        from: { kind: "nearestUnit", unit: "miner" },
+        to: { kind: "nearestCrystal" },
+      },
+      // Once it is working: where it is actually going, which follows the
+      // mining cycle out and back. A forecast, and it matches.
+      doing: {
+        from: { kind: "nearestUnit", unit: "miner" },
+        to: { kind: "unitDestination", unit: "miner" },
+      },
+    },
     // The miner cannot attack, so this drill must have no opponent.
     opponent: null,
     // BOTH, in both phases: this drill is about a relationship — that craft
@@ -199,6 +249,15 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     // in the way", which is the correct instruction either way.
     keepAlive: ["miner"],
     trigger: { kind: "crystalsAtLeast", amount: 35 },
+    // "Put it in the way" as a route rather than a sentence. An INSTRUCTION
+    // path: it predicts nothing, so a straight line is simply correct.
+    path: {
+      intro: null, // nothing to send yet — the astronaut does not exist
+      doing: {
+        from: { kind: "nearestUnit", unit: "astronaut" },
+        to: { kind: "interceptTile" },
+      },
+    },
     // Hunts the miner on purpose: being threatened is the most teachable moment
     // in the tutorial, and it spawns far enough away to leave ~35s to react.
     opponent: { enemy: "alien", count: 1, spawn: "farFromMiner", hunts: "miner" },
@@ -223,6 +282,13 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     // recovery prompt, or the player sits unable to produce with no idea why.
     keepAlive: ["miner", "astronaut"],
     trigger: { kind: "crystalsAtLeast", amount: 80 },
+    path: {
+      intro: null,
+      doing: {
+        from: { kind: "nearestUnit", unit: "racer" },
+        to: { kind: "nearestEnemy" },
+      },
+    },
     opponent: { enemy: "alienDrake", count: 1, spawn: "south", hunts: "commandCenter" },
     arrows: {
       intro: { kind: "tabletTab", tab: "crafts" },
@@ -245,6 +311,11 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     // the racer drill, same reason it must be recoverable.
     keepAlive: ["miner", "astronaut"],
     trigger: { kind: "crystalsAtLeast", amount: 30 },
+    // From the base out toward the threat: "build on the side they come from".
+    path: {
+      intro: { from: { kind: "commandCenter" }, to: { kind: "threatTile" } },
+      doing: { from: { kind: "commandCenter" }, to: { kind: "threatTile" } },
+    },
     opponent: {
       enemy: "strongAlienMech",
       count: 1,
@@ -269,6 +340,7 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     create: null,
     placement: null,
     trigger: { kind: "dwellSeconds", seconds: 8 },
+    path: { intro: null, doing: null },
     opponent: null,
     // Nothing left to point at — the tutorial is handing over.
     arrows: { intro: null, doing: null },

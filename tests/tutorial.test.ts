@@ -27,6 +27,7 @@ import {
   isDeadEnd,
   hasDrillStarted,
   latchDrillStarted,
+  pathFor,
   nearestCornerTo,
   releaseBudget,
   tutorialHoldsWaveCountdown,
@@ -917,6 +918,61 @@ test("no drill declares more arrows than the pool can show", () => {
         count <= capacity,
         `drill "${drill.id}" declares ${count} arrows but the pool holds ${capacity}`,
       );
+    }
+  }
+});
+
+// ── The Living Path is data-driven too ──────────────────────────────────────
+
+test("a drill's path is declared, not coded", () => {
+  // Same principle as the focus effect: both ends are ordinary ArrowTargets, so
+  // adding a route to a drill is a catalog edit.
+  const mine = TUTORIAL_DRILLS[indexOf("mine")]!;
+  // Before acting: an INSTRUCTION, "send it there".
+  assert.equal(pathFor(mine, false)?.to.kind, "nearestCrystal");
+  // Once working: a FORECAST that follows the mining cycle out and back.
+  assert.equal(pathFor(mine, true)?.to.kind, "unitDestination");
+
+  // Instruction paths on the combat drills — where to send the unit you just
+  // made, which is the thing a sentence explains worst.
+  assert.equal(pathFor(TUTORIAL_DRILLS[indexOf("astronaut")]!, true)?.to.kind, "interceptTile");
+  assert.equal(pathFor(TUTORIAL_DRILLS[indexOf("racer")]!, true)?.to.kind, "nearestEnemy");
+  assert.equal(pathFor(TUTORIAL_DRILLS[indexOf("turret")]!, true)?.to.kind, "threatTile");
+});
+
+test("instruction beats declare no path", () => {
+  // Nothing is travelling during orientation or the sign-off.
+  for (const id of ["orient", "done"]) {
+    for (const started of [false, true]) {
+      assert.equal(pathFor(TUTORIAL_DRILLS[indexOf(id)]!, started), null);
+    }
+  }
+});
+
+test("every path endpoint is a target the system can resolve", () => {
+  // The resolver switches exhaustively on kind; a path naming an unhandled kind
+  // would compile and then silently draw nothing.
+  const known = new Set([
+    "commandCenter",
+    "nearestUnit",
+    "nearestCrystal",
+    "tile",
+    "tabletTab",
+    "nearestEnemy",
+    "threatTile",
+    "interceptTile",
+    "unitDestination",
+  ]);
+  for (const drill of TUTORIAL_DRILLS) {
+    for (const started of [false, true]) {
+    const path = pathFor(drill, started);
+    if (!path) continue;
+    for (const end of [path.from, path.to]) {
+      assert.ok(
+        known.has(end.kind),
+        `drill "${drill.id}" path names unknown kind "${end.kind}"`,
+      );
+    }
     }
   }
 });
