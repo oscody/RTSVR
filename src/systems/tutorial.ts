@@ -17,6 +17,8 @@ import {
   TUTORIAL_CARD_TEXTURE_HEIGHT,
   TUTORIAL_CARD_TEXTURE_WIDTH,
   TUTORIAL_CARD_TITLE_COLOR,
+  TUTORIAL_CARD_DIM_BACKGROUND,
+  TUTORIAL_CARD_DIM_BORDER,
   TUTORIAL_CARD_DISTANCE,
   TUTORIAL_CARD_DROP,
   TUTORIAL_CARD_FACING_MIN,
@@ -57,6 +59,11 @@ import {
 } from "./state.js";
 import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
 import { setEnvironmentDim } from "./skySystem.js";
+import {
+  attachTutorialSpotlight,
+  clearCommandCenterHighlight,
+  setCommandCenterHighlight,
+} from "./tutorialSpotlight.js";
 import { setTutorialTabHint } from "./tablet.js";
 import {
   clearTutorialWaveGate,
@@ -154,6 +161,8 @@ let spawnAnchor: TutorialSpawnAnchor | null = null;
 let gazeProgress = 0;
 /** Last value mirrored into TutorialState.gaze, to avoid a per-frame ECS write. */
 let lastPublishedGaze = -1;
+/** Whether the card is currently painted in its dimmed-world palette. */
+let cardDimmed = false;
 /** Cached nearest-crystal tile; -1 means none. Refreshed at sample rate. */
 let crystalTileX = -1;
 let crystalTileY = -1;
@@ -306,6 +315,8 @@ export function resetTutorial(): void {
   clearTutorialRing();
   setEnvironmentDim(1);
   setBoardDim(1);
+  clearCommandCenterHighlight();
+  cardDimmed = false;
   spawnAnchor = null;
   // Re-arm the gate NOW, not on the next 4 Hz sample. Two reasons, both real:
   // for that quarter second the old budget would still be live (enough for a
@@ -365,7 +376,12 @@ function wrapLines(
   return lines;
 }
 
-function paintCard(title: string, body: string, step: string): void {
+function paintCard(
+  title: string,
+  body: string,
+  step: string,
+  dimmedWorld: boolean,
+): void {
   const context = cardContext;
   if (!context || !cardTexture) return;
   const width = TUTORIAL_CARD_TEXTURE_WIDTH;
@@ -374,10 +390,17 @@ function paintCard(title: string, body: string, step: string): void {
 
   context.beginPath();
   context.roundRect(3, 3, width - 6, height - 6, 22);
-  context.fillStyle = TUTORIAL_CARD_BACKGROUND;
+  // Brighter panel and border while the world is dimmed. The card is unlit so
+  // it never darkens — but a near-black panel against a darkened board recedes
+  // instead of standing out, which is the opposite of what the beat wants.
+  context.fillStyle = dimmedWorld
+    ? TUTORIAL_CARD_DIM_BACKGROUND
+    : TUTORIAL_CARD_BACKGROUND;
   context.fill();
-  context.lineWidth = 4;
-  context.strokeStyle = TUTORIAL_CARD_BORDER;
+  context.lineWidth = dimmedWorld ? 6 : 4;
+  context.strokeStyle = dimmedWorld
+    ? TUTORIAL_CARD_DIM_BORDER
+    : TUTORIAL_CARD_BORDER;
   context.stroke();
 
   const pad = width * 0.045;
@@ -420,6 +443,7 @@ export class TutorialSystem extends createSystem({
     // add() onto the board root — same reason combatEffects captures a world.
     attachTutorialArrowWorld(this.world);
     attachTutorialRingWorld(this.world);
+    attachTutorialSpotlight(this.world);
 
     // Restart the tutorial when the player actually puts the headset on.
     //
@@ -554,6 +578,17 @@ export class TutorialSystem extends createSystem({
   private setWorldDim(factor: number): void {
     setEnvironmentDim(factor);
     setBoardDim(factor);
+    // The subject of the beat gets BRIGHTER as its surroundings fall away. A
+    // dim that darkens the thing the player is being told to look at is only
+    // half the idea.
+    const dimmed = factor < 1;
+    setCommandCenterHighlight(dimmed ? 1 : 0);
+    if (dimmed !== cardDimmed) {
+      cardDimmed = dimmed;
+      // Force the next evaluate() to repaint in the other palette.
+      paintedTitle = "";
+      paintedBody = "";
+    }
   }
 
   private publishGaze(fraction: number): void {
@@ -979,7 +1014,12 @@ export class TutorialSystem extends createSystem({
     if (title !== paintedTitle || body !== paintedBody) {
       paintedTitle = title;
       paintedBody = body;
-      paintCard(title, body, `${progress.drill + 1} / ${TUTORIAL_DRILLS.length}`);
+      paintCard(
+        title,
+        body,
+        `${progress.drill + 1} / ${TUTORIAL_DRILLS.length}`,
+        cardDimmed,
+      );
       // New words, new placement: put the card wherever the player is looking
       // now. Between changes it stays exactly where it was.
       this.placeCard();

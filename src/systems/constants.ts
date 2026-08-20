@@ -583,12 +583,18 @@ export const TUTORIAL_RING_DRAIN_RATE = 1.6;
 /**
  * How far the world dims while the tutorial is holding the player's attention.
  *
- * A fraction of normal sun and dome intensity, not a black-out: the player still
- * has to see the thing they are being asked to look at. The cone and the ring
- * are `toneMapped: false`, so they do NOT dim with the scene — which is where
- * the contrast in the concept art comes from, for free.
+ * Tuned to the concept art (`plan/tutorial/TimeFreeze.png`), whose dark ground
+ * measures a mean red of ~21. Reaching that took a far lower factor than it
+ * sounds: tone mapping lifts shadows hard, so 0.34 only moved the ground to 62%
+ * of normal. At 0.012 it lands on 20.
+ *
+ * The number is meaningless on its own — it is one of three terms, and the other
+ * two exist because this one is so low:
+ *   - `setBoardDim` scales the unlit ground and scenery (they ignore lights).
+ *   - `TUTORIAL_SPOTLIGHT_LIGHT_INTENSITY` relights the subject, because at ~1%
+ *     sun there is no light left for a colour scale to work with.
  */
-export const TUTORIAL_DIM_FACTOR = 0.34;
+export const TUTORIAL_DIM_FACTOR = 0.012;
 /**
  * Seconds to ease in and out of the dim.
  *
@@ -597,3 +603,41 @@ export const TUTORIAL_DIM_FACTOR = 0.34;
  * enough not to lag the beat it belongs to.
  */
 export const TUTORIAL_DIM_RAMP_SECONDS = 0.6;
+
+/**
+ * How strongly the command center self-illuminates while the world is dimmed.
+ *
+ * A multiplier on the base's own material colours — the same mechanism
+ * `setBoardDim` uses, in the opposite direction. Three.js colours are floats and
+ * may exceed 1, so this has headroom.
+ *
+ * Emissive was tried first, twice, and moved the measured brightness by about
+ * one point (63 -> 65). Whatever these materials are, emissive does not reach
+ * the renderer for them.
+ *
+ * On its own this is NOT enough at concept-art darkness — a colour scale
+ * multiplies reflected light, and at ~1% sun there is almost none. It works
+ * alongside the spotlight below, which supplies the light to scale.
+ */
+export const TUTORIAL_SPOTLIGHT_BOOST = 3.0;
+/**
+ * Card palette while the world is dimmed.
+ *
+ * The card is unlit, so it never darkens with the scene — but its panel is
+ * near-black by design, which means against a dimmed board it recedes rather
+ * than standing out. Brightening the panel and the border is what makes the
+ * "floating sign" read as lit.
+ */
+export const TUTORIAL_CARD_DIM_BACKGROUND = "rgba(22, 44, 58, 0.96)";
+export const TUTORIAL_CARD_DIM_BORDER = "#bde9ff";
+
+// The tutorial spotlight's own light. See tutorialSpotlight.ts for why a real
+// light is needed here when colour scaling was enough elsewhere: at concept-art
+// darkness the sun contributes almost nothing, and a colour scale has no light
+// to multiply.
+export const TUTORIAL_SPOTLIGHT_LIGHT_COLOR = 0xdff3ff;
+export const TUTORIAL_SPOTLIGHT_LIGHT_INTENSITY = 11.0;
+/** Falloff radius — tight, so it lights the base and not the whole board. */
+export const TUTORIAL_SPOTLIGHT_LIGHT_DISTANCE = 1.6;
+/** Above the base, so the light reads as coming down onto it. */
+export const TUTORIAL_SPOTLIGHT_LIGHT_HEIGHT = 0.55;

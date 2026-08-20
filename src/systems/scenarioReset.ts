@@ -12,6 +12,7 @@ import { clearMinerAnimations } from "./minerAnimation.js";
 import { clearUnitSelections, updateCommandGridVisibility } from "./selection.js";
 import { clearTurretAnimations } from "./turretAnimation.js";
 import { isTutorialEnabled, resetTutorial } from "./tutorial.js";
+import { clearCommandCenterHighlight } from "./tutorialSpotlight.js";
 import { resetUnderAttackAlert } from "./underAttackAlert.js";
 import { clearUnderAttackVfx } from "./underAttackVfx.js";
 import { clearUnitAnimations } from "./unitAnimation.js";
@@ -34,6 +35,7 @@ import {
   boardState,
   resetBoardTerrain,
 } from "./state.js";
+import { clearDimmableScenario } from "./board.js";
 import { createInitialScenario } from "./structures.js";
 import { INITIAL_WAVE_DELAY_SECONDS } from "./waveRules.js";
 import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
@@ -82,6 +84,9 @@ export class ScenarioResetSystem extends createSystem({
     // Restart replays the tutorial from drill 1 while it is enabled.
     resetTutorial();
     clearUnderAttackVfx();
+    // The base is about to be rebuilt; drop references into the old model.
+    clearCommandCenterHighlight();
+    clearDimmableScenario();
     resetUnderAttackAlert();
     for (const ring of boardState.selectionRingByUnit.values()) ring.dispose();
     boardState.selectionRingByUnit.clear();

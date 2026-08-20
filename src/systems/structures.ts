@@ -35,6 +35,7 @@ import { attachHealthBar } from "./healthBar.js";
 import { UNIT_BOX_GEOMETRY } from "./sharedGeometry.js";
 import { attachMinerAnimation } from "./minerAnimation.js";
 import { attachTurretAnimation } from "./turretAnimation.js";
+import { registerDimmableObject } from "./board.js";
 import { isTutorialEnabled } from "./tutorial.js";
 import { attachUnitAnimation } from "./unitAnimation.js";
 import {
@@ -375,6 +376,11 @@ export function createInitialScenario(
         .addComponent(ScenarioObject);
       if (spec.name === "CommandCenter") {
         boardState.commandCenter = entity;
+      } else {
+        // Everything EXCEPT the base dims with the board during a tutorial
+        // beat. The base is excluded because it is the subject — it gets
+        // brighter instead, via tutorialSpotlight.
+        registerDimmableObject(holder);
       }
       if (spec.unit) {
         const maxHealth = currentUnitMaxHealth(spec.unit);

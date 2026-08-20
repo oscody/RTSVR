@@ -95,12 +95,34 @@ export function worldToGrid(localX: number, localZ: number): [number, number] {
  * Three surfaces get the same read for a hundredth of the cost.
  */
 const dimmableSurfaces: { material: MeshBasicMaterial; base: Color }[] = [];
+/** Dedupe: the load-time merge shares materials across instances. */
+const dimmableSeen = new Set<object>();
 let appliedBoardDim = 1;
+/** How many entries belong to the board itself rather than to a scenario. */
+let boardOwnedSurfaces = 0;
 
 function registerDimmable(mesh: Mesh): void {
   const material = mesh.material as MeshBasicMaterial;
-  if (!material?.color) return;
+  if (!material?.color || dimmableSeen.has(material)) return;
+  dimmableSeen.add(material);
   dimmableSurfaces.push({ material, base: material.color.clone() });
+}
+
+/**
+ * Register every material under an object so the tutorial dim reaches it.
+ *
+ * Scenery is `MeshBasicMaterial` like the ground, so dimming the sun does
+ * nothing to it — without this the rocks stayed bright salmon over a near-black
+ * board, reading as objects floating on a void rather than as a darkened scene.
+ *
+ * Deduped by material reference, because the load-time merge shares materials
+ * across instances: ~60 props resolve to a handful of entries.
+ */
+export function registerDimmableObject(object: Object3D): void {
+  object.traverse((node) => {
+    const mesh = node as Mesh;
+    if (mesh.material) registerDimmable(mesh);
+  });
 }
 
 /**
@@ -110,6 +132,20 @@ function registerDimmable(mesh: Mesh): void {
  * them they cover everything the player can see. Idempotent, so it is safe to
  * call every frame.
  */
+/**
+ * Forget scenario materials on reset.
+ *
+ * The board's own surfaces survive a reset, but scenario props are disposed and
+ * rebuilt — holding their materials would scale colours that no longer render,
+ * and would leak one entry per prop per match.
+ */
+export function clearDimmableScenario(): void {
+  setBoardDim(1);
+  dimmableSurfaces.length = boardOwnedSurfaces;
+  dimmableSeen.clear();
+  for (const entry of dimmableSurfaces) dimmableSeen.add(entry.material);
+}
+
 export function setBoardDim(factor: number): void {
   const clamped = Math.max(0, Math.min(1, factor));
   if (clamped === appliedBoardDim) return;
@@ -300,6 +336,9 @@ export class BoardSystem extends createSystem({}) {
     makeNonInteractive(dustPatches);
     dustPatches.name = "BoardDustPatches";
     registerDimmable(dustPatches);
+    // Everything registered from here on belongs to a scenario and is dropped
+    // on reset; everything before it is the board itself and persists.
+    boardOwnedSurfaces = dimmableSurfaces.length;
     dustPatches.renderOrder = 1;
     rootObject.add(dustPatches);
 
