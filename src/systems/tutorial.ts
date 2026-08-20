@@ -18,6 +18,7 @@ import {
   TUTORIAL_CARD_TEXTURE_HEIGHT,
   TUTORIAL_CARD_TEXTURE_WIDTH,
   TUTORIAL_CARD_TITLE_COLOR,
+  TUTORIAL_CARD_PROGRESS_COLOR,
   TUTORIAL_CARD_DIM_BACKGROUND,
   TUTORIAL_CARD_DIM_BORDER,
   TUTORIAL_CARD_DISTANCE,
@@ -85,6 +86,12 @@ import {
   tickTutorialPaths,
 } from "./tutorialPath.js";
 import { setTutorialFreeze } from "./tutorialFreeze.js";
+import {
+  attachTutorialTurnCue,
+  clearTutorialTurnCue,
+  hideTutorialTurnCue,
+  showTutorialTurnCue,
+} from "./tutorialTurnCue.js";
 import { alienRouteTiles } from "./wave.js";
 import {
   attachTutorialRingWorld,
@@ -116,6 +123,8 @@ import {
   canResolveArrow,
   advanceGazeProgress,
   gazeFraction,
+  savingProgressLine,
+  savingTowardFor,
   interceptTileFor,
   cardBodyFor,
   drillPhase,
@@ -159,6 +168,8 @@ let drillElapsed = 0;
 /** Last text painted, so a repaint only happens when the words change. */
 let paintedTitle = "";
 let paintedBody = "";
+/** Last progress line painted, so a ticking crystal count repaints but does not move the card. */
+let paintedProgress = "";
 /** Last arrow problem reported, so a sustained one logs once, not at 4 Hz. */
 let reportedArrowProblem = "";
 /**
@@ -349,6 +360,7 @@ export function resetTutorial(): void {
   drillElapsed = 0;
   paintedTitle = "";
   paintedBody = "";
+  paintedProgress = "";
   reportedArrowProblem = "";
   resolvableTargets.length = 0;
   activeArrowTargets = resolvableTargets;
@@ -359,6 +371,7 @@ export function resetTutorial(): void {
   gazeProgress = 0;
   lastPublishedGaze = -1;
   clearTutorialRing();
+  clearTutorialTurnCue();
   clearTutorialPath();
   setEnvironmentDim(1);
   setBoardDim(1);
@@ -429,6 +442,7 @@ function paintCard(
   body: string,
   step: string,
   dimmedWorld: boolean,
+  progress: string,
 ): void {
   const context = cardContext;
   if (!context || !cardTexture) return;
@@ -463,12 +477,20 @@ function paintCard(
   context.fillStyle = TUTORIAL_CARD_TITLE_COLOR;
   context.fillText(title, pad, height * 0.26);
 
-  context.font = `${Math.round(height * 0.15)}px sans-serif`;
+  context.font = `${Math.round(height * 0.128)}px sans-serif`;
   context.fillStyle = TUTORIAL_CARD_BODY_COLOR;
-  let y = height * 0.55;
+  let y = height * 0.46;
   for (const line of wrapLines(context, body, width - pad * 2)) {
     context.fillText(line, pad, y);
-    y += height * 0.19;
+    y += height * 0.16;
+  }
+
+  // "Why am I hoarding crystals?" — answered on the card rather than left to
+  // the player to work out from the tablet.
+  if (progress) {
+    context.font = `600 ${Math.round(height * 0.118)}px sans-serif`;
+    context.fillStyle = TUTORIAL_CARD_PROGRESS_COLOR;
+    context.fillText(progress, pad, height * 0.845);
   }
 
   cardTexture.needsUpdate = true;
@@ -493,6 +515,7 @@ export class TutorialSystem extends createSystem({
     attachTutorialRingWorld(this.world);
     attachTutorialSpotlight(this.world);
     attachTutorialPathWorld(this.world);
+    attachTutorialTurnCue(this.world);
 
     // Restart the tutorial when the player actually puts the headset on.
     //
@@ -670,6 +693,7 @@ export class TutorialSystem extends createSystem({
       gazeProgress = 0;
       focusResolved = false;
       hideTutorialRing();
+      hideTutorialTurnCue();
       this.publishGaze(0);
       this.clearFocus();
       return;
@@ -697,11 +721,18 @@ export class TutorialSystem extends createSystem({
 
     if (!focusResolved) {
       hideTutorialRing();
+      hideTutorialTurnCue();
       return;
     }
     const fraction = gazeFraction(gazeProgress, required);
     showTutorialRing(tmpFocus, fraction, subjectRingRadius(subject));
     this.publishGaze(fraction);
+
+    // "It is behind you." A ring on something outside the player's view teaches
+    // nothing, so point them at it until it is in front of them.
+    this.camera.getWorldPosition(tmpCamera);
+    this.camera.getWorldDirection(tmpForward);
+    showTutorialTurnCue(tmpCamera, tmpForward, tmpFocus, delta);
   }
 
   /** Restore the world and drop the focus. Idempotent. */
@@ -1212,6 +1243,7 @@ export class TutorialSystem extends createSystem({
     activeArrowTargets = resolvableTargets;
     hideTutorialArrow();
     hideTutorialRing();
+    hideTutorialTurnCue();
     hideAllTutorialPaths();
     // Dormant means the headset is off or the tutorial is disabled — either way
     // the player must not be left in a darkened world with no explanation.
@@ -1314,18 +1346,29 @@ export class TutorialSystem extends createSystem({
       body = cardBodyFor(drill, activePhase);
     }
 
-    if (title !== paintedTitle || body !== paintedBody) {
+    const savingLine = savingProgressLine(
+      savingTowardFor(progress.drill),
+      snapshot.crystals,
+    );
+    if (
+      title !== paintedTitle ||
+      body !== paintedBody ||
+      savingLine !== paintedProgress
+    ) {
+      const moved = title !== paintedTitle || body !== paintedBody;
       paintedTitle = title;
       paintedBody = body;
+      paintedProgress = savingLine;
       paintCard(
         title,
         body,
         `${progress.drill + 1} / ${TUTORIAL_DRILLS.length}`,
         cardDimmed,
+        savingLine,
       );
-      // New words, new placement: put the card wherever the player is looking
-      // now. Between changes it stays exactly where it was.
-      this.placeCard();
+      // New WORDS, new placement — but not for a ticking crystal count, which
+      // changes constantly and would drag the card around the room.
+      if (moved) this.placeCard();
     }
 
     this.applyArrow(drill, progress.recovery !== null || progress.deadEnd);

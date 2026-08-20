@@ -304,11 +304,15 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
           to: { kind: "nearestUnit", unit: "miner" },
         },
       ],
-      // Then both: what is coming, and your answer heading for the same place.
-      // The blue route ends where the RED one does — the thing under threat —
-      // so the instruction is "get there before it does", not "stand on a tile".
-      // It only appears once the astronaut exists; until then it cannot resolve
-      // and nothing is drawn.
+      // Then both: what is coming, and what to do about it.
+      //
+      // The blue route ends AT THE ALIEN, because that is literally the click
+      // the game wants: `interaction.ts` issues an attack by ordering the
+      // selected unit onto the enemy's own tile. A route to the miner would
+      // point at a square where clicking achieves nothing.
+      //
+      // Only drawn once the astronaut exists — that falls out of `nearestUnit`
+      // failing to resolve rather than needing a check.
       doing: [
         {
           style: "hostile",
@@ -318,7 +322,7 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
         {
           style: "friendly",
           from: { kind: "nearestUnit", unit: "astronaut" },
-          to: { kind: "nearestUnit", unit: "miner" },
+          to: { kind: "nearestEnemy" },
         },
       ],
     },
@@ -332,7 +336,7 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     cards: {
       title: "Defend your miner",
       intro: "Your crystals are stacking up. Something will come for them.",
-      meet: "An alien has landed. It is heading for your mining craft.",
+      meet: "Something has landed. Follow the red marker and find it — it is walking at your mining craft.",
       doing: "Amber means spotted. Make an astronaut and put it in the way.",
       cleared: "Astronauts fight, and they build. You will need one for what is next.",
     },
@@ -365,7 +369,7 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
         {
           style: "friendly",
           from: { kind: "nearestUnit", unit: "racer" },
-          to: { kind: "commandCenter" },
+          to: { kind: "nearestEnemy" },
         },
       ],
     },
@@ -377,7 +381,7 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     cards: {
       title: "Meet the flyer",
       intro: "Something is flying in.",
-      meet: "A drake. It is going straight for your command center.",
+      meet: "A drake is in the air. Follow the red marker — it is going straight for your command center.",
       doing: "Racing craft are fast. Produce one and send it at the flyer.",
       cleared: "Different enemies want different answers.",
     },
@@ -426,7 +430,7 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     cards: {
       title: "Build a turret",
       intro: "Turrets fight on their own. Build one on the side the aliens come from.",
-      meet: "A war machine — heavier than anything you have faced.",
+      meet: "A war machine, heavier than anything yet. Follow the red marker and see where it is headed.",
       doing: "Your turret fires by itself. Help it finish this one.",
       cleared: "Wave cleared. Crystals keep coming, the waves get bigger. Good luck.",
     },

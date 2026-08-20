@@ -87,6 +87,63 @@ export interface TutorialProgress {
   deadEnd: boolean;
 }
 
+/**
+ * What the player is currently saving up for, and what it costs.
+ *
+ * The drill's own unit if it creates one; otherwise the next drill that does.
+ * That second case is the one that matters — the mining drill teaches commanding
+ * and creates nothing, so "why am I hoarding crystals?" has no answer on screen
+ * unless it looks ahead.
+ *
+ * Derived rather than declared, so inserting a drill cannot leave a stale goal
+ * pointing at a unit two steps away.
+ */
+export function savingTowardFor(
+  drillIndex: number,
+  drills: readonly TutorialDrill[] = TUTORIAL_DRILLS,
+): { kind: string; label: string; cost: number } | null {
+  if (drillIndex < 0) return null;
+  for (let index = drillIndex; index < drills.length; index += 1) {
+    const create = drills[index].create;
+    if (!create) continue;
+    const cost = drillCost(drills[index]);
+    if (cost <= 0) continue;
+    return { kind: create.kind, label: unitLabel(create.kind), cost };
+  }
+  return null;
+}
+
+/** Display name for a unit or building kind, falling back to the raw kind. */
+function unitLabel(kind: string): string {
+  return (
+    getProductionSpec(kind)?.label ??
+    getBuildingSpec(kind)?.label ??
+    kind
+  );
+}
+
+/**
+ * The card's progress line: what you are saving for and how far along you are.
+ *
+ * Counts CRYSTALS against the unit's price rather than mining trips. The trips
+ * are what completes the drill, but they are not what the player spends — and a
+ * bar counting something you cannot see in the tablet teaches the wrong number.
+ */
+export function savingProgressLine(
+  goal: { label: string; cost: number } | null,
+  crystals: number,
+): string {
+  if (!goal) return "";
+  if (crystals >= goal.cost) {
+    return `${goal.cost} crystals banked — you can build ${article(goal.label)} now`;
+  }
+  return `${crystals} / ${goal.cost} crystals toward ${article(goal.label)}`;
+}
+
+function article(label: string): string {
+  return /^[aeiou]/i.test(label) ? `an ${label}` : `a ${label}`;
+}
+
 /** Cost of whatever a drill asks the player to create. 0 for instruction drills. */
 export function drillCost(drill: TutorialDrill): number {
   if (!drill.create) return 0;

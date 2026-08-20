@@ -299,6 +299,10 @@ export function flushFrameProfile(): void {
   const countsLine = maxDrawCalls > 0 || sceneObjectCount > 0
     ? `Calls ${maxDrawCalls} | Tris ${Math.round(maxTriangles / 1000)}k | ` +
       `Objs ${sceneObjectCount} | Mesh ${sceneMeshCount} | ` +
+      `Ents ${liveEntities}${entityDelta} | ` +
+      (heapMb > 0
+        ? `Heap ${heapMb.toFixed(0)}mb floor ${heapFloorMb.toFixed(0)} | `
+        : "") +
       `Geom ${liveGeometries} | Prog ${livePrograms} | ` +
       `Prof ${lastFlushMs.toFixed(2)}`
     : "";
@@ -465,6 +469,62 @@ function wrapWorldUpdate(world: any): void {
 }
 
 // Wrap renderer.render to time the render pass (CPU submit cost) and sample
+/**
+ * Live ECS entities carrying a Transform, and how that has moved since the last
+ * flush.
+ *
+ * **`Objs` cannot see a leak of the kind this exists to catch.** It walks the
+ * SCENE GRAPH, so anything detached with `removeFromParent()` vanishes from it
+ * — while the ECS entity that owned it lives on forever. That is exactly how
+ * the tutorial ring leaked 24 entities per subject size with every existing
+ * instrument reading normal.
+ *
+ * The delta is the useful half. An absolute count means little (a wave legitimately
+ * adds entities); a count that only ever climbs across resets does not.
+ */
+let liveEntities = 0;
+let entityDelta = "";
+let lastFlushEntities = -1;
+
+/**
+ * JS heap, and the lowest value seen — the post-GC floor.
+ *
+ * The current figure sawtooths with collection and says almost nothing on its
+ * own. **The floor is the leak detector**: garbage that can be collected pulls
+ * the heap back down to roughly where it started, so a floor that climbs across
+ * a session is memory that cannot be reclaimed.
+ *
+ * This is the counterpart to `Ents` for the *other* invisible failure — not
+ * "objects nobody freed" but "allocation in a per-frame path". A `Box3` rebuilt
+ * every frame never shows up in system timings at 0.1 ms resolution; it shows up
+ * here, as a floor that will not settle.
+ *
+ * Chrome-only (`performance.memory`); silently absent elsewhere rather than
+ * faked, because a fabricated memory number is worse than none.
+ */
+let heapMb = 0;
+let heapFloorMb = 0;
+
+function sampleHeap(): void {
+  const memory = (performance as { memory?: { usedJSHeapSize: number } }).memory;
+  if (!memory) return;
+  heapMb = memory.usedJSHeapSize / (1024 * 1024);
+  heapFloorMb = heapFloorMb === 0 ? heapMb : Math.min(heapFloorMb, heapMb);
+}
+
+/** Called once per flush by PerformanceSystem, which owns the query. */
+export function setLiveEntityCount(count: number): void {
+  liveEntities = count;
+  if (lastFlushEntities >= 0 && count !== lastFlushEntities) {
+    const change = count - lastFlushEntities;
+    entityDelta = ` (${change > 0 ? "+" : ""}${change})`;
+  } else {
+    entityDelta = "";
+  }
+  lastFlushEntities = count;
+  sampleHeap();
+}
+
 // draw calls / triangles / resource counts from renderer.info. three.js resets
 // info at the start of render() (info.autoReset defaults true), so reading it
 // right after the original call reflects the frame just drawn.

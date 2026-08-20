@@ -418,7 +418,7 @@ export const ENEMY_RANGE_RING_COLOR = 0xa855f7;
 // Built like commandCenterHud.ts: one plane, one CanvasTexture, repainted only
 // when the text changes — nine repaints for an entire tutorial.
 export const TUTORIAL_CARD_WIDTH = TILE_SIZE * 5.2;
-export const TUTORIAL_CARD_HEIGHT = TILE_SIZE * 1.45;
+export const TUTORIAL_CARD_HEIGHT = TILE_SIZE * 1.7;
 // The card is placed RELATIVE TO THE VIEWER, not at a fixed board position.
 //
 // It has to be, because there is no fixed spot that serves a player who walks.
@@ -459,7 +459,9 @@ export const TUTORIAL_CARD_VIEW_ANGLE_MIN = 0.6;
 // card's own height plus a visible gap.
 export const TUTORIAL_CARD_BOARD_CLEARANCE = TILE_SIZE * 1.6;
 export const TUTORIAL_CARD_TEXTURE_WIDTH = 1024;
-export const TUTORIAL_CARD_TEXTURE_HEIGHT = 272;
+export const TUTORIAL_CARD_TEXTURE_HEIGHT = 320;
+/** Colour of the card's "saving toward" progress line. */
+export const TUTORIAL_CARD_PROGRESS_COLOR = "#8fe3b0";
 export const TUTORIAL_CARD_BACKGROUND = "rgba(10, 18, 24, 0.9)";
 // The tutorial gets a hue of its own, distinct from every gameplay marker, so
 // "the tutorial is telling you something" never reads as a game state.
@@ -730,3 +732,29 @@ export const TUTORIAL_PATH_OPACITY = 0.85;
  * top of it, which reads as a glitch rather than as direction.
  */
 export const TUTORIAL_PATH_MIN_LENGTH = TILE_SIZE * 1.2;
+
+// ---------------------------------------------------------------------------
+// Turn cue — "it is behind you".
+//
+// The meet beat rings whatever just arrived, but an alien can land anywhere on
+// a 24x24 board, and a ring you cannot see teaches nothing. This is a chevron
+// at the edge of view saying which way to turn, and it disappears the moment the
+// subject is in front of you — so it answers a question and then gets out of the
+// way rather than becoming furniture.
+export const TUTORIAL_TURN_CUE_DISTANCE = 1.1;
+export const TUTORIAL_TURN_CUE_OFFSET = 0.44;
+export const TUTORIAL_TURN_CUE_DROP = 0.22;
+export const TUTORIAL_TURN_CUE_SIZE = TILE_SIZE * 0.42;
+/** Red, because it points at theirs. Same language as the hostile path. */
+export const TUTORIAL_TURN_CUE_COLOR = 0xff5a4a;
+/**
+ * Hide the cue once the subject is within this much of view-forward.
+ *
+ * ~0.72 is about 44 degrees — comfortably wider than the gaze cone that fills
+ * the ring, so the cue is gone before the ring starts filling and the player is
+ * never chasing two things at once.
+ */
+export const TUTORIAL_TURN_CUE_HIDE_DOT = 0.72;
+/** Gentle pulse so it reads as live rather than as a static edge decoration. */
+export const TUTORIAL_TURN_CUE_PULSE_HZ = 1.4;
+export const TUTORIAL_TURN_CUE_PULSE = 0.16;

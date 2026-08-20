@@ -28,6 +28,8 @@ import {
   hasDrillStarted,
   latchDrillStarted,
   pathsFor,
+  savingProgressLine,
+  savingTowardFor,
   drillPhase,
   focusTargetFor,
   latchDrillMet,
@@ -1037,11 +1039,13 @@ test("a drill's path is declared, not coded", () => {
     astronaut.map((p) => p.style).sort(),
     ["friendly", "hostile"],
   );
-  // Both routes end at the SAME place — the thing under threat. The lesson is
-  // "get there before it does", not "stand on a marked tile".
+  // Red shows what the alien is walking at; blue ends ON the alien, because
+  // that is the click the game actually wants — an attack order is issued by
+  // clicking the enemy itself (interaction.ts).
   const red = astronaut.find((p) => p.style === "hostile")!;
   const blue = astronaut.find((p) => p.style === "friendly")!;
-  assert.deepEqual(blue.to, red.to);
+  assert.equal(red.to.kind, "nearestUnit");
+  assert.equal(blue.to.kind, "nearestEnemy");
 });
 
 test("instruction beats declare no path", () => {
@@ -1093,17 +1097,50 @@ test("the second cone marks where the alien is going", () => {
   }
 });
 
-test("a sent unit is told to defend the thing, not to stand on a tile", () => {
-  // Drills where the player SENDS a unit route it to the same place the alien
-  // is heading. The turret has no blue route at all — it is built, not sent.
+test("a blue route ends where the player has to click", () => {
+  // An attack order is issued by clicking the ENEMY (interaction.ts orders the
+  // unit onto the enemy's own tile). A route ending anywhere else would point
+  // at a square where clicking achieves nothing.
   for (const id of ["astronaut", "racer"]) {
     const drill = TUTORIAL_DRILLS[indexOf(id)]!;
     const paths = pathsFor(drill, "doing");
-    const red = paths.find((p) => p.style === "hostile")!;
     const blue = paths.find((p) => p.style === "friendly")!;
-    assert.deepEqual(blue.to, red.to, `drill "${id}"`);
+    assert.equal(blue.to.kind, "nearestEnemy", `drill "${id}"`);
     // And it starts at the unit being taught, so it cannot draw before the
     // player has made one.
     assert.equal(blue.from.kind, "nearestUnit");
   }
+});
+
+// ── The saving-toward progress line ─────────────────────────────────────────
+
+test("the mining drill looks ahead to what you are saving for", () => {
+  // The mining drill creates nothing, so without looking ahead the card can
+  // never answer "why am I hoarding crystals?".
+  const goal = savingTowardFor(indexOf("mine"));
+  assert.ok(goal);
+  assert.equal(goal!.kind, "astronaut");
+  assert.equal(goal!.cost, ASTRONAUT_COST);
+});
+
+test("a drill that creates something points at its own unit", () => {
+  assert.equal(savingTowardFor(indexOf("astronaut"))?.kind, "astronaut");
+  assert.equal(savingTowardFor(indexOf("racer"))?.kind, "racer");
+  assert.equal(savingTowardFor(indexOf("turret"))?.kind, "turret");
+});
+
+test("the sign-off has nothing left to save for", () => {
+  assert.equal(savingTowardFor(indexOf("done")), null);
+  assert.equal(savingTowardFor(-1), null);
+});
+
+test("the progress line counts crystals, and says when you can afford it", () => {
+  const goal = savingTowardFor(indexOf("mine"))!;
+  assert.match(savingProgressLine(goal, 0), /0 \/ 35 crystals toward an /);
+  assert.match(savingProgressLine(goal, 20), /^20 \/ 35 crystals/);
+  // Affordable: the line stops nagging and starts inviting.
+  assert.match(savingProgressLine(goal, 35), /you can build an /);
+  assert.match(savingProgressLine(goal, 99), /you can build an /);
+  // No goal, no line — never a stray "0 / 0".
+  assert.equal(savingProgressLine(null, 10), "");
 });

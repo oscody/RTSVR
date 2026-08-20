@@ -1,7 +1,8 @@
 import { createSystem } from "@iwsdk/core";
 import { PERFORMANCE_SAMPLE_SECONDS } from "./constants.ts";
-import { flushFrameProfile } from "./frameProfiler.js";
+import { flushFrameProfile, setLiveEntityCount } from "./frameProfiler.js";
 import { resolvePerformanceSample } from "./performanceRules.js";
+import { Transform } from "@iwsdk/core";
 import {
   Enemy,
   RuntimePerformance,
@@ -13,6 +14,10 @@ export class PerformanceSystem extends createSystem({
   diagnostics: { required: [RuntimePerformance] },
   units: { required: [Unit] },
   aliens: { required: [Enemy, WaveUnit] },
+  // Every entity that owns something in the world. Broad on purpose: this is a
+  // LEAK census, and a leak that only shows up in a narrow query is one nobody
+  // thought to write a query for.
+  transforms: { required: [Transform] },
 }) {
   private elapsedSeconds = 0;
   private frameCount = 0;
@@ -42,6 +47,8 @@ export class PerformanceSystem extends createSystem({
     for (const alien of this.queries.aliens.entities) {
       if (alien.getValue(WaveUnit, "hasWaypoint") ?? false) movingEntities += 1;
     }
+
+    setLiveEntityCount(this.queries.transforms.entities.size);
 
     const sample = resolvePerformanceSample(
       this.elapsedSeconds,
