@@ -28,7 +28,9 @@ import {
   hasDrillStarted,
   latchDrillStarted,
   pathsFor,
+  allowedCreateKind,
   savingProgressLine,
+  tabHintFor,
   savingTowardFor,
   drillPhase,
   focusTargetFor,
@@ -642,9 +644,11 @@ test("the arrow follows the phase, not the live read", () => {
   // drill points at both ends throughout, so it could not catch a regression.
   const drill = TUTORIAL_DRILLS[indexOf("racer")]!;
   const idle = snapshot({ crystals: 0 });
+  // Intro points at the miner you already have: the step is "you can afford a
+  // racer now". The TAB is highlighted by the derived pulse, not by a cone.
   assert.deepEqual(arrowTargetsFor(drill, idle, "intro")[0], {
-    kind: "tabletTab",
-    tab: "crafts",
+    kind: "nearestUnit",
+    unit: "miner",
   });
   // The meet beat points at BOTH ends of the red route: what arrived, and what
   // it is walking at. "This is coming, and it is going THERE."
@@ -1143,4 +1147,62 @@ test("the progress line counts crystals, and says when you can afford it", () =>
   assert.match(savingProgressLine(goal, 99), /you can build an /);
   // No goal, no line — never a stray "0 / 0".
   assert.equal(savingProgressLine(null, 10), "");
+});
+
+// ── Tablet lock and tab hint ────────────────────────────────────────────────
+
+test("the tab pulses only once the unit is affordable", () => {
+  // A highlight over a tab with nothing affordable behind it teaches the player
+  // to ignore highlights.
+  const astronaut = TUTORIAL_DRILLS[indexOf("astronaut")]!;
+  assert.equal(tabHintFor(astronaut, 0), null);
+  assert.equal(tabHintFor(astronaut, ASTRONAUT_COST - 1), null);
+  assert.equal(tabHintFor(astronaut, ASTRONAUT_COST), "build");
+});
+
+test("every drill that creates something pulses the right tab", () => {
+  // The ask was "same for astronaut and turret as for racer" — derived from
+  // where the card actually lives, so all three are identical by construction
+  // rather than by three separate catalog entries agreeing.
+  //
+  // The astronaut is the reason this is not `create.via`: it is *produced*, but
+  // its card is on the BUILD tab beside the turret, because it comes from the
+  // command center rather than a hangar.
+  const expected: Record<string, "build" | "crafts"> = {
+    astronaut: "build",
+    racer: "crafts",
+    turret: "build",
+  };
+  for (const [id, tab] of Object.entries(expected)) {
+    const drill = TUTORIAL_DRILLS[indexOf(id)]!;
+    assert.equal(tabHintFor(drill, 9999), tab, `drill "${id}"`);
+  }
+});
+
+test("instruction drills pulse no tab", () => {
+  for (const id of ["orient", "mine", "done"]) {
+    assert.equal(tabHintFor(TUTORIAL_DRILLS[indexOf(id)]!, 9999), null);
+  }
+});
+
+test("the tablet lock names the drill's own unit", () => {
+  assert.equal(allowedCreateKind(TUTORIAL_DRILLS[indexOf("astronaut")]!, null), "astronaut");
+  assert.equal(allowedCreateKind(TUTORIAL_DRILLS[indexOf("turret")]!, null), "turret");
+  // Nothing to create, nothing to lock.
+  assert.equal(allowedCreateKind(TUTORIAL_DRILLS[indexOf("mine")]!, null), null);
+  assert.equal(allowedCreateKind(undefined, null), null);
+});
+
+test("recovery outranks the drill, or the player is stranded", () => {
+  // Locking the tablet to an astronaut while the miner is dead and there is no
+  // income is a soft-lock with no exit but restart.
+  const drill = TUTORIAL_DRILLS[indexOf("racer")]!;
+  assert.equal(
+    allowedCreateKind(drill, { unit: "miner", affordable: true }),
+    "miner",
+  );
+  assert.equal(
+    allowedCreateKind(drill, { unit: "astronaut", affordable: true }),
+    "astronaut",
+  );
 });

@@ -1,6 +1,6 @@
 import { canUnitAttack } from "./combatRules.ts";
 import { getBuildingSpec } from "./buildingCatalog.ts";
-import { getProductionSpec } from "./craftCatalog.ts";
+import { getCraftSpec, getProductionSpec } from "./craftCatalog.ts";
 import {
   TUTORIAL_DRILLS,
   type ArrowTarget,
@@ -142,6 +142,53 @@ export function savingProgressLine(
 
 function article(label: string): string {
   return /^[aeiou]/i.test(label) ? `an ${label}` : `a ${label}`;
+}
+
+/**
+ * Which tablet tab the tutorial should be pulsing, or null.
+ *
+ * **Only once the player can afford the unit** — the pulse then coincides with
+ * the moment the click actually works. Highlighting a tab while there is
+ * nothing affordable behind it teaches the player to ignore the highlight.
+ *
+ * Derived from `create.via` rather than declared per drill, so the astronaut,
+ * racer and turret behave identically without three chances to get it wrong.
+ */
+export function tabHintFor(
+  drill: TutorialDrill,
+  crystals: number,
+): "build" | "crafts" | null {
+  if (!drill.create) return null;
+  if (crystals < drillCost(drill)) return null;
+  // Which TAB the card lives on, which is not the same question as `via`.
+  // The astronaut is produced (`via: "produce"`) but its card sits on the BUILD
+  // tab next to the turret, because it is made at the command center rather
+  // than at a hangar. Deriving the tab from `via` pulsed Crafts and sent the
+  // player to a tab with no astronaut on it.
+  return getCraftSpec(drill.create.kind) ? "crafts" : "build";
+}
+
+/**
+ * What the player is allowed to build or produce right now, or null for no lock.
+ *
+ * Everything else on the tablet greys out, so "make an astronaut" cannot be
+ * answered by making something else. Deliberately narrow — one kind at a time.
+ *
+ * **Recovery outranks the drill.** If the miner has died the answer is the
+ * miner, whatever the drill was teaching: locking the tablet to an astronaut
+ * while the player has no income and no miner is a soft-lock with no exit but
+ * restart.
+ *
+ * Note the lock is tablet-only. Units on the board stay selectable, so the miner
+ * can always be re-tasked — which is the other half of not stranding a player
+ * whose crystal patch runs dry.
+ */
+export function allowedCreateKind(
+  drill: TutorialDrill | undefined,
+  recovery: TutorialRecovery | null,
+): string | null {
+  if (recovery) return recovery.unit;
+  return drill?.create?.kind ?? null;
 }
 
 /** Cost of whatever a drill asks the player to create. 0 for instruction drills. */

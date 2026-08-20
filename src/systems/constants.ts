@@ -758,3 +758,12 @@ export const TUTORIAL_TURN_CUE_HIDE_DOT = 0.72;
 /** Gentle pulse so it reads as live rather than as a static edge decoration. */
 export const TUTORIAL_TURN_CUE_PULSE_HZ = 1.4;
 export const TUTORIAL_TURN_CUE_PULSE = 0.16;
+
+/**
+ * How faded a tablet card looks while the tutorial is asking for something else.
+ *
+ * Faded, not hidden. Removing the card would teach the player the game has fewer
+ * options than it does, and they would have to re-learn the tablet once the
+ * tutorial let go. This says "not now", not "not available".
+ */
+export const TABLET_TUTORIAL_LOCKED_OPACITY = 0.3;

@@ -70,7 +70,7 @@ import {
   subjectRingRadius,
   subjectTopWorldY,
 } from "./tutorialSpotlight.js";
-import { setTutorialTabHint } from "./tablet.js";
+import { setTutorialAllowedKind, setTutorialTabHint } from "./tablet.js";
 import {
   clearTutorialWaveGate,
   setTutorialWaveGate,
@@ -123,8 +123,10 @@ import {
   canResolveArrow,
   advanceGazeProgress,
   gazeFraction,
+  allowedCreateKind,
   savingProgressLine,
   savingTowardFor,
+  tabHintFor,
   interceptTileFor,
   cardBodyFor,
   drillPhase,
@@ -181,6 +183,8 @@ let reportedArrowProblem = "";
 let activeArrowTargets: readonly ArrowTarget[] = [];
 /** The tab currently pulsing, so the hint is only pushed to the tablet on change. */
 let activeTabHint: string | null = null;
+/** The kind the tablet is currently locked to, so the push happens on change. */
+let activeAllowedKind: string | null = null;
 /**
  * Whether the current drill has visibly begun. A LATCH, not a live read — see
  * latchDrillStarted. Cleared when the drill changes.
@@ -396,6 +400,10 @@ export function resetTutorial(): void {
   if (activeTabHint !== null) {
     activeTabHint = null;
     setTutorialTabHint(null);
+  }
+  if (activeAllowedKind !== null) {
+    activeAllowedKind = null;
+    setTutorialAllowedKind(null);
   }
   if (cardMesh) cardMesh.visible = false;
   const state = boardState.tutorial;
@@ -1252,6 +1260,7 @@ export class TutorialSystem extends createSystem({
     // the player must not be left in a darkened world with no explanation.
     this.setWorldDim(1);
     this.setTabHint(null);
+    this.setAllowedKind(null);
     const state = boardState.tutorial;
     if (!state) return;
     if (!(state.getValue(TutorialState, "active") ?? false)) return;
@@ -1313,6 +1322,7 @@ export class TutorialSystem extends createSystem({
       resolvableTargets.length = 0;
       activeArrowTargets = resolvableTargets;
       this.setTabHint(null);
+      this.setAllowedKind(null);
       if (state && (state.getValue(TutorialState, "active") ?? false)) {
         state.setValue(TutorialState, "active", false);
         state.setValue(TutorialState, "drill", -1);
@@ -1374,6 +1384,9 @@ export class TutorialSystem extends createSystem({
       if (moved) this.placeCard();
     }
 
+    // Lock the tablet to the one thing this step is asking for. Recovery wins,
+    // so a dead miner is always rebuildable.
+    this.setAllowedKind(allowedCreateKind(drill, progress.recovery));
     this.applyArrow(drill, progress.recovery !== null || progress.deadEnd);
     this.reportArrowProblem(drill);
 
@@ -1466,8 +1479,10 @@ export class TutorialSystem extends createSystem({
     if (resolvableTargets.some((t) => t.kind === "nearestCrystal")) {
       this.refreshNearestCrystal();
     }
-    const tab = resolvableTargets.find((t) => t.kind === "tabletTab");
-    this.setTabHint(tab && tab.kind === "tabletTab" ? tab.tab : null);
+    // The tab pulse is DERIVED from affordability rather than declared as an
+    // arrow target, so the astronaut, racer and turret behave identically and
+    // the highlight only appears when the click behind it would work.
+    this.setTabHint(tabHintFor(drill, snapshot.crystals));
   }
 
   /** Push a tab hint to the tablet only when it changes — not at 4 Hz. */
@@ -1475,6 +1490,13 @@ export class TutorialSystem extends createSystem({
     if (tab === activeTabHint) return;
     activeTabHint = tab;
     setTutorialTabHint(tab);
+  }
+
+  /** Same discipline for the tablet lock: push only on change. */
+  private setAllowedKind(kind: string | null): void {
+    if (kind === activeAllowedKind) return;
+    activeAllowedKind = kind;
+    setTutorialAllowedKind(kind);
   }
 
   /**

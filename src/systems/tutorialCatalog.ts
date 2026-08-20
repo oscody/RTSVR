@@ -60,6 +60,9 @@ export type ArrowTarget =
   | { kind: "nearestUnit"; unit: string }
   | { kind: "nearestCrystal" }
   | { kind: "tile"; x: number; y: number }
+  // Points a cone at the tablet itself. The tab PULSE is no longer declared
+  // here — it is derived from what the drill asks you to build and whether you
+  // can afford it yet (`tabHintFor`), so every build step behaves alike.
   | { kind: "tabletTab"; tab: "build" | "crafts" }
   | { kind: "nearestEnemy" }
   /** Base tile stepped toward the incoming spawn edge. */
@@ -374,7 +377,8 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
       ],
     },
     arrows: {
-      intro: { kind: "tabletTab", tab: "crafts" },
+      // No tablet cone: the tab PULSE is derived from affordability now.
+      intro: { kind: "nearestUnit", unit: "miner" },
       meet: [{ kind: "nearestEnemy" }, { kind: "commandCenter" }],
       doing: [{ kind: "nearestEnemy" }, { kind: "commandCenter" }],
     },
@@ -423,7 +427,7 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
       ],
     },
     arrows: {
-      intro: { kind: "tabletTab", tab: "build" },
+      intro: { kind: "commandCenter" },
       meet: [{ kind: "nearestEnemy" }, { kind: "commandCenter" }],
       doing: [{ kind: "nearestEnemy" }, { kind: "threatTile" }],
     },

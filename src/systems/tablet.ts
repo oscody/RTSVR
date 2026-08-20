@@ -59,6 +59,7 @@ import {
   TABLET_TAB_ACTIVE_BORDER,
   TABLET_TAB_INACTIVE_BACKGROUND,
   TABLET_TAB_INACTIVE_BORDER,
+  TABLET_TUTORIAL_LOCKED_OPACITY,
   TABLET_UNIT_BACKGROUND,
   TABLET_Y_OFFSET,
   TUTORIAL_TAB_PULSE_BACKGROUND,
@@ -128,6 +129,46 @@ export function setTutorialTabHint(tab: string | null): void {
   tutorialTabHint = tab;
 }
 
+/**
+ * The one thing the tutorial will let the player build or produce, or null for
+ * no lock.
+ *
+ * Everything else greys out and refuses its click, so "make an astronaut" cannot
+ * be answered by making something else. **Tablet only** — units on the board stay
+ * selectable, so the miner can always be re-tasked and a drill can never strand a
+ * player whose crystal patch runs dry.
+ */
+let tutorialAllowedKind: string | null = null;
+
+export function setTutorialAllowedKind(kind: string | null): void {
+  if (tutorialAllowedKind === kind) return;
+  tutorialAllowedKind = kind;
+  // The tablet only repaints when something it watches changes, and the lock is
+  // module state rather than a component — without this bump the greying would
+  // not appear until the player happened to change something else.
+  tutorialLockRevision += 1;
+}
+
+/** Bumped whenever the lock changes, so the repaint guard can see it. */
+let tutorialLockRevision = 0;
+
+/** Is this build/craft kind currently offerable? */
+function tutorialAllows(kind: string): boolean {
+  return tutorialAllowedKind === null || tutorialAllowedKind === kind;
+}
+
+/**
+ * What to call the locked-to kind in a refusal.
+ *
+ * The raw kind would read "build a astronaut" — and worse, it is the internal
+ * name, which is not always what the card says.
+ */
+function tutorialWants(): string {
+  const kind = tutorialAllowedKind;
+  if (!kind) return "";
+  return getProductionSpec(kind)?.label ?? getBuildingSpec(kind)?.label ?? kind;
+}
+
 type UiElement = UIKit.Text & {
   setProperties(properties: Record<string, unknown>): void;
 };
@@ -175,6 +216,8 @@ export class TabletSystem extends createSystem({
   /** `"<tab>:<lit>"` of the last tutorial pulse write; "" when nothing is lit. */
   private lastTabHintKey = "";
   private tabHintClock = 0;
+  /** Tutorial tablet-lock revision last painted. */
+  private lastLockRevision = -1;
   /** TutorialState.revision last mirrored into the status line. */
   private lastTutorialRevision = Number.NaN;
 
@@ -286,6 +329,7 @@ export class TabletSystem extends createSystem({
       boardState.debugSettings?.getValue(DebugSettings, "revision") ?? 0;
     const performanceRevision =
       performance?.getValue(RuntimePerformance, "revision") ?? 0;
+    const lockRevision = tutorialLockRevision;
     // Before the dirty guard below: the pulse changes with time and nothing
     // else, so anything downstream of that early-out would never animate.
     this.applyTabHint(delta, tablet.getValue(TabletState, "view") ?? "overview");
@@ -301,10 +345,12 @@ export class TabletSystem extends createSystem({
       kills === this.lastKills &&
       selectionRevision === this.lastSelectionRevision &&
       debugRevision === this.lastDebugRevision &&
-      performanceRevision === this.lastPerformanceRevision
+      performanceRevision === this.lastPerformanceRevision &&
+      lockRevision === this.lastLockRevision
     ) {
       return;
     }
+    this.lastLockRevision = lockRevision;
     this.lastTabletRevision = tabletRevision;
     this.lastCrystals = crystals;
     this.lastMined = mined;
@@ -579,6 +625,10 @@ export class TabletSystem extends createSystem({
           this.touch(tablet, `${spec.label} is locked`, "error");
           return;
         }
+        if (!tutorialAllows(spec.kind)) {
+          this.touch(tablet, `Not this step - the drill wants ${tutorialWants()}`, "error");
+          return;
+        }
         tablet.setValue(TabletState, "view", "build");
         tablet.setValue(TabletState, "buildPlacementActive", false);
         tablet.setValue(TabletState, "craftPlacementActive", false);
@@ -596,6 +646,10 @@ export class TabletSystem extends createSystem({
         if (!spec) return;
         if (spec.locked) {
           this.touch(tablet, `${spec.label} is locked`, "error");
+          return;
+        }
+        if (!tutorialAllows(spec.kind)) {
+          this.touch(tablet, `Not this step - the drill wants ${tutorialWants()}`, "error");
           return;
         }
         tablet.setValue(TabletState, "view", "crafts");
@@ -875,16 +929,23 @@ export class TabletSystem extends createSystem({
   private applySelectedCard(kind: string): void {
     for (const spec of BUILDING_CATALOG.filter((item) => !item.locked)) {
       const selected = spec.kind === kind;
-      this.setProps(`build-${spec.kind}`, `${selected}`, {
+      const allowed = tutorialAllows(spec.kind);
+      // The tutorial lock rides on the same pass as selection, so a card can
+      // never end up styled selected AND greyed.
+      this.setProps(`build-${spec.kind}`, `${selected}:${allowed}`, {
         borderColor: selected
           ? TABLET_SELECTED_BUILD_BORDER
           : TABLET_CARD_BORDER,
         borderWidth: selected ? 3 : 1,
+        opacity: allowed ? 1 : TABLET_TUTORIAL_LOCKED_OPACITY,
       });
     }
     const selectedCraftKind =
       this.tabletEntity?.getValue(TabletState, "selectedCraftKind") ?? "none";
     element(this.document!, "build-astronaut")?.setProperties({
+      opacity: tutorialAllows(ASTRONAUT_PRODUCTION_SPEC.kind)
+        ? 1
+        : TABLET_TUTORIAL_LOCKED_OPACITY,
       borderColor:
         selectedCraftKind === ASTRONAUT_PRODUCTION_SPEC.kind && kind === "none"
           ? TABLET_SELECTED_CRAFT_BORDER
@@ -904,6 +965,7 @@ export class TabletSystem extends createSystem({
     );
     for (let slot = 0; slot < 4; slot += 1) {
       const spec = CRAFT_CATALOG[page * 4 + slot];
+      const craftAllowed = !spec || tutorialAllows(spec.kind);
       element(this.document!, `craft-card-${slot}`)?.setProperties({
         display: spec ? "flex" : "none",
         borderColor:
@@ -911,6 +973,10 @@ export class TabletSystem extends createSystem({
             ? TABLET_SELECTED_CRAFT_BORDER
             : TABLET_CARD_BORDER,
         borderWidth: spec?.kind === selectedKind ? 3 : 1,
+        // Greyed while the tutorial is asking for something else. The card stays
+        // visible on purpose — hiding it would teach that the game has fewer
+        // options than it does.
+        opacity: craftAllowed ? 1 : TABLET_TUTORIAL_LOCKED_OPACITY,
       });
       if (!spec) continue;
       this.setProps(`craft-image-${slot}`, spec.image, { src: spec.image });
