@@ -627,6 +627,20 @@ export const TUTORIAL_CARD_BACKGROUND = "rgba(10, 18, 24, 0.9)";
 // "the tutorial is telling you something" never reads as a game state.
 export const TUTORIAL_CARD_BORDER = "#7dd3fc";
 export const TUTORIAL_CARD_TITLE_COLOR = "#7dd3fc";
+// A LOSS must not be dressed as a lesson.
+//
+// Every tutorial card looked identical, so "you have lost your miner and must
+// act" arrived in the same calm blue as "here is the next thing to learn". The
+// words changed and nothing else did, which is exactly how a player reads past
+// them. Amber for a setback you can still recover from, red for a run that
+// cannot continue — the same vocabulary the rest of the game already uses for
+// caution and danger.
+export const TUTORIAL_CARD_RECOVERY_BACKGROUND = "rgba(38, 26, 8, 0.94)";
+export const TUTORIAL_CARD_RECOVERY_BORDER = "#f59e0b";
+export const TUTORIAL_CARD_RECOVERY_TITLE_COLOR = "#fcd34d";
+export const TUTORIAL_CARD_DEAD_END_BACKGROUND = "rgba(42, 12, 12, 0.95)";
+export const TUTORIAL_CARD_DEAD_END_BORDER = "#ef4444";
+export const TUTORIAL_CARD_DEAD_END_TITLE_COLOR = "#fca5a5";
 export const TUTORIAL_CARD_BODY_COLOR = "#e8f4f8";
 export const TUTORIAL_CARD_STEP_COLOR = "#7c93a1";
 // Rules run at 4 Hz — nothing here needs 72 Hz, and the counts are the only

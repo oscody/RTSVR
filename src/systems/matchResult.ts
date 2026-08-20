@@ -10,6 +10,7 @@ import {
 import {
   MatchResultPanel,
   MatchState,
+  TutorialState,
   WaveSource,
   boardState,
 } from "./state.js";
@@ -56,9 +57,21 @@ export class MatchResultSystem extends createSystem({
 
   update(): void {
     const panel = this.panel ?? boardState.matchResultPanel;
-    const status =
+    const matchStatus =
       boardState.waveSource?.getValue(MatchState, "status") ?? "playing";
-    const visible = status === "defeat" || status === "victory";
+    // The tutorial's dead end is read straight off `TutorialState`, NOT pushed
+    // through `MatchState.status`.
+    //
+    // That is deliberate and load-bearing: `advanceTutorial` goes inactive the
+    // moment `matchStatus !== "playing"`, which would clear the very `deadEnd`
+    // flag that raised the panel — the panel would appear and immediately
+    // un-appear. Reading the flag directly keeps the match "playing" (waves are
+    // already held while `deadEnd` is set) and breaks the interlock.
+    const deadEnd =
+      boardState.tutorial?.getValue(TutorialState, "deadEnd") ?? false;
+    const status = deadEnd ? "tutorialDeadEnd" : matchStatus;
+    const visible =
+      status === "defeat" || status === "victory" || status === "tutorialDeadEnd";
     if (!panel?.object3D || status === this.lastStatus) return;
     this.lastStatus = status;
     if (visible) {
@@ -77,6 +90,26 @@ export class MatchResultSystem extends createSystem({
     const victory = status === "victory";
     const waveNumber =
       boardState.waveSource?.getValue(WaveSource, "waveNumber") ?? 1;
+    // The third variant: the tutorial cannot continue. Amber rather than red —
+    // nothing was destroyed and the player did nothing wrong, they simply ran
+    // out of the one resource that buys more resources. Styling it as a defeat
+    // would tell them they lost a fight they were never in.
+    if (status === "tutorialDeadEnd") {
+      this.element("result-panel")?.setProperties({ borderColor: "#f59e0b" });
+      this.element("result-title")?.setProperties({
+        text: "TUTORIAL OVER",
+        color: "#fcd34d",
+      });
+      const baseAlive =
+        boardState.waveSource?.getValue(MatchState, "commandCenterAlive") ??
+        true;
+      this.element("result-body")?.setProperties({
+        text: baseAlive
+          ? "No miner, and too few crystals to build one."
+          : "Your command center was destroyed.",
+      });
+      return;
+    }
     this.element("result-panel")?.setProperties({
       borderColor: victory ? "#22c55e" : "#ef4444",
     });

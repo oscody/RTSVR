@@ -30,6 +30,8 @@ import {
   pathsFor,
   allowedCreateKind,
   savingProgressLine,
+  cardToneFor,
+  recoveryGoal,
   tabHintFor,
   savingTowardFor,
   drillPhase,
@@ -1205,4 +1207,53 @@ test("recovery outranks the drill, or the player is stranded", () => {
     allowedCreateKind(drill, { unit: "astronaut", affordable: true }),
     "astronaut",
   );
+});
+
+// ── Phase 5: recovery and dead-end presentation ─────────────────────────────
+
+test("the card tone distinguishes a lesson from a loss", () => {
+  // The whole point of 5a: three states that must not look alike.
+  assert.equal(cardToneFor({ recovery: null, deadEnd: false }), "normal");
+  assert.equal(
+    cardToneFor({ recovery: { unit: "miner", affordable: true }, deadEnd: false }),
+    "recovery",
+  );
+  // A dead end outranks a recovery, the same way it does in `advanceTutorial` —
+  // if both were somehow set, "you cannot continue" is the true one.
+  assert.equal(
+    cardToneFor({ recovery: { unit: "miner", affordable: true }, deadEnd: true }),
+    "deadEnd",
+  );
+});
+
+test("a recovery prompt is priced", () => {
+  // "Make another miner" with no number leaves the player unable to tell
+  // whether they are 5 crystals away or 50.
+  const miner = recoveryGoal({ unit: "miner", affordable: false })!;
+  assert.equal(miner.kind, "miner");
+  assert.equal(miner.cost, MINER_COST);
+  // A display label, not the internal kind — this is read aloud on the card.
+  assert.ok(miner.label.length > 0);
+  const astronaut = recoveryGoal({ unit: "astronaut", affordable: true })!;
+  assert.equal(astronaut.kind, "astronaut");
+  assert.equal(astronaut.cost, ASTRONAUT_COST);
+  assert.equal(recoveryGoal(null), null);
+});
+
+test("the recovery prompt renders through the same progress line", () => {
+  const goal = recoveryGoal({ unit: "miner", affordable: false });
+  assert.match(savingProgressLine(goal, 20), /20 \/ 60/);
+  assert.match(savingProgressLine(goal, 60), /banked/);
+});
+
+test("the tab pulse follows the recovery, not the drill", () => {
+  // The lock already switches to the lost unit; the pulse must agree, or the
+  // player gets a locked tab with no highlight telling them to go there.
+  const drill = TUTORIAL_DRILLS[indexOf("turret")]!;   // a BUILD-tab drill
+  const miner = { unit: "miner", affordable: true };   // a CRAFTS-tab unit
+  assert.equal(tabHintFor(drill, 9999, miner), "crafts");
+  // Unaffordable: no pulse, because the click behind it would fail.
+  assert.equal(tabHintFor(drill, 9999, { unit: "miner", affordable: false }), null);
+  // No recovery: unchanged behaviour.
+  assert.equal(tabHintFor(drill, 9999, null), "build");
 });

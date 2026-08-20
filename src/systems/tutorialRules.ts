@@ -157,15 +157,64 @@ function article(label: string): string {
 export function tabHintFor(
   drill: TutorialDrill,
   crystals: number,
+  recovery: TutorialRecovery | null = null,
 ): "build" | "crafts" | null {
+  // Recovery outranks the drill, exactly as the tablet lock does. The two must
+  // agree: a pulsing tab over a locked tab, or a lock with no pulse, is worse
+  // than either alone.
+  if (recovery) {
+    return recovery.affordable ? tabForKind(recovery.unit) : null;
+  }
   if (!drill.create) return null;
   if (crystals < drillCost(drill)) return null;
-  // Which TAB the card lives on, which is not the same question as `via`.
-  // The astronaut is produced (`via: "produce"`) but its card sits on the BUILD
-  // tab next to the turret, because it is made at the command center rather
-  // than at a hangar. Deriving the tab from `via` pulsed Crafts and sent the
-  // player to a tab with no astronaut on it.
-  return getCraftSpec(drill.create.kind) ? "crafts" : "build";
+  return tabForKind(drill.create.kind);
+}
+
+/**
+ * Which TAB a unit's card lives on — not the same question as `create.via`.
+ *
+ * The astronaut is produced (`via: "produce"`) but its card sits on the BUILD
+ * tab next to the turret, because it is made at the command center rather than
+ * at a hangar. Deriving the tab from `via` pulsed Crafts and sent the player to
+ * a tab with no astronaut on it.
+ */
+function tabForKind(kind: string): "build" | "crafts" {
+  return getCraftSpec(kind) ? "crafts" : "build";
+}
+
+/**
+ * What a recovery prompt is asking the player to buy, priced.
+ *
+ * Same shape as `savingTowardFor` so the card's progress line renders it with
+ * the same code — a recovery is a thing you are saving for, it just interrupts
+ * rather than waits its turn.
+ */
+export function recoveryGoal(
+  recovery: TutorialRecovery | null,
+): { kind: string; label: string; cost: number } | null {
+  if (!recovery) return null;
+  const cost = recovery.unit === "miner" ? MINER_COST : ASTRONAUT_COST;
+  return { kind: recovery.unit, label: unitLabel(recovery.unit), cost };
+}
+
+/**
+ * How the card should be styled. Three states, and they mean different things:
+ *
+ * - `normal` — here is the next thing to learn.
+ * - `recovery` — you have LOST something and must act. Amber.
+ * - `deadEnd` — the run cannot continue. Red.
+ *
+ * Split out as a pure function so the card's appearance is decided by the same
+ * layer that decides its words, and can be tested without a canvas. Rendering a
+ * loss identically to a lesson was the whole complaint behind Phase 5a.
+ */
+export function cardToneFor(progress: {
+  recovery: TutorialRecovery | null;
+  deadEnd: boolean;
+}): "normal" | "recovery" | "deadEnd" {
+  if (progress.deadEnd) return "deadEnd";
+  if (progress.recovery) return "recovery";
+  return "normal";
 }
 
 /**

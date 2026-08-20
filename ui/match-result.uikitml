@@ -20,10 +20,19 @@
     text-align: center;
   }
 
+  /* Keep this to ONE LINE, and do not add `text-align`.
+     This span rendered NOTHING for a long time and nobody noticed, because both
+     failures are silent — no truncation, no overflow, just no text:
+       - `text-align: center` made it vanish outright, even for short copy.
+       - Copy long enough to wrap vanishes too; the panel is a fixed 250px and
+         drops the whole child rather than clipping it. A 75-character string
+         disappeared; 43 characters renders.
+     At 21px that is roughly 50 characters. Centring comes from the panel's
+     `align-items: center` instead, which is why no width is set here — a width
+     would define a wrap box, and wrapping is the thing that kills it. */
   .result-body {
     color: #edf4f7;
     font-size: 21px;
-    text-align: center;
     margin-top: 18px;
   }
 

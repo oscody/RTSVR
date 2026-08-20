@@ -13,6 +13,12 @@ import {
   TUTORIAL_CARD_BACKGROUND,
   TUTORIAL_CARD_BODY_COLOR,
   TUTORIAL_CARD_BORDER,
+  TUTORIAL_CARD_DEAD_END_BACKGROUND,
+  TUTORIAL_CARD_DEAD_END_BORDER,
+  TUTORIAL_CARD_DEAD_END_TITLE_COLOR,
+  TUTORIAL_CARD_RECOVERY_BACKGROUND,
+  TUTORIAL_CARD_RECOVERY_BORDER,
+  TUTORIAL_CARD_RECOVERY_TITLE_COLOR,
   TUTORIAL_CARD_HEIGHT,
   TUTORIAL_CARD_STEP_COLOR,
   TUTORIAL_CARD_TEXTURE_HEIGHT,
@@ -125,6 +131,8 @@ import {
   advanceGazeProgress,
   gazeFraction,
   allowedCreateKind,
+  cardToneFor,
+  recoveryGoal,
   savingProgressLine,
   savingTowardFor,
   tabHintFor,
@@ -141,6 +149,7 @@ import {
   tutorialGovernsWaves,
   tutorialHoldsWaveCountdown,
   threatTileFor,
+  type TutorialRecovery,
   type TutorialSnapshot,
 } from "./tutorialRules.ts";
 
@@ -174,6 +183,8 @@ let paintedTitle = "";
 let paintedBody = "";
 /** Last progress line painted, so a ticking crystal count repaints but does not move the card. */
 let paintedProgress = "";
+/** Card tone last painted, so a colour change repaints even if the words match. */
+let paintedTone: "normal" | "recovery" | "deadEnd" = "normal";
 /** Last arrow problem reported, so a sustained one logs once, not at 4 Hz. */
 let reportedArrowProblem = "";
 /**
@@ -449,12 +460,37 @@ function wrapLines(
   return lines;
 }
 
+/**
+ * Set a font that makes `text` fit `maxWidth`, shrinking from `basePx` if needed.
+ *
+ * Down to 70% only. Past that the text is small enough that fitting it is no
+ * longer the useful outcome — a line that needs more than a third off is a line
+ * that should be shorter, and capping the shrink makes that visible instead of
+ * silently producing something unreadable.
+ */
+function fitFont(
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  basePx: number,
+  weight: string,
+): void {
+  let size = Math.round(basePx);
+  const floor = Math.round(basePx * 0.7);
+  for (;;) {
+    context.font = `${weight} ${size}px sans-serif`;
+    if (context.measureText(text).width <= maxWidth || size <= floor) return;
+    size -= 1;
+  }
+}
+
 function paintCard(
   title: string,
   body: string,
   step: string,
   dimmedWorld: boolean,
   progress: string,
+  tone: "normal" | "recovery" | "deadEnd" = "normal",
 ): void {
   const context = cardContext;
   if (!context || !cardTexture) return;
@@ -467,14 +503,29 @@ function paintCard(
   // Brighter panel and border while the world is dimmed. The card is unlit so
   // it never darkens — but a near-black panel against a darkened board recedes
   // instead of standing out, which is the opposite of what the beat wants.
-  context.fillStyle = dimmedWorld
-    ? TUTORIAL_CARD_DIM_BACKGROUND
-    : TUTORIAL_CARD_BACKGROUND;
+  // Tone outranks the dim. A recovery or a dead end can happen during a frozen
+  // beat, and "something has gone wrong" is the more important of the two things
+  // the card is saying — so the loss colours win rather than blending.
+  context.fillStyle =
+    tone === "deadEnd"
+      ? TUTORIAL_CARD_DEAD_END_BACKGROUND
+      : tone === "recovery"
+        ? TUTORIAL_CARD_RECOVERY_BACKGROUND
+        : dimmedWorld
+          ? TUTORIAL_CARD_DIM_BACKGROUND
+          : TUTORIAL_CARD_BACKGROUND;
   context.fill();
-  context.lineWidth = dimmedWorld ? 6 : 4;
-  context.strokeStyle = dimmedWorld
-    ? TUTORIAL_CARD_DIM_BORDER
-    : TUTORIAL_CARD_BORDER;
+  // A thicker rule for both loss states: the border is the part read at a
+  // glance, before any of the words.
+  context.lineWidth = tone !== "normal" ? 7 : dimmedWorld ? 6 : 4;
+  context.strokeStyle =
+    tone === "deadEnd"
+      ? TUTORIAL_CARD_DEAD_END_BORDER
+      : tone === "recovery"
+        ? TUTORIAL_CARD_RECOVERY_BORDER
+        : dimmedWorld
+          ? TUTORIAL_CARD_DIM_BORDER
+          : TUTORIAL_CARD_BORDER;
   context.stroke();
 
   const pad = width * 0.045;
@@ -486,7 +537,12 @@ function paintCard(
   context.fillText(step, pad, height * 0.11);
 
   context.font = `bold ${Math.round(height * 0.2)}px sans-serif`;
-  context.fillStyle = TUTORIAL_CARD_TITLE_COLOR;
+  context.fillStyle =
+    tone === "deadEnd"
+      ? TUTORIAL_CARD_DEAD_END_TITLE_COLOR
+      : tone === "recovery"
+        ? TUTORIAL_CARD_RECOVERY_TITLE_COLOR
+        : TUTORIAL_CARD_TITLE_COLOR;
   context.fillText(title, pad, height * 0.26);
 
   context.font = `${Math.round(height * 0.128)}px sans-serif`;
@@ -500,8 +556,13 @@ function paintCard(
   // "Why am I hoarding crystals?" — answered on the card rather than left to
   // the player to work out from the tablet.
   if (progress) {
-    context.font = `600 ${Math.round(height * 0.118)}px sans-serif`;
+    // Fitted, not assumed to fit. This line is the longest thing on the card and
+    // the only one that is not wrapped — "60 crystals banked - you can build a
+    // Mining Craft now" ran off the right edge and lost its last word, which is
+    // the word that says you can act. Shrinking to fit keeps it one line, which
+    // is what makes it readable as a status rather than as more body text.
     context.fillStyle = TUTORIAL_CARD_PROGRESS_COLOR;
+    fitFont(context, progress, width - pad * 2, height * 0.118, "600");
     context.fillText(progress, pad, height * 0.845);
   }
 
@@ -1360,25 +1421,46 @@ export class TutorialSystem extends createSystem({
       body = cardBodyFor(drill, activePhase);
     }
 
-    const savingLine = savingProgressLine(
-      savingTowardFor(progress.drill),
-      snapshot.crystals,
-    );
+    // A recovery is a thing you are saving for too — it just interrupts rather
+    // than waiting its turn — so it renders through the same progress line. That
+    // answers the question a bare "make another miner" leaves open: how much?
+    const tone = cardToneFor(progress);
+    // The dead-end PANEL owns this moment — it is the one surface with a Restart
+    // button on it, and the run cannot continue without pressing that. Leaving
+    // the card up too put two versions of the same sentence in the same patch of
+    // sky, overlapping, with the panel on top.
+    if (cardMesh) cardMesh.visible = tone !== "deadEnd";
+    // ...and no progress line in a dead end. "20 / 35 crystals toward an
+    // Astronaut" is true arithmetic and a lie about the situation: there is no
+    // path from here to an astronaut. A goal shown to a player who cannot reach
+    // it is worse than no goal.
+    const savingLine =
+      tone === "deadEnd"
+        ? ""
+        : savingProgressLine(
+            progress.recovery
+              ? recoveryGoal(progress.recovery)
+              : savingTowardFor(progress.drill),
+            snapshot.crystals,
+          );
     if (
       title !== paintedTitle ||
       body !== paintedBody ||
-      savingLine !== paintedProgress
+      savingLine !== paintedProgress ||
+      tone !== paintedTone
     ) {
       const moved = title !== paintedTitle || body !== paintedBody;
       paintedTitle = title;
       paintedBody = body;
       paintedProgress = savingLine;
+      paintedTone = tone;
       paintCard(
         title,
         body,
         `${progress.drill + 1} / ${TUTORIAL_DRILLS.length}`,
         cardDimmed,
         savingLine,
+        tone,
       );
       // New WORDS, new placement — but not for a ticking crystal count, which
       // changes constantly and would drag the card around the room.
@@ -1388,7 +1470,11 @@ export class TutorialSystem extends createSystem({
     // Lock the tablet to the one thing this step is asking for. Recovery wins,
     // so a dead miner is always rebuildable.
     this.setAllowedKind(allowedCreateKind(drill, progress.recovery));
-    this.applyArrow(drill, progress.recovery !== null || progress.deadEnd);
+    this.applyArrow(
+      drill,
+      progress.recovery !== null || progress.deadEnd,
+      progress.recovery,
+    );
     this.reportArrowProblem(drill);
 
     if (!state) return;
@@ -1462,11 +1548,22 @@ export class TutorialSystem extends createSystem({
    * words carry it. Sending two different instructions at once is worse than
    * sending one.
    */
-  private applyArrow(drill: TutorialDrill, interrupted: boolean): void {
+  private applyArrow(
+    drill: TutorialDrill,
+    interrupted: boolean,
+    recovery: TutorialRecovery | null = null,
+  ): void {
     if (interrupted) {
+      // Board arrows go: during a recovery there is nothing out there to point
+      // at — the lost unit is precisely what does not exist — and a cone over
+      // empty ground during a setback reads as a fault.
       resolvableTargets.length = 0;
       activeArrowTargets = resolvableTargets;
-      this.setTabHint(null);
+      // The TAB PULSE stays, because for a recovery it is the whole instruction:
+      // the thing to do is on the tablet, and the lock has already narrowed it
+      // to one card. Suppressing it left the player told what went wrong and not
+      // where to fix it.
+      this.setTabHint(tabHintFor(drill, snapshot.crystals, recovery));
       return;
     }
     // Keep only the targets that can actually be pointed at. An arrow aimed at
