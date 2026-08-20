@@ -29,6 +29,8 @@ import {
   TUTORIAL_ARROW_COMMAND_CENTER_FALLBACK,
   TUTORIAL_ARROW_COMMAND_CENTER_GAP,
   TUTORIAL_ARROW_TABLET_LIFT,
+  TUTORIAL_RING_DRAIN_RATE,
+  TUTORIAL_RING_WEDGES,
   TUTORIAL_SAMPLE_SECONDS,
   TUTORIAL_THREAT_TILE_STEPS,
 } from "./constants.ts";
@@ -60,6 +62,12 @@ import {
   type TutorialSpawnAnchor,
 } from "./tutorialWaveGate.js";
 import {
+  attachTutorialRingWorld,
+  clearTutorialRing,
+  hideTutorialRing,
+  showTutorialRing,
+} from "./tutorialRing.js";
+import {
   attachTutorialArrowWorld,
   clearTutorialArrow,
   hideTutorialArrow,
@@ -76,6 +84,9 @@ import {
   arrowProblem,
   arrowTargetFor,
   canResolveArrow,
+  advanceGazeProgress,
+  gazeFraction,
+  gazeRequirement,
   interceptTileFor,
   latchDrillStarted,
   nearestCornerTo,
@@ -134,6 +145,13 @@ let drillStarted = false;
  * re-deriving it at sample rate would be pure waste.
  */
 let spawnAnchor: TutorialSpawnAnchor | null = null;
+/**
+ * Seconds of accumulated looking for the current drill. Filled and drained per
+ * FRAME, not per sample — the ring is the feedback, and 4 Hz would visibly step.
+ */
+let gazeProgress = 0;
+/** Last value mirrored into TutorialState.gaze, to avoid a per-frame ECS write. */
+let lastPublishedGaze = -1;
 /** Cached nearest-crystal tile; -1 means none. Refreshed at sample rate. */
 let crystalTileX = -1;
 let crystalTileY = -1;
@@ -154,6 +172,7 @@ const snapshot: TutorialSnapshot = {
   stepElapsedSeconds: 0,
   alertRevision: 0,
   lookingAtCommandCenter: false,
+  gazeProgressSeconds: 0,
   commandCenterAlive: true,
 };
 const tmpAnchor = new Vector3();
@@ -162,6 +181,8 @@ const tmpForward = new Vector3();
 const tmpCardWorld = new Vector3();
 const tmpToCard = new Vector3();
 const tmpArrow = new Vector3();
+/** Where the gaze ring is centred. Owner: updateGazeRing. */
+const tmpRing = new Vector3();
 /** The card's own facing, for the leash's view-angle check. */
 const tmpCardFacing = new Vector3();
 /** Board-root world position, for the card's ground clamp. */
@@ -278,6 +299,9 @@ export function resetTutorial(): void {
   reportedArrowProblem = "";
   activeArrowTarget = null;
   drillStarted = false;
+  gazeProgress = 0;
+  lastPublishedGaze = -1;
+  clearTutorialRing();
   spawnAnchor = null;
   // Re-arm the gate NOW, not on the next 4 Hz sample. Two reasons, both real:
   // for that quarter second the old budget would still be live (enough for a
@@ -391,6 +415,7 @@ export class TutorialSystem extends createSystem({
     // The arrow lives in its own module but must be a real entity, not a bare
     // add() onto the board root — same reason combatEffects captures a world.
     attachTutorialArrowWorld(this.world);
+    attachTutorialRingWorld(this.world);
 
     // Restart the tutorial when the player actually puts the headset on.
     //
@@ -462,6 +487,59 @@ export class TutorialSystem extends createSystem({
     // Every frame, not every sample: the arrow tracks a walking alien, and at
     // 4 Hz it would visibly stutter behind one.
     this.updateArrow(step);
+    this.updateGazeRing(step);
+  }
+
+  /**
+   * Fill the gaze ring while the player is on target, drain it when they are
+   * not, and park it for drills that do not gate on looking.
+   *
+   * Per frame, not per sample. This is the one piece of tutorial feedback where
+   * 4 Hz would be visible — a ring that steps in quarter-second jumps reads as
+   * a stutter rather than as a fill.
+   */
+  private updateGazeRing(delta: number): void {
+    const drill = drillIndex >= 0 ? TUTORIAL_DRILLS[drillIndex] : undefined;
+    if (!drill || drill.trigger.kind !== "lookedAt") {
+      gazeProgress = 0;
+      hideTutorialRing();
+      this.publishGaze(0);
+      return;
+    }
+    const required = gazeRequirement(drill);
+    gazeProgress = advanceGazeProgress(
+      gazeProgress,
+      this.isLookingAtCommandCenter(),
+      delta,
+      required,
+      TUTORIAL_RING_DRAIN_RATE,
+    );
+    // The ring lies on the GROUND around the base, so it wants the base's own
+    // position — not the arrow's, which rides above the whole HUD stack.
+    if (!this.worldOfEntity(boardState.commandCenter, tmpRing)) {
+      hideTutorialRing();
+      return;
+    }
+    const fraction = gazeFraction(gazeProgress, required);
+    showTutorialRing(tmpRing, fraction);
+    this.publishGaze(fraction);
+  }
+
+  /**
+   * Mirror the ring's fill into TutorialState.
+   *
+   * Quantised to the wedge count before comparing, so a continuously changing
+   * float does not write to ECS every frame — the value only moves when the
+   * ring visibly does.
+   */
+  private publishGaze(fraction: number): void {
+    const state = boardState.tutorial;
+    if (!state) return;
+    const stepped =
+      Math.round(fraction * TUTORIAL_RING_WEDGES) / TUTORIAL_RING_WEDGES;
+    if (stepped === lastPublishedGaze) return;
+    lastPublishedGaze = stepped;
+    state.setValue(TutorialState, "gaze", stepped);
   }
 
   /**
@@ -778,6 +856,7 @@ export class TutorialSystem extends createSystem({
     // an arrow hanging over the board and a tab lit that nothing will clear.
     activeArrowTarget = null;
     hideTutorialArrow();
+    hideTutorialRing();
     this.setTabHint(null);
     const state = boardState.tutorial;
     if (!state) return;
@@ -820,9 +899,11 @@ export class TutorialSystem extends createSystem({
     if (progress.advanced) {
       drillIndex = progress.drill;
       killsAtDrillStart = snapshot.enemiesKilled;
-      // A new drill starts its own dwell clock, and its own started latch.
+      // A new drill starts its own dwell clock, its own started latch, and its
+      // own gaze ring.
       drillElapsed = 0;
       drillStarted = false;
+      gazeProgress = 0;
     }
 
     // Before anything visual: the wave system reads this, and it must reflect
@@ -935,6 +1016,7 @@ export class TutorialSystem extends createSystem({
       boardState.underAttackAlert?.getValue(UnderAttackAlertState, "revision") ?? 0;
     snapshot.stepElapsedSeconds = drillElapsed;
     snapshot.lookingAtCommandCenter = this.isLookingAtCommandCenter();
+    snapshot.gazeProgressSeconds = gazeProgress;
     snapshot.commandCenterAlive =
       boardState.waveSource?.getValue(MatchState, "commandCenterAlive") ?? true;
   }

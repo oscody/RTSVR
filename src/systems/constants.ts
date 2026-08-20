@@ -546,3 +546,36 @@ export const TUTORIAL_TAB_PULSE_BORDER = "#7dd3fc";
  * must never be 0, or the wave activates on the next tick while still held.
  */
 export const TUTORIAL_WAVE_ACTIVATION_LEAD_SECONDS = 2;
+
+// ---------------------------------------------------------------------------
+// Tutorial gaze ring — the fill-while-you-look marker.
+//
+// It does not add a cue so much as draw one that already exists: the `orient`
+// drill has two invisible gates (are you facing the base, and have you had time
+// to read), and a player who looks away at 3.5 s has no idea why nothing
+// happened. The ring IS both gates.
+//
+// Built as N pooled wedges toggled by visibility, NOT as one ring whose
+// geometry is rebuilt per frame — that would allocate a geometry inside
+// update(), against the standing no-allocation rule.
+export const TUTORIAL_RING_WEDGES = 24; // 15 degrees each
+// Must CLEAR the thing it surrounds. The command center is 3 tiles wide and its
+// skirt flares wider still, so a 2.2-tile ring was drawn half-buried under the
+// building it was pointing at.
+export const TUTORIAL_RING_RADIUS = TILE_SIZE * 3.4;
+export const TUTORIAL_RING_THICKNESS = TILE_SIZE * 0.34;
+export const TUTORIAL_RING_Y_OFFSET = 0.028; // just above the range rings
+/** Fraction of each wedge left empty, so the ring reads as segmented. */
+export const TUTORIAL_RING_WEDGE_GAP = 0.18;
+export const TUTORIAL_RING_COLOR = 0x7dd3fc; // the tutorial's own hue
+export const TUTORIAL_RING_OPACITY = 0.92;
+/**
+ * How fast the ring empties when the player looks away, as a multiple of the
+ * fill rate.
+ *
+ * Draining is the whole point. A ring that merely PAUSES tells the player
+ * nothing about why it stopped; one that visibly retreats says "come back".
+ * Faster than the fill so the feedback is unmistakable, but not instant —
+ * a glance away should not wipe four seconds of progress.
+ */
+export const TUTORIAL_RING_DRAIN_RATE = 1.6;

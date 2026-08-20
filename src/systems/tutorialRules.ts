@@ -43,6 +43,12 @@ export interface TutorialSnapshot {
   stepElapsedSeconds: number;
   /** Is the command center currently within the player's view cone? */
   lookingAtCommandCenter: boolean;
+  /**
+   * Seconds of accumulated LOOKING, not of elapsed time — it fills while the
+   * player is on target and drains when they are not. This is what the gaze
+   * ring draws, and what a `lookedAt` trigger is measured against.
+   */
+  gazeProgressSeconds: number;
   /** False once the base is gone. Its own dead end — see isDeadEnd. */
   commandCenterAlive: boolean;
   /**
@@ -192,6 +198,42 @@ export function resolveRecovery(
   return null;
 }
 
+/**
+ * How long a `lookedAt` drill needs the player to actually look.
+ *
+ * The same number as `minSeconds`, deliberately: the floor exists so a card is
+ * readable, and for a gaze beat "long enough to read" and "long enough to have
+ * found it" are the same requirement. One knob, one ring, one meaning.
+ */
+export function gazeRequirement(drill: TutorialDrill): number {
+  return Math.max(0, drill.minSeconds ?? 0);
+}
+
+/**
+ * Advance the gaze clock: fill while looking, drain while not.
+ *
+ * Draining is the point. A ring that merely pauses tells the player nothing
+ * about why it stopped; one that visibly retreats says "come back". Pure, with
+ * the previous value passed in, so the caller owns the storage.
+ */
+export function advanceGazeProgress(
+  current: number,
+  looking: boolean,
+  delta: number,
+  required: number,
+  drainRate: number,
+): number {
+  const step = Math.max(0, delta);
+  const next = looking ? current + step : current - step * drainRate;
+  return Math.max(0, Math.min(required, next));
+}
+
+/** 0..1 for the ring, given the drill's requirement. */
+export function gazeFraction(progress: number, required: number): number {
+  if (required <= 0) return 1;
+  return Math.max(0, Math.min(1, progress / required));
+}
+
 /** Trigger evaluation — what gates this drill's opponent, or its completion. */
 function triggerMet(drill: TutorialDrill, snapshot: TutorialSnapshot): boolean {
   switch (drill.trigger.kind) {
@@ -202,7 +244,10 @@ function triggerMet(drill: TutorialDrill, snapshot: TutorialSnapshot): boolean {
     case "crystalsAtLeast":
       return snapshot.crystals >= drill.trigger.amount;
     case "lookedAt":
-      return snapshot.lookingAtCommandCenter;
+      // Accumulated looking, not "is looking right now". The gaze ring makes
+      // this legible: a glance no longer completes the beat, and looking away
+      // visibly costs progress rather than silently pausing it.
+      return snapshot.gazeProgressSeconds >= gazeRequirement(drill);
     case "dwellSeconds":
       return snapshot.stepElapsedSeconds >= drill.trigger.seconds;
   }

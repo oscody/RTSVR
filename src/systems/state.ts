@@ -123,6 +123,12 @@ export const TutorialState = createComponent("TutorialState", {
   body: { type: Types.String, default: "" },
   /** Set while a lost unit needs replacing; blank otherwise. */
   recovery: { type: Types.String, default: "" },
+  /**
+   * Gaze-ring fill, 0..1. Exposed for the same reason the rest of this
+   * component is: the wedges are nested deeper than `scene hierarchy` reaches,
+   * so this is the only way to read the ring from outside the app.
+   */
+  gaze: { type: Types.Float32, default: 0 },
   deadEnd: { type: Types.Boolean, default: false },
   revision: { type: Types.Int32, default: 0 },
 });

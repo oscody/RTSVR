@@ -8,6 +8,9 @@ import {
 } from "../src/systems/tutorialCatalog.ts";
 import {
   ASTRONAUT_COST,
+  advanceGazeProgress,
+  gazeFraction,
+  gazeRequirement,
   CRYSTALS_PER_TRIP,
   MINER_COST,
   advanceTutorial,
@@ -110,13 +113,14 @@ test("the tutorial opens by naming the base and closes by signing off", () => {
 test("a satisfied trigger cannot skip a card before it can be read", () => {
   const orient = TUTORIAL_DRILLS[0];
   assert.ok(orient.minSeconds && orient.minSeconds > 0, "orient needs a floor");
-  // Already looking at the base — the trigger is satisfied from frame one.
-  const looking = snapshot({ lookingAtCommandCenter: true });
-  // …but it must still be on screen long enough to read.
-  assert.equal(isDrillComplete(orient, { ...looking, stepElapsedSeconds: 0 }, 0), false);
-  assert.equal(isDrillComplete(orient, { ...looking, stepElapsedSeconds: 1 }, 0), false);
+  // Since the gaze ring, `minSeconds` is spent in ACCUMULATED LOOKING rather
+  // than in elapsed time — one knob, drawn as the ring. Facing the base from
+  // frame one no longer skips the card; the player has to hold it.
+  const looking = snapshot({ lookingAtCommandCenter: true, stepElapsedSeconds: 600 });
+  assert.equal(isDrillComplete(orient, { ...looking, gazeProgressSeconds: 0 }, 0), false);
+  assert.equal(isDrillComplete(orient, { ...looking, gazeProgressSeconds: 1 }, 0), false);
   assert.equal(
-    isDrillComplete(orient, { ...looking, stepElapsedSeconds: orient.minSeconds! }, 0),
+    isDrillComplete(orient, { ...looking, gazeProgressSeconds: orient.minSeconds! }, 0),
     true,
   );
 });
@@ -137,11 +141,16 @@ test("the orientation beat waits until the player looks at their base", () => {
     isDrillComplete(orient, snapshot({ stepElapsedSeconds: 600 }), 0),
     false,
   );
-  // Looking AND read: both are required.
+  // Looking long enough is what completes it — a glance is not enough, which
+  // is the distinction the gaze ring exists to make visible.
   assert.equal(
     isDrillComplete(
       orient,
-      snapshot({ lookingAtCommandCenter: true, stepElapsedSeconds: 10 }),
+      snapshot({
+        lookingAtCommandCenter: true,
+        gazeProgressSeconds: orient.minSeconds ?? 0,
+        stepElapsedSeconds: 10,
+      }),
       0,
     ),
     true,
@@ -752,4 +761,69 @@ test("every drill that needs a builder can recover one", () => {
       `drill "${drill.id}" needs a builder but would not prompt to replace one`,
     );
   }
+});
+
+// ── Future features: the gaze ring ──────────────────────────────────────────
+
+test("gaze progress fills while looking and drains while not", () => {
+  // Draining is the point. A ring that merely pauses tells the player nothing
+  // about why it stopped; one that retreats says "come back".
+  let progress = advanceGazeProgress(0, true, 1, 4, 1.6);
+  assert.equal(progress, 1);
+  progress = advanceGazeProgress(progress, true, 1, 4, 1.6);
+  assert.equal(progress, 2);
+  progress = advanceGazeProgress(progress, false, 1, 4, 1.6);
+  assert.ok(progress < 2, "looking away must cost progress");
+  assert.equal(progress, 2 - 1.6);
+});
+
+test("gaze progress is clamped at both ends", () => {
+  // Never negative — a long look away must not bank a debt the player then has
+  // to pay back before the ring moves at all.
+  assert.equal(advanceGazeProgress(0, false, 10, 4, 1.6), 0);
+  // And never past the requirement, so the ring cannot overfill.
+  assert.equal(advanceGazeProgress(3.9, true, 10, 4, 1.6), 4);
+});
+
+test("a lookedAt drill completes on accumulated looking, not on a glance", () => {
+  const drill = TUTORIAL_DRILLS[indexOf("orient")]!;
+  const required = gazeRequirement(drill);
+  assert.ok(required > 0, "the orientation beat must require real looking");
+
+  // Looking right now, but no accumulated progress: NOT complete. This is the
+  // bug the ring fixes — a glance used to satisfy the gate.
+  const glance = snapshot({
+    lookingAtCommandCenter: true,
+    gazeProgressSeconds: 0,
+    stepElapsedSeconds: 999,
+  });
+  assert.equal(isDrillComplete(drill, glance, 0), false);
+
+  // Progress banked: complete.
+  const held = snapshot({
+    lookingAtCommandCenter: true,
+    gazeProgressSeconds: required,
+    stepElapsedSeconds: 999,
+  });
+  assert.equal(isDrillComplete(drill, held, 0), true);
+});
+
+test("time alone never completes the orientation beat", () => {
+  // Ten minutes of standing still, looking the wrong way.
+  const drill = TUTORIAL_DRILLS[indexOf("orient")]!;
+  const away = snapshot({
+    lookingAtCommandCenter: false,
+    gazeProgressSeconds: 0,
+    stepElapsedSeconds: 600,
+  });
+  assert.equal(isDrillComplete(drill, away, 0), false);
+});
+
+test("the ring fraction maps progress onto 0..1", () => {
+  assert.equal(gazeFraction(0, 4), 0);
+  assert.equal(gazeFraction(2, 4), 0.5);
+  assert.equal(gazeFraction(4, 4), 1);
+  assert.equal(gazeFraction(9, 4), 1);
+  // A zero requirement must read as full, not divide by zero into NaN.
+  assert.equal(gazeFraction(0, 0), 1);
 });
