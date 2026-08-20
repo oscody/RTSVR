@@ -441,6 +441,23 @@ export const TUTORIAL_CARD_MIN_DISTANCE = 0.45;
 // Dot product of view-forward against the direction to the card, both flattened.
 // ~0.3 is about 70 degrees off-axis — generous, so small head turns do not move it.
 export const TUTORIAL_CARD_FACING_MIN = 0.3;
+// How far the card may be turned AWAY from the viewer before it is re-placed.
+//
+// The leash above only asks where the card IS. On Quest that was not enough: a
+// player who walks around a tabletop board while keeping the card roughly ahead
+// never trips it, and the card stays yawed toward wherever they stood when the
+// text last changed. An edge-on plane is a line — the same failure that made the
+// under-attack beacon invisible. ~0.6 is about 53 degrees off the card's own
+// normal, past which the text starts to foreshorten badly.
+export const TUTORIAL_CARD_VIEW_ANGLE_MIN = 0.6;
+// Floor on the card's height above the board surface.
+//
+// Without it the card is placed purely at `cameraY - DROP`, which is BELOW the
+// board (BOARD_Y = 0.78) for any head under ~1.36 m — leaning in over a
+// table-height board, crouching, or simply being short. On Quest the card sank
+// to its mid-line and the body text was under the terrain. Must clear half the
+// card's own height plus a visible gap.
+export const TUTORIAL_CARD_BOARD_CLEARANCE = TILE_SIZE * 1.6;
 export const TUTORIAL_CARD_TEXTURE_WIDTH = 1024;
 export const TUTORIAL_CARD_TEXTURE_HEIGHT = 272;
 export const TUTORIAL_CARD_BACKGROUND = "rgba(10, 18, 24, 0.9)";
@@ -486,6 +503,21 @@ export const TUTORIAL_ARROW_TIP_GAP = TILE_SIZE * 0.5;
  * Half the panel height clears the top edge.
  */
 export const TUTORIAL_ARROW_TABLET_LIFT = TABLET_PANEL_MAX_HEIGHT / 2;
+/**
+ * Extra clearance above the LEVEL/TROOPS/GEMS strip, on top of the tip gap every
+ * other target already gets.
+ *
+ * Deliberately small. The command center's entity origin is the building's
+ * FOOT, so an arrow placed there sat INSIDE a three-tile-tall building — but
+ * over-correcting is its own failure: a cone parked well clear of the strip
+ * reads as floating in the sky rather than as pointing at anything.
+ */
+export const TUTORIAL_ARROW_COMMAND_CENTER_GAP = TILE_SIZE * 0.08;
+/**
+ * Fallback lift above the command center's foot, for the frames before the HUD
+ * strip exists. Roughly the building's own height plus the stack above it.
+ */
+export const TUTORIAL_ARROW_COMMAND_CENTER_FALLBACK = TILE_SIZE * 3.2;
 /** Bob amplitude and rate. Motion is what makes a small object findable. */
 export const TUTORIAL_ARROW_BOB = TILE_SIZE * 0.33;
 export const TUTORIAL_ARROW_BOB_HZ = 0.9;

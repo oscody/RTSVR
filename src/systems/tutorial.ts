@@ -22,14 +22,20 @@ import {
   TUTORIAL_CARD_FACING_MIN,
   TUTORIAL_CARD_MAX_DISTANCE,
   TUTORIAL_CARD_MIN_DISTANCE,
+  TUTORIAL_CARD_BOARD_CLEARANCE,
+  TUTORIAL_CARD_VIEW_ANGLE_MIN,
   TUTORIAL_CARD_WIDTH,
   TUTORIAL_GAZE_DOT_MIN,
+  TUTORIAL_ARROW_COMMAND_CENTER_FALLBACK,
+  TUTORIAL_ARROW_COMMAND_CENTER_GAP,
   TUTORIAL_ARROW_TABLET_LIFT,
   TUTORIAL_SAMPLE_SECONDS,
   TUTORIAL_THREAT_TILE_STEPS,
 } from "./constants.ts";
 import { GRID_SIZE, gridToWorld, worldToGrid } from "./board.js";
+import { commandCenterHudTopWorldY } from "./commandCenterHud.js";
 import { makeNonInteractive } from "./sharedGeometry.js";
+import { liftAboveScene } from "./underAttackBanner.js";
 import {
   Building,
   ConstructionSite,
@@ -156,6 +162,10 @@ const tmpForward = new Vector3();
 const tmpCardWorld = new Vector3();
 const tmpToCard = new Vector3();
 const tmpArrow = new Vector3();
+/** The card's own facing, for the leash's view-angle check. */
+const tmpCardFacing = new Vector3();
+/** Board-root world position, for the card's ground clamp. */
+const tmpBoardTop = new Vector3();
 // Scratch for the arrow resolvers. Each has ONE owner, because they nest:
 // worldOfInterceptTile holds a unit position while calling worldOfNearestEnemy,
 // which needs an anchor and a cursor of its own. Sharing one scratch between
@@ -477,8 +487,17 @@ export class TutorialSystem extends createSystem({
    */
   private resolveArrowTarget(target: ArrowTarget, out: Vector3): boolean {
     switch (target.kind) {
-      case "commandCenter":
-        return this.worldOfEntity(boardState.commandCenter, out);
+      case "commandCenter": {
+        // Above the LEVEL/TROOPS/GEMS strip, not at the base's origin — that
+        // origin is the building's foot, so the cone ended up inside it.
+        if (!this.worldOfEntity(boardState.commandCenter, out)) return false;
+        const stripTop = commandCenterHudTopWorldY();
+        out.y =
+          stripTop === null
+            ? out.y + TUTORIAL_ARROW_COMMAND_CENTER_FALLBACK
+            : stripTop + TUTORIAL_ARROW_COMMAND_CENTER_GAP;
+        return true;
+      }
       case "nearestUnit":
         return this.worldOfNearestUnit(target.unit, out);
       case "nearestCrystal":
@@ -717,7 +736,28 @@ export class TutorialSystem extends createSystem({
     if (tmpForward.lengthSq() < 1e-6 || tmpToCard.lengthSq() < 1e-6) return;
     tmpForward.normalize();
     tmpToCard.normalize();
-    if (tmpForward.dot(tmpToCard) < TUTORIAL_CARD_FACING_MIN) this.placeCard();
+    if (tmpForward.dot(tmpToCard) < TUTORIAL_CARD_FACING_MIN) {
+      this.placeCard();
+      return;
+    }
+
+    // And how far the card is turned AWAY from the viewer — which the three
+    // checks above do not ask. All of them are about where the card IS; none is
+    // about which way it faces. On Quest that gap showed up as a card sitting
+    // obediently in front of the player and edge-on to them, because they had
+    // walked around it without ever pushing it out of the tested cone.
+    mesh.getWorldDirection(tmpCardFacing);
+    tmpCardFacing.y = 0;
+    if (tmpCardFacing.lengthSq() < 1e-6) return;
+    tmpCardFacing.normalize();
+    // `tmpToCard` points camera -> card, and the card's normal points back at
+    // the viewer, so a well-faced card gives dot == -1 and an edge-on one gives
+    // 0. Hence the negation — comparing the raw dot against a positive
+    // threshold is true even when the card is perfectly square to the viewer,
+    // which re-places every frame and welds the card to the player's head.
+    if (-tmpCardFacing.dot(tmpToCard) < TUTORIAL_CARD_VIEW_ANGLE_MIN) {
+      this.placeCard();
+    }
   }
 
   /**
@@ -1006,7 +1046,15 @@ export class TutorialSystem extends createSystem({
     tmpAnchor
       .copy(tmpCamera)
       .addScaledVector(tmpForward, TUTORIAL_CARD_DISTANCE);
-    tmpAnchor.y = tmpCamera.y - TUTORIAL_CARD_DROP;
+    // Below eye level, but never below the board. `cameraY - DROP` alone puts
+    // the card under the terrain for any head below ~1.36 m, which is what
+    // leaning in over a table-height board does — and the body line, being the
+    // lower half of the card, is the first thing to disappear.
+    rootObject.getWorldPosition(tmpBoardTop);
+    tmpAnchor.y = Math.max(
+      tmpCamera.y - TUTORIAL_CARD_DROP,
+      tmpBoardTop.y + TUTORIAL_CARD_BOARD_CLEARANCE,
+    );
 
     // The mesh hangs off the board root, so convert into that space.
     rootObject.worldToLocal(tmpAnchor);
@@ -1042,6 +1090,11 @@ export class TutorialSystem extends createSystem({
       cardMaterial,
     );
     makeNonInteractive(cardMesh);
+    // Draw over the scene rather than competing with it. `depthWrite: false`
+    // alone still leaves depth TESTING on, so the command center and the
+    // terrain both drew over the card — on Quest it was routinely a sliver
+    // behind the base. Same helper, same reason, as the under-attack banner.
+    liftAboveScene(cardMesh);
     cardMesh.name = "TutorialCard";
     cardMesh.visible = false;
     cardMesh.frustumCulled = false;

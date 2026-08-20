@@ -716,7 +716,7 @@
 <Panel class="tablet">
   <div class="top-row">
     <span class="title">RTS-VR</span>
-    <div class="level-chip">
+    <div id="level-chip" class="level-chip">
       <span class="level-label">Level</span>
       <span id="current-level" class="level-value">1</span>
     </div>

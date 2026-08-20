@@ -106,6 +106,16 @@ function ensureHud(world: {
   return true;
 }
 
+/** Spacer between the three readouts. A string so it measures like the rest. */
+const GAP = "   ";
+/** Fraction of the texture width kept clear at each end. */
+const COMMAND_CENTER_HUD_PAD_RATIO = 0.045;
+
+function fontFor(isLabel: boolean, height: number, scale: number): string {
+  const size = Math.round(height * (isLabel ? 0.3 : 0.42) * scale);
+  return isLabel ? `600 ${size}px sans-serif` : `bold ${size}px sans-serif`;
+}
+
 /** Redraw the strip. Called only when one of the three numbers has changed. */
 function paint(
   level: number,
@@ -128,52 +138,97 @@ function paint(
   context.strokeStyle = COMMAND_CENTER_HUD_BORDER;
   context.stroke();
 
-  const labelFont = `600 ${Math.round(height * 0.3)}px sans-serif`;
-  const valueFont = `bold ${Math.round(height * 0.42)}px sans-serif`;
   const midY = height * 0.54;
   context.textBaseline = "middle";
   context.textAlign = "left";
 
-  let x = width * 0.045;
-  const write = (text: string, font: string, color: string): void => {
-    context.font = font;
-    context.fillStyle = color;
-    context.fillText(text, x, midY);
-    x += context.measureText(text).width;
-  };
-  const gap = (): void => {
-    x += width * 0.03;
+  // Build the line as segments first, then fit it — rather than drawing
+  // left-to-right from a fixed pad and hoping it lands inside the pill.
+  //
+  // It did not. "LEVEL TUTORIAL" is several times wider than "LEVEL 1", so the
+  // gem count ran off the right edge of the texture for the whole tutorial.
+  // Measuring first makes the strip content-independent, which also covers the
+  // cases still ahead of it: TROOPS 100/100, and a five-digit gem count.
+  const ratio = total > 0 ? remaining / total : 0;
+  const label = COMMAND_CENTER_HUD_LABEL_COLOR;
+  const segments: { text: string; label: boolean; color: string }[] = [
+    { text: "LEVEL ", label: true, color: label },
+    // Wave 0 is the tutorial's own level. "LEVEL 0" reads as a bug; the word
+    // says what is actually happening, and its disappearance is the reward for
+    // clearing it.
+    {
+      text: level === TUTORIAL_WAVE_NUMBER ? "TUTORIAL" : String(level),
+      label: false,
+      color: COMMAND_CENTER_HUD_VALUE_COLOR,
+    },
+    { text: GAP, label: true, color: label },
+    { text: "TROOPS ", label: true, color: label },
+    // Remaining AND the level's total. The count alone was ambiguous — "11"
+    // answers neither "how many are left" nor "out of how many", and colour is
+    // too weak a channel to carry that on its own. The total is dimmed so the
+    // number that changes is the one that reads first.
+    {
+      text: String(remaining),
+      label: false,
+      color:
+        ratio <= COMMAND_CENTER_HUD_TROOPS_LOW_RATIO
+          ? COMMAND_CENTER_HUD_TROOPS_LOW_COLOR
+          : COMMAND_CENTER_HUD_TROOPS_HIGH_COLOR,
+    },
+    { text: `/${total}`, label: true, color: label },
+    { text: GAP, label: true, color: label },
+    { text: "GEMS ", label: true, color: label },
+    {
+      text: String(crystals),
+      label: false,
+      color: COMMAND_CENTER_HUD_GEM_COLOR,
+    },
+  ];
+
+  const measure = (scale: number): number => {
+    let total = 0;
+    for (const segment of segments) {
+      context.font = fontFor(segment.label, height, scale);
+      total += context.measureText(segment.text).width;
+    }
+    return total;
   };
 
-  write("LEVEL ", labelFont, COMMAND_CENTER_HUD_LABEL_COLOR);
-  // Wave 0 is the tutorial's own level. "LEVEL 0" reads as a bug; the word says
-  // what is actually happening, and its disappearance is the reward for
-  // clearing it.
-  write(
-    level === TUTORIAL_WAVE_NUMBER ? "TUTORIAL" : String(level),
-    valueFont,
-    COMMAND_CENTER_HUD_VALUE_COLOR,
-  );
-  gap();
-  write("TROOPS ", labelFont, COMMAND_CENTER_HUD_LABEL_COLOR);
-  // Remaining AND the level's total. The count alone was ambiguous — "11"
-  // answers neither "how many are left" nor "out of how many", and colour is
-  // too weak a channel to carry that on its own. The total is dimmed so the
-  // number that changes is the one that reads first.
-  const ratio = total > 0 ? remaining / total : 0;
-  write(
-    String(remaining),
-    valueFont,
-    ratio <= COMMAND_CENTER_HUD_TROOPS_LOW_RATIO
-      ? COMMAND_CENTER_HUD_TROOPS_LOW_COLOR
-      : COMMAND_CENTER_HUD_TROOPS_HIGH_COLOR,
-  );
-  write(`/${total}`, labelFont, COMMAND_CENTER_HUD_LABEL_COLOR);
-  gap();
-  write("GEMS ", labelFont, COMMAND_CENTER_HUD_LABEL_COLOR);
-  write(String(crystals), valueFont, COMMAND_CENTER_HUD_GEM_COLOR);
+  const available = width * (1 - COMMAND_CENTER_HUD_PAD_RATIO * 2);
+  const natural = measure(1);
+  // Text width is linear in font size for a fixed string, so one pass lands it.
+  const scale = natural > available ? available / natural : 1;
+  const finalWidth = scale < 1 ? measure(scale) : natural;
+
+  // Centred, not left-anchored: the pill is a fixed size and the content is
+  // not, so anchoring left leaves a lopsided gap whenever the line is short.
+  let x = (width - finalWidth) / 2;
+  for (const segment of segments) {
+    context.font = fontFor(segment.label, height, scale);
+    context.fillStyle = segment.color;
+    context.fillText(segment.text, x, midY);
+    x += context.measureText(segment.text).width;
+  }
 
   hudTexture.needsUpdate = true;
+}
+
+/**
+ * World-space Y of the top edge of the LEVEL/TROOPS/GEMS strip, or null when it
+ * is not up.
+ *
+ * Exported so the tutorial arrow can sit above the strip rather than at the
+ * command center's origin — which is the building's FOOT, so a marker placed
+ * there with only a tip gap ends up inside a three-tile-tall building.
+ *
+ * Reading the strip's actual position rather than re-deriving the offsets keeps
+ * one source of truth for the stack over the base: move the strip and the arrow
+ * follows it.
+ */
+export function commandCenterHudTopWorldY(): number | null {
+  if (!hudMesh?.visible) return null;
+  hudMesh.getWorldPosition(tmpAnchor);
+  return tmpAnchor.y + COMMAND_CENTER_HUD_HEIGHT / 2;
 }
 
 export function clearCommandCenterHud(): void {
@@ -202,6 +257,21 @@ export class CommandCenterHudSystem extends createSystem({
     const source = boardState.waveSource;
     const level = source?.getValue(WaveSource, "waveNumber") ?? 1;
     const total = waveTotalEnemyCount(level);
+    // Every alive enemy of this wave, RESERVES INCLUDED — deliberately not the
+    // same rule as the tablet's "Enemies alive", which counts only what is on
+    // the board.
+    //
+    // They measure different things and the labels say so. This strip answers
+    // "how much of this wave is left", so it counts down 11/11, 10/11, 9/11 and
+    // reaches 0 when the wave is beaten. The tablet answers "what am I fighting
+    // right now". Narrowing this one to released-only was tried on 2026-08-19
+    // and reverted by the owner: it turned the wave counter into a duplicate of
+    // a number the player can already see by looking at the board, and threw
+    // away the only readout of progress through a wave.
+    //
+    // The cost is that during the tutorial's Act 1 it reads TROOPS 3/3 with an
+    // empty board. That is true of the wave and false of the board; the tablet
+    // is where you look for the board.
     let remaining = 0;
     for (const enemy of this.queries.enemies.entities) {
       if ((enemy.getValue(Health, "current") ?? 0) > 0) remaining += 1;

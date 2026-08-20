@@ -66,6 +66,8 @@ import {
   TUTORIAL_TAB_PULSE_SECONDS,
 } from "./constants.ts";
 import { tabPulseOn } from "./tutorialRules.ts";
+import { tutorialHoldsCountdown } from "./tutorialWaveGate.js";
+import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
 import { getFrameProfileHudLines } from "./frameProfiler.js";
 import {
   clearUnitSelections,
@@ -98,9 +100,11 @@ import {
   RuntimePerformance,
   SelectionState,
   TabletState,
+  TutorialState,
   Unit,
   UnitSelection,
   WaveSource,
+  WaveUnit,
   boardState,
   type DebugSettingKey,
 } from "./state.js";
@@ -166,9 +170,13 @@ export class TabletSystem extends createSystem({
   private lastTabletRevision = Number.NaN;
   private lastWaveNumber = Number.NaN;
   private lastWaveStage = "";
+  /** Tri-state so the first frame always writes. See the wave-banner block. */
+  private lastShowWaveBanner: boolean | null = null;
   /** `"<tab>:<lit>"` of the last tutorial pulse write; "" when nothing is lit. */
   private lastTabHintKey = "";
   private tabHintClock = 0;
+  /** TutorialState.revision last mirrored into the status line. */
+  private lastTutorialRevision = Number.NaN;
 
   init(): void {
     this.createTablet();
@@ -193,13 +201,39 @@ export class TabletSystem extends createSystem({
     const countingDown = waveStage === "countdown";
     if (waveNumber !== this.lastWaveNumber) {
       this.lastWaveNumber = waveNumber;
-      this.setText("current-level", `${waveNumber}`);
+      // The markup renders "Level " + this, so wave 0 reads
+      // "Level 0 - TUTORIAL LEVEL". The HUD strip already said LEVEL TUTORIAL
+      // and the tablet still said "Level 0", which reads as a bug and undercut
+      // the reason the special case exists.
+      //
+      // The chip is sized for one or two digits, so it has to grow with the
+      // text and the value has to drop to label size — otherwise the words
+      // overflow the chip, wrap, and collide with the Restart/Exit row.
+      const tutorialLevel = waveNumber === TUTORIAL_WAVE_NUMBER;
+      this.setText(
+        "current-level",
+        tutorialLevel ? `${waveNumber} - TUTORIAL LEVEL` : `${waveNumber}`,
+      );
+      this.setProps("level-chip", `${tutorialLevel}`, {
+        width: tutorialLevel ? 208 : 86,
+      });
+      this.setProps("current-level", `${tutorialLevel}`, {
+        fontSize: tutorialLevel ? 13 : 20,
+      });
       this.setText("wave-banner-label", `Wave ${waveNumber} incoming in`);
     }
-    if (waveStage !== this.lastWaveStage) {
+    // Hide the incoming-wave banner while the tutorial is holding the
+    // countdown. The timer is parked at the activation lead, so the banner sat
+    // on "Wave 0 incoming in 2" for the whole of Act 1 — a countdown that never
+    // reaches zero, promising something that is not coming until the player
+    // mines. It returns by itself the moment the tutorial releases the hold,
+    // and is untouched when the tutorial is off.
+    const showWaveBanner = countingDown && !tutorialHoldsCountdown();
+    if (showWaveBanner !== this.lastShowWaveBanner) {
+      this.lastShowWaveBanner = showWaveBanner;
       this.lastWaveStage = waveStage;
       element(document, "wave-banner")?.setProperties({
-        display: countingDown ? "flex" : "none",
+        display: showWaveBanner ? "flex" : "none",
       });
     }
     if (countingDown) {
@@ -224,7 +258,27 @@ export class TabletSystem extends createSystem({
     }
     const tabletRevision = tablet.getValue(TabletState, "revision") ?? 0;
     const buildingCount = this.queries.buildings.entities.size;
-    const enemyCount = this.queries.enemies.entities.size;
+    // "Enemies alive" is a claim about the BOARD, so it counts only what is on
+    // it: alive, and released. A wave's reserve is built during the countdown
+    // and sits detached and invisible until released, so counting it said
+    // "3 enemies alive" next to "0 killed" while the board was empty.
+    //
+    // Pre-existing — a normal wave's countdown has the same reserve — but the
+    // tutorial made the window minutes long instead of seconds, which is what
+    // exposed it. The query itself is NOT narrowed: the debug health-rescale
+    // below must still reach reserves, or a released alien would arrive with
+    // stale health.
+    let enemyCount = 0;
+    for (const enemy of this.queries.enemies.entities) {
+      if ((enemy.getValue(Health, "current") ?? 0) <= 0) continue;
+      if (
+        enemy.hasComponent(WaveUnit) &&
+        enemy.getValue(WaveUnit, "stage") === "waiting"
+      ) {
+        continue;
+      }
+      enemyCount += 1;
+    }
     const kills = stats?.getValue(GameStats, "enemiesKilled") ?? 0;
     const selectionRevision =
       boardState.selection?.getValue(SelectionState, "revision") ?? 0;
@@ -235,6 +289,7 @@ export class TabletSystem extends createSystem({
     // Before the dirty guard below: the pulse changes with time and nothing
     // else, so anything downstream of that early-out would never animate.
     this.applyTabHint(delta, tablet.getValue(TabletState, "view") ?? "overview");
+    this.applyTutorialStatus(tablet);
     if (
       tabletRevision === this.lastTabletRevision &&
       crystals === this.lastCrystals &&
@@ -727,6 +782,35 @@ export class TabletSystem extends createSystem({
     // pulse has to forget its state or it would skip the write that puts the
     // highlight back and stay dark until the next flip.
     this.lastTabHintKey = "";
+  }
+
+  /**
+   * Let the tutorial own the status line while it is running.
+   *
+   * `TabletState.status` defaults to "Select an astronaut to build", which was
+   * true when every match started with one standing by the base. With the
+   * tutorial's bare start it is dead-end advice for the whole first drill — it
+   * names a unit the player does not have and cannot afford yet.
+   *
+   * Written only when the tutorial's drill CHANGES, not every frame, so ordinary
+   * gameplay feedback ("Not enough crystals", "Astronaut is constructing") still
+   * appears and persists until the next drill. The tutorial claims the line at
+   * each step; it does not hold it.
+   */
+  private applyTutorialStatus(tablet: Entity): void {
+    const state = boardState.tutorial;
+    if (!state || !(state.getValue(TutorialState, "active") ?? false)) {
+      this.lastTutorialRevision = Number.NaN;
+      return;
+    }
+    const revision = state.getValue(TutorialState, "revision") ?? 0;
+    if (revision === this.lastTutorialRevision) return;
+    this.lastTutorialRevision = revision;
+    const title = state.getValue(TutorialState, "title") ?? "";
+    if (!title) return;
+    // The title only — the card already carries the sentence, and a status line
+    // repeating it in full would be two places saying the same thing at once.
+    this.touch(tablet, title, "info");
   }
 
   /** A tab's normal styling. Shared with the tutorial pulse, which restores it. */
