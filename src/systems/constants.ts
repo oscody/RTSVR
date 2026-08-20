@@ -641,3 +641,15 @@ export const TUTORIAL_SPOTLIGHT_LIGHT_INTENSITY = 11.0;
 export const TUTORIAL_SPOTLIGHT_LIGHT_DISTANCE = 1.6;
 /** Above the base, so the light reads as coming down onto it. */
 export const TUTORIAL_SPOTLIGHT_LIGHT_HEIGHT = 0.55;
+
+/**
+ * Gap between a focused subject's own footprint and the ring around it.
+ *
+ * The radius is DERIVED from the subject's bounds rather than configured per
+ * drill, so a 3-tile command center and a 1-tile alien each get a ring that
+ * fits without anyone tuning a number. This is the clearance on top.
+ */
+export const TUTORIAL_RING_SUBJECT_MARGIN = TILE_SIZE * 0.9;
+
+/** Ring stroke as a fraction of its radius, so small subjects are not all stroke. */
+export const TUTORIAL_RING_THICKNESS_RATIO = 0.1;

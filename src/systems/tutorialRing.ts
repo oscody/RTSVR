@@ -11,6 +11,7 @@ import {
   TUTORIAL_RING_OPACITY,
   TUTORIAL_RING_RADIUS,
   TUTORIAL_RING_THICKNESS,
+  TUTORIAL_RING_THICKNESS_RATIO,
   TUTORIAL_RING_WEDGES,
   TUTORIAL_RING_WEDGE_GAP,
   TUTORIAL_RING_Y_OFFSET,
@@ -45,6 +46,15 @@ let pooledRoot: Object3D | null = null;
 let ringWorld: World | null = null;
 /** How many wedges are currently shown, so a repaint only happens on change. */
 let shownWedges = -1;
+/**
+ * The radius the current wedges were built at.
+ *
+ * Geometry has to be rebuilt when the subject's size changes — a ring sized for
+ * a 3-tile command center is wrong around a 1-tile alien. Rebuilt only when the
+ * radius actually changes (once per beat, not per frame), which is what keeps
+ * this off the no-allocation-in-update rule.
+ */
+let builtRadius = -1;
 
 const tmpLocal = new Vector3();
 
@@ -53,12 +63,17 @@ export function attachTutorialRingWorld(world: World): void {
   ringWorld = world;
 }
 
-function ensureRing(): boolean {
+function ensureRing(radius: number): boolean {
   const root = boardState.boardRoot;
   const rootObject = root?.object3D ?? null;
   if (!root || !rootObject || !ringWorld) return false;
-  if (pooledRoot === rootObject && wedges.length > 0) return true;
+  const sameRadius = Math.abs(radius - builtRadius) < 1e-4;
+  if (pooledRoot === rootObject && wedges.length > 0 && sameRadius) return true;
 
+  // Rebuilding for a new radius: drop the old geometries rather than leaking
+  // one set per subject the tutorial ever focuses.
+  for (const geometry of ringGeometries) geometry.dispose();
+  for (const wedge of wedges) wedge.removeFromParent();
   wedges.length = 0;
   ringGeometries = [];
   // One material for every wedge: they are identical, and sharing keeps the
@@ -74,10 +89,16 @@ function ensureRing(): boolean {
   });
 
   const step = (Math.PI * 2) / TUTORIAL_RING_WEDGES;
+  // Thickness scales with radius so a small subject does not get a ring that is
+  // mostly stroke.
+  const thickness = Math.max(
+    TUTORIAL_RING_THICKNESS * 0.5,
+    radius * TUTORIAL_RING_THICKNESS_RATIO,
+  );
   for (let index = 0; index < TUTORIAL_RING_WEDGES; index += 1) {
     const geometry = new RingGeometry(
-      TUTORIAL_RING_RADIUS - TUTORIAL_RING_THICKNESS,
-      TUTORIAL_RING_RADIUS,
+      Math.max(0.001, radius - thickness),
+      radius,
       4,
       1,
       index * step,
@@ -96,6 +117,7 @@ function ensureRing(): boolean {
     wedges.push(wedge);
   }
   pooledRoot = rootObject;
+  builtRadius = radius;
   shownWedges = -1;
   return true;
 }
@@ -106,8 +128,12 @@ function ensureRing(): boolean {
  * Call every frame it should be up. Wedge visibility is only touched when the
  * count changes, so a still ring costs one comparison.
  */
-export function showTutorialRing(target: Vector3, progress: number): void {
-  if (!ensureRing()) return;
+export function showTutorialRing(
+  target: Vector3,
+  progress: number,
+  radius: number = TUTORIAL_RING_RADIUS,
+): void {
+  if (!ensureRing(radius)) return;
   const rootObject = boardState.boardRoot?.object3D;
   if (!rootObject) return;
 
@@ -139,6 +165,11 @@ export function clearTutorialRing(): void {
   shownWedges = -1;
 }
 
+/** Current ring radius, for tests and debugging. */
+export function tutorialRingRadius(): number {
+  return builtRadius;
+}
+
 /** Genuine teardown only — a rebuilt board root orphans the old wedges. */
 export function disposeTutorialRing(): void {
   for (const wedge of wedges) wedge.removeFromParent();
@@ -149,4 +180,5 @@ export function disposeTutorialRing(): void {
   ringMaterial = null;
   pooledRoot = null;
   shownWedges = -1;
+  builtRadius = -1;
 }

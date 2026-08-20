@@ -1,4 +1,5 @@
 import {
+  Box3,
   Color,
   PointLight,
   Vector3,
@@ -12,11 +13,17 @@ import {
   TUTORIAL_SPOTLIGHT_LIGHT_DISTANCE,
   TUTORIAL_SPOTLIGHT_LIGHT_HEIGHT,
   TUTORIAL_SPOTLIGHT_LIGHT_INTENSITY,
+  TUTORIAL_RING_RADIUS,
+  TUTORIAL_RING_SUBJECT_MARGIN,
 } from "./constants.ts";
-import { boardState } from "./state.js";
 
 /**
- * Lights the command center up while the rest of the world is dimmed.
+ * Lights ONE subject up while the rest of the world is dimmed.
+ *
+ * **Subject-agnostic on purpose.** It takes an `Object3D`, so the same effect
+ * works for the command center, a unit, an alien or a building — which is what
+ * makes "introduce a new thing" a data change in `TUTORIAL_DRILLS` rather than
+ * new code each time.
  *
  * The dim alone was only half the concept art: it darkened everything
  * *including* the thing the player is being told to look at. This is the other
@@ -55,6 +62,8 @@ interface HighlightSlot {
  */
 let spotlight: PointLight | null = null;
 const tmpLightPos = new Vector3();
+const tmpBounds = new Box3();
+const tmpSize = new Vector3();
 
 const slots: HighlightSlot[] = [];
 /** The holder the slots were captured from; a reset rebuilds the base. */
@@ -110,23 +119,42 @@ function capture(holder: Object3D): void {
  * restore** — the same discipline the dim needs, and for the same reason: a base
  * left glowing after the beat is a bug nobody can explain.
  */
-export function setCommandCenterHighlight(factor: number): void {
-  const holder = boardState.commandCenter?.object3D ?? null;
+export function setSpotlightSubject(
+  subject: Object3D | null,
+  position: Vector3 | null,
+  factor: number,
+): void {
+  const holder = subject;
   if (!holder) {
-    // The base is gone (destroyed, or mid-reset). Drop the captured materials
-    // rather than holding references into a disposed model, and kill the light
-    // so it cannot be left burning over an empty tile.
-    if (spotlight) spotlight.intensity = 0;
-    slots.length = 0;
-    capturedHolder = null;
-    applied = -1;
+    // No object to brighten — but a tile target still gets the light, so the
+    // player can see WHERE they are being sent even on bare ground.
+    if (spotlight) {
+      if (position) {
+        spotlight.position.set(
+          position.x,
+          position.y + TUTORIAL_SPOTLIGHT_LIGHT_HEIGHT,
+          position.z,
+        );
+        spotlight.intensity =
+          TUTORIAL_SPOTLIGHT_LIGHT_INTENSITY *
+          Math.max(0, Math.min(1, factor));
+      } else {
+        spotlight.intensity = 0;
+      }
+    }
+    restoreSlots();
     return;
   }
-  if (holder !== capturedHolder) capture(holder);
+  // A different subject (or a rebuilt one) means new materials to capture; the
+  // previous subject must be put back first or it stays lit forever.
+  if (holder !== capturedHolder) {
+    restoreSlots();
+    capture(holder);
+  }
 
   const clamped = Math.max(0, Math.min(1, factor));
-  // The light follows the base every call, since the base can be rebuilt; the
-  // material work below is guarded on change.
+  // The light follows the subject every call — subjects move, and the base can
+  // be rebuilt. The material work below is guarded on change.
   if (spotlight) {
     holder.getWorldPosition(tmpLightPos);
     spotlight.position.set(
@@ -165,9 +193,41 @@ export function setCommandCenterHighlight(factor: number): void {
   }
 }
 
+/** Put every captured material back exactly as authored. */
+function restoreSlots(): void {
+  if (applied <= 0) return;
+  for (const slot of slots) {
+    if (slot.material.emissive) slot.material.emissive.copy(slot.emissive);
+    slot.material.emissiveIntensity = slot.intensity;
+    if (slot.color) slot.material.color!.copy(slot.color);
+  }
+  applied = 0;
+}
+
+/**
+ * A ring radius that fits the subject.
+ *
+ * Measured from the object's own bounds rather than configured per drill: a
+ * 3-tile command center and a 1-tile alien need very different rings, and
+ * deriving it means adding a new subject needs no new tuning. Falls back to the
+ * default radius when there is nothing to measure (tile targets).
+ */
+export function subjectRingRadius(subject: Object3D | null): number {
+  if (!subject) return TUTORIAL_RING_RADIUS;
+  tmpBounds.setFromObject(subject);
+  tmpSize.set(0, 0, 0);
+  tmpBounds.getSize(tmpSize);
+  const footprint = Math.max(tmpSize.x, tmpSize.z) / 2;
+  if (!Number.isFinite(footprint) || footprint <= 0) return TUTORIAL_RING_RADIUS;
+  // Must CLEAR the subject — a ring drawn inside the thing it surrounds reads
+  // as a bug, which is exactly what happened with the command center's skirt.
+  return footprint + TUTORIAL_RING_SUBJECT_MARGIN;
+}
+
 /** Scenario reset: forget the old model's materials. */
-export function clearCommandCenterHighlight(): void {
-  setCommandCenterHighlight(0);
+export function clearSpotlightSubject(): void {
+  restoreSlots();
+  if (spotlight) spotlight.intensity = 0;
   slots.length = 0;
   capturedHolder = null;
   applied = -1;

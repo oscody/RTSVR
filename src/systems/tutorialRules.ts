@@ -41,8 +41,14 @@ export interface TutorialSnapshot {
   liveEnemyCount: number;
   matchStatus: string;
   stepElapsedSeconds: number;
-  /** Is the command center currently within the player's view cone? */
-  lookingAtCommandCenter: boolean;
+  /**
+   * Is the current drill's gaze subject within the player's view cone?
+   *
+   * Deliberately not named for the command center: the focus effect works for
+   * any subject the tutorial can point at, and a snapshot field named after one
+   * of them would have to be renamed the first time it was used for another.
+   */
+  lookingAtFocus: boolean;
   /**
    * Seconds of accumulated LOOKING, not of elapsed time — it fills while the
    * player is on target and drains when they are not. This is what the gaze
@@ -207,6 +213,18 @@ export function resolveRecovery(
  */
 export function gazeRequirement(drill: TutorialDrill): number {
   return Math.max(0, drill.minSeconds ?? 0);
+}
+
+/**
+ * What this drill wants the player to look at, or null if it is not a gaze beat.
+ *
+ * The whole reusability of the focus effect rests here: it returns an
+ * `ArrowTarget`, which the system already knows how to resolve to a position and
+ * an object — so pointing the dim, the light and the ring at an alien instead of
+ * the base is a data change, not a code change.
+ */
+export function gazeTargetFor(drill: TutorialDrill): ArrowTarget | null {
+  return drill.trigger.kind === "lookedAt" ? drill.trigger.target : null;
 }
 
 /**

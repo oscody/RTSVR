@@ -11,6 +11,7 @@ import {
   advanceGazeProgress,
   gazeFraction,
   gazeRequirement,
+  gazeTargetFor,
   CRYSTALS_PER_TRIP,
   MINER_COST,
   advanceTutorial,
@@ -53,7 +54,7 @@ function snapshot(overrides: Partial<TutorialSnapshot> = {}): TutorialSnapshot {
     matchStatus: "playing",
     stepElapsedSeconds: 0,
     alertRevision: 0,
-    lookingAtCommandCenter: false,
+    lookingAtFocus: false,
     commandCenterAlive: true,
     ...overrides,
   };
@@ -116,7 +117,7 @@ test("a satisfied trigger cannot skip a card before it can be read", () => {
   // Since the gaze ring, `minSeconds` is spent in ACCUMULATED LOOKING rather
   // than in elapsed time — one knob, drawn as the ring. Facing the base from
   // frame one no longer skips the card; the player has to hold it.
-  const looking = snapshot({ lookingAtCommandCenter: true, stepElapsedSeconds: 600 });
+  const looking = snapshot({ lookingAtFocus: true, stepElapsedSeconds: 600 });
   assert.equal(isDrillComplete(orient, { ...looking, gazeProgressSeconds: 0 }, 0), false);
   assert.equal(isDrillComplete(orient, { ...looking, gazeProgressSeconds: 1 }, 0), false);
   assert.equal(
@@ -147,7 +148,7 @@ test("the orientation beat waits until the player looks at their base", () => {
     isDrillComplete(
       orient,
       snapshot({
-        lookingAtCommandCenter: true,
+        lookingAtFocus: true,
         gazeProgressSeconds: orient.minSeconds ?? 0,
         stepElapsedSeconds: 10,
       }),
@@ -793,7 +794,7 @@ test("a lookedAt drill completes on accumulated looking, not on a glance", () =>
   // Looking right now, but no accumulated progress: NOT complete. This is the
   // bug the ring fixes — a glance used to satisfy the gate.
   const glance = snapshot({
-    lookingAtCommandCenter: true,
+    lookingAtFocus: true,
     gazeProgressSeconds: 0,
     stepElapsedSeconds: 999,
   });
@@ -801,7 +802,7 @@ test("a lookedAt drill completes on accumulated looking, not on a glance", () =>
 
   // Progress banked: complete.
   const held = snapshot({
-    lookingAtCommandCenter: true,
+    lookingAtFocus: true,
     gazeProgressSeconds: required,
     stepElapsedSeconds: 999,
   });
@@ -812,7 +813,7 @@ test("time alone never completes the orientation beat", () => {
   // Ten minutes of standing still, looking the wrong way.
   const drill = TUTORIAL_DRILLS[indexOf("orient")]!;
   const away = snapshot({
-    lookingAtCommandCenter: false,
+    lookingAtFocus: false,
     gazeProgressSeconds: 0,
     stepElapsedSeconds: 600,
   });
@@ -826,4 +827,42 @@ test("the ring fraction maps progress onto 0..1", () => {
   assert.equal(gazeFraction(9, 4), 1);
   // A zero requirement must read as full, not divide by zero into NaN.
   assert.equal(gazeFraction(0, 0), 1);
+});
+
+test("the focus effect is aimed by data, not by code", () => {
+  // The whole point of the refactor: a gaze beat names an ArrowTarget, and the
+  // dim, the light and the ring all follow it. Pointing the effect at an alien
+  // instead of the base must be a catalog edit, not a code change.
+  const orient = TUTORIAL_DRILLS[indexOf("orient")]!;
+  const target = gazeTargetFor(orient);
+  assert.ok(target, "the orientation beat must declare what to look at");
+  assert.equal(target!.kind, "commandCenter");
+
+  // Any target the arrow can resolve is a legal focus subject.
+  for (const kind of ["nearestEnemy", "nearestUnit", "tile"] as const) {
+    const drill: TutorialDrill = {
+      ...orient,
+      trigger: {
+        kind: "lookedAt",
+        target:
+          kind === "nearestUnit"
+            ? { kind, unit: "miner" }
+            : kind === "tile"
+              ? { kind, x: 3, y: 4 }
+              : { kind },
+      },
+    };
+    assert.equal(gazeTargetFor(drill)?.kind, kind);
+  }
+});
+
+test("drills that are not gaze beats declare no focus", () => {
+  // Otherwise every drill would dim the world.
+  for (const id of ["mine", "astronaut", "racer", "turret", "done"]) {
+    assert.equal(
+      gazeTargetFor(TUTORIAL_DRILLS[indexOf(id)]!),
+      null,
+      `drill "${id}" should not hold the world dimmed`,
+    );
+  }
 });

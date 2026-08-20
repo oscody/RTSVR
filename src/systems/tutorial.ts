@@ -61,8 +61,9 @@ import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
 import { setEnvironmentDim } from "./skySystem.js";
 import {
   attachTutorialSpotlight,
-  clearCommandCenterHighlight,
-  setCommandCenterHighlight,
+  clearSpotlightSubject,
+  setSpotlightSubject,
+  subjectRingRadius,
 } from "./tutorialSpotlight.js";
 import { setTutorialTabHint } from "./tablet.js";
 import {
@@ -96,6 +97,7 @@ import {
   advanceGazeProgress,
   gazeFraction,
   gazeRequirement,
+  gazeTargetFor,
   interceptTileFor,
   latchDrillStarted,
   nearestCornerTo,
@@ -182,7 +184,7 @@ const snapshot: TutorialSnapshot = {
   matchStatus: "playing",
   stepElapsedSeconds: 0,
   alertRevision: 0,
-  lookingAtCommandCenter: false,
+  lookingAtFocus: false,
   gazeProgressSeconds: 0,
   commandCenterAlive: true,
 };
@@ -192,8 +194,10 @@ const tmpForward = new Vector3();
 const tmpCardWorld = new Vector3();
 const tmpToCard = new Vector3();
 const tmpArrow = new Vector3();
-/** Where the gaze ring is centred. Owner: updateGazeRing. */
-const tmpRing = new Vector3();
+/** Where the focus effect is centred. Owner: updateGazeRing. */
+const tmpFocus = new Vector3();
+/** Whether tmpFocus holds a usable position this frame. */
+let focusResolved = false;
 /** The card's own facing, for the leash's view-angle check. */
 const tmpCardFacing = new Vector3();
 /** Board-root world position, for the card's ground clamp. */
@@ -315,7 +319,8 @@ export function resetTutorial(): void {
   clearTutorialRing();
   setEnvironmentDim(1);
   setBoardDim(1);
-  clearCommandCenterHighlight();
+  clearSpotlightSubject();
+  focusResolved = false;
   cardDimmed = false;
   spawnAnchor = null;
   // Re-arm the gate NOW, not on the next 4 Hz sample. Two reasons, both real:
@@ -528,36 +533,110 @@ export class TutorialSystem extends createSystem({
    */
   private updateGazeRing(delta: number): void {
     const drill = drillIndex >= 0 ? TUTORIAL_DRILLS[drillIndex] : undefined;
-    if (!drill || drill.trigger.kind !== "lookedAt") {
+    const target = drill ? gazeTargetFor(drill) : null;
+    if (!drill || !target) {
       gazeProgress = 0;
+      focusResolved = false;
       hideTutorialRing();
       this.publishGaze(0);
       // Whoever dims must restore. This is the path taken every time a gaze
       // beat completes, so it is the one that matters most.
-      this.setWorldDim(1);
+      this.clearFocus();
       return;
     }
+
+    // ONE resolution serves all three effects — the light, the ring and the
+    // gaze test — so they cannot end up pointed at different things.
+    focusResolved = this.resolveArrowTarget(target, tmpFocus);
+    const subject = this.objectOfArrowTarget(target);
+
     // The world dims while the tutorial is waiting on the player's attention.
-    // The cone and ring are `toneMapped: false` and do not dim with it, which
-    // is what supplies the contrast.
+    // The card, cone and ring are `toneMapped: false` and do not dim with it,
+    // which is what supplies the contrast.
     this.setWorldDim(TUTORIAL_DIM_FACTOR);
+    setSpotlightSubject(subject, focusResolved ? tmpFocus : null, 1);
+
     const required = gazeRequirement(drill);
     gazeProgress = advanceGazeProgress(
       gazeProgress,
-      this.isLookingAtCommandCenter(),
+      this.isLookingAt(focusResolved ? tmpFocus : null),
       delta,
       required,
       TUTORIAL_RING_DRAIN_RATE,
     );
-    // The ring lies on the GROUND around the base, so it wants the base's own
-    // position — not the arrow's, which rides above the whole HUD stack.
-    if (!this.worldOfEntity(boardState.commandCenter, tmpRing)) {
+
+    if (!focusResolved) {
       hideTutorialRing();
       return;
     }
+    // The ring lies on the GROUND around the subject, so it takes the subject's
+    // own position and sizes itself to the subject's footprint — a 3-tile
+    // building and a 1-tile alien need very different radii.
     const fraction = gazeFraction(gazeProgress, required);
-    showTutorialRing(tmpRing, fraction);
+    showTutorialRing(tmpFocus, fraction, subjectRingRadius(subject));
     this.publishGaze(fraction);
+  }
+
+  /** Restore the world and drop the focus. Idempotent. */
+  private clearFocus(): void {
+    this.setWorldDim(1);
+    setSpotlightSubject(null, null, 0);
+  }
+
+  /**
+   * The Object3D behind an arrow target, when there is one.
+   *
+   * Tile targets have no object — the light still goes to the position, but
+   * there are no materials to brighten. That is correct: a tile is ground.
+   */
+  private objectOfArrowTarget(target: ArrowTarget): Object3D | null {
+    switch (target.kind) {
+      case "commandCenter":
+        return boardState.commandCenter?.object3D ?? null;
+      case "nearestUnit":
+        return this.nearestUnitObject(target.unit);
+      case "nearestEnemy":
+        return this.nearestEnemyObject();
+      default:
+        return null;
+    }
+  }
+
+  private nearestUnitObject(kind: string): Object3D | null {
+    this.camera.getWorldPosition(tmpCamera);
+    let best = Number.POSITIVE_INFINITY;
+    let found: Object3D | null = null;
+    for (const unit of this.queries.units.entities) {
+      if ((unit.getValue(Health, "current") ?? 0) <= 0) continue;
+      if (unit.getValue(Unit, "kind") !== kind) continue;
+      const object = unit.object3D;
+      if (!object) continue;
+      object.getWorldPosition(tmpScan);
+      const distance = tmpScan.distanceToSquared(tmpCamera);
+      if (distance >= best) continue;
+      best = distance;
+      found = object;
+    }
+    return found;
+  }
+
+  private nearestEnemyObject(): Object3D | null {
+    if (!this.worldOfEntity(boardState.commandCenter, tmpFrom)) {
+      this.camera.getWorldPosition(tmpFrom);
+    }
+    let best = Number.POSITIVE_INFINITY;
+    let found: Object3D | null = null;
+    for (const enemy of this.queries.enemies.entities) {
+      if ((enemy.getValue(Health, "current") ?? 0) <= 0) continue;
+      const object = enemy.object3D;
+      if (!object) continue;
+      object.getWorldPosition(tmpScan);
+      const distance = tmpScan.distanceToSquared(tmpFrom);
+      if (distance >= best) continue;
+      best = distance;
+      found = object;
+    }
+    return found;
   }
 
   /**
@@ -582,7 +661,6 @@ export class TutorialSystem extends createSystem({
     // dim that darkens the thing the player is being told to look at is only
     // half the idea.
     const dimmed = factor < 1;
-    setCommandCenterHighlight(dimmed ? 1 : 0);
     if (dimmed !== cardDimmed) {
       cardDimmed = dimmed;
       // Force the next evaluate() to repaint in the other palette.
@@ -1082,7 +1160,9 @@ export class TutorialSystem extends createSystem({
     snapshot.alertRevision =
       boardState.underAttackAlert?.getValue(UnderAttackAlertState, "revision") ?? 0;
     snapshot.stepElapsedSeconds = drillElapsed;
-    snapshot.lookingAtCommandCenter = this.isLookingAtCommandCenter();
+    snapshot.lookingAtFocus = focusResolved
+      ? this.isLookingAt(tmpFocus)
+      : true;
     snapshot.gazeProgressSeconds = gazeProgress;
     snapshot.commandCenterAlive =
       boardState.waveSource?.getValue(MatchState, "commandCenterAlive") ?? true;
@@ -1150,13 +1230,12 @@ export class TutorialSystem extends createSystem({
    * as facing it, which matters on a table-height board where a standing player
    * looks down.
    */
-  private isLookingAtCommandCenter(): boolean {
-    const holder = boardState.commandCenter?.object3D ?? null;
-    // No base to find (destroyed, or not yet built): never stall the tutorial.
-    if (!holder) return true;
+  private isLookingAt(worldPoint: Vector3 | null): boolean {
+    // Nothing to find (destroyed, or not yet built): never stall the tutorial.
+    if (!worldPoint) return true;
 
     this.camera.getWorldPosition(tmpCamera);
-    holder.getWorldPosition(tmpCardWorld);
+    tmpCardWorld.copy(worldPoint);
     tmpToCard.copy(tmpCardWorld).sub(tmpCamera);
     tmpToCard.y = 0;
     this.camera.getWorldDirection(tmpForward);

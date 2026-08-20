@@ -12,7 +12,7 @@ import { clearMinerAnimations } from "./minerAnimation.js";
 import { clearUnitSelections, updateCommandGridVisibility } from "./selection.js";
 import { clearTurretAnimations } from "./turretAnimation.js";
 import { isTutorialEnabled, resetTutorial } from "./tutorial.js";
-import { clearCommandCenterHighlight } from "./tutorialSpotlight.js";
+import { clearSpotlightSubject } from "./tutorialSpotlight.js";
 import { resetUnderAttackAlert } from "./underAttackAlert.js";
 import { clearUnderAttackVfx } from "./underAttackVfx.js";
 import { clearUnitAnimations } from "./unitAnimation.js";
@@ -85,7 +85,7 @@ export class ScenarioResetSystem extends createSystem({
     resetTutorial();
     clearUnderAttackVfx();
     // The base is about to be rebuilt; drop references into the old model.
-    clearCommandCenterHighlight();
+    clearSpotlightSubject();
     clearDimmableScenario();
     resetUnderAttackAlert();
     for (const ring of boardState.selectionRingByUnit.values()) ring.dispose();

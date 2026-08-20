@@ -77,8 +77,16 @@ export interface TutorialDrill {
   trigger:
     | { kind: "minerTrips"; count: number }
     | { kind: "crystalsAtLeast"; amount: number }
-    /** Completes when the player actually looks at the thing being named. */
-    | { kind: "lookedAt"; target: "commandCenter" }
+    /**
+     * Completes when the player actually looks at the thing being named.
+     *
+     * `target` is a full `ArrowTarget`, so this works for ANY subject the
+     * tutorial can already point at — the base, a unit, an alien, a building.
+     * The focus effect (dim the world, light the subject, ring it) follows the
+     * same target, so introducing a new thing is one drill entry rather than a
+     * new mechanism.
+     */
+    | { kind: "lookedAt"; target: ArrowTarget }
     /** Last resort for beats with genuinely nothing to react to. */
     | { kind: "dwellSeconds"; seconds: number }
     | { kind: "immediate" };
@@ -125,7 +133,7 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     // their base — and from the default XR position the base is BEHIND them, so
     // a timer would routinely elapse while they stare at empty terrain. This
     // completes only once they have actually turned and looked at it.
-    trigger: { kind: "lookedAt", target: "commandCenter" },
+    trigger: { kind: "lookedAt", target: { kind: "commandCenter" } },
     // Long enough to read two lines. Without it, anyone already facing their
     // base skips the only step that explains what it is.
     minSeconds: 4,
