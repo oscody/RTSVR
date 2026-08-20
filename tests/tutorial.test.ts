@@ -644,13 +644,12 @@ test("the arrow follows the phase, not the live read", () => {
     kind: "tabletTab",
     tab: "crafts",
   });
-  // The meet beat points at what just arrived...
-  assert.deepEqual(arrowTargetsFor(drill, idle, "meet")[0], {
-    kind: "nearestEnemy",
-  });
-  // ...and then at where to answer it, plus the thing itself.
+  // The meet beat points at BOTH ends of the red route: what arrived, and what
+  // it is walking at. "This is coming, and it is going THERE."
+  const meet = arrowTargetsFor(drill, idle, "meet").map((t) => t.kind);
+  assert.deepEqual(meet, ["nearestEnemy", "commandCenter"]);
   const doing = arrowTargetsFor(drill, idle, "doing").map((t) => t.kind);
-  assert.deepEqual(doing, ["interceptTile", "nearestEnemy"]);
+  assert.deepEqual(doing, ["nearestEnemy", "commandCenter"]);
 });
 
 // ── Step 3: the meet beat ───────────────────────────────────────────────────
@@ -708,7 +707,7 @@ test("the focus follows the phase", () => {
   assert.equal(focusTargetFor(orient, "intro")?.kind, "commandCenter");
 });
 
-test("every combat drill draws the threat in red and the answer in blue", () => {
+test("every combat drill draws the threat in red", () => {
   for (const drill of TUTORIAL_DRILLS) {
     if (!drill.opponent) continue;
     const meet = pathsFor(drill, "meet");
@@ -718,7 +717,23 @@ test("every combat drill draws the threat in red and the answer in blue", () => 
     );
     const doing = pathsFor(drill, "doing").map((p) => p.style);
     assert.ok(doing.includes("hostile"), `drill "${drill.id}" lost the threat path`);
-    assert.ok(doing.includes("friendly"), `drill "${drill.id}" lost the answer path`);
+  }
+});
+
+test("only drills that SEND a unit draw a blue route", () => {
+  // A blue trail is a journey. The turret is built where you place it and never
+  // travels, so a route from the base to the tile would be drawing a walk that
+  // never happens — the cone already says where to put it.
+  const sends = new Set(["mine", "astronaut", "racer"]);
+  for (const drill of TUTORIAL_DRILLS) {
+    const blue = (["intro", "meet", "doing"] as const).some((phase) =>
+      pathsFor(drill, phase).some((p) => p.style === "friendly"),
+    );
+    assert.equal(
+      blue,
+      sends.has(drill.id),
+      `drill "${drill.id}" blue route: expected ${sends.has(drill.id)}`,
+    );
   }
 });
 
@@ -1022,7 +1037,11 @@ test("a drill's path is declared, not coded", () => {
     astronaut.map((p) => p.style).sort(),
     ["friendly", "hostile"],
   );
-  assert.equal(astronaut.find((p) => p.style === "friendly")?.to.kind, "interceptTile");
+  // Both routes end at the SAME place — the thing under threat. The lesson is
+  // "get there before it does", not "stand on a marked tile".
+  const red = astronaut.find((p) => p.style === "hostile")!;
+  const blue = astronaut.find((p) => p.style === "friendly")!;
+  assert.deepEqual(blue.to, red.to);
 });
 
 test("instruction beats declare no path", () => {
@@ -1059,5 +1078,32 @@ test("every path endpoint is a target the system can resolve", () => {
     }
     }
     }
+  }
+});
+
+test("the second cone marks where the alien is going", () => {
+  // Cone 1 on the thing that arrived, cone 2 on what it is walking at — the two
+  // ends of the red route.
+  for (const drill of TUTORIAL_DRILLS) {
+    if (!drill.opponent) continue;
+    const meet = arrowTargetsFor(drill, snapshot(), "meet");
+    assert.equal(meet[0]?.kind, "nearestEnemy", `drill "${drill.id}"`);
+    const red = pathsFor(drill, "meet").find((p) => p.style === "hostile");
+    assert.deepEqual(meet[1], red!.to, `drill "${drill.id}" cone 2 vs red route end`);
+  }
+});
+
+test("a sent unit is told to defend the thing, not to stand on a tile", () => {
+  // Drills where the player SENDS a unit route it to the same place the alien
+  // is heading. The turret has no blue route at all — it is built, not sent.
+  for (const id of ["astronaut", "racer"]) {
+    const drill = TUTORIAL_DRILLS[indexOf(id)]!;
+    const paths = pathsFor(drill, "doing");
+    const red = paths.find((p) => p.style === "hostile")!;
+    const blue = paths.find((p) => p.style === "friendly")!;
+    assert.deepEqual(blue.to, red.to, `drill "${id}"`);
+    // And it starts at the unit being taught, so it cannot draw before the
+    // player has made one.
+    assert.equal(blue.from.kind, "nearestUnit");
   }
 });

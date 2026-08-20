@@ -67,6 +67,7 @@ import {
   clearSpotlightSubject,
   setSpotlightSubject,
   subjectRingRadius,
+  subjectTopWorldY,
 } from "./tutorialSpotlight.js";
 import { setTutorialTabHint } from "./tablet.js";
 import {
@@ -849,11 +850,15 @@ export class TutorialSystem extends createSystem({
         return true;
       }
       case "nearestUnit":
-        return this.worldOfNearestUnit(target.unit, out);
+        if (!this.worldOfNearestUnit(target.unit, out)) return false;
+        this.raiseToSubjectTop(this.nearestUnitObject(target.unit), out);
+        return true;
       case "nearestCrystal":
         return this.worldOfNearestCrystal(out);
       case "nearestEnemy":
-        return this.worldOfNearestEnemy(out);
+        if (!this.worldOfNearestEnemy(out)) return false;
+        this.raiseToSubjectTop(this.nearestEnemyObject(), out);
+        return true;
       case "tile":
         return this.worldOfTile(target.x, target.y, out);
       case "tabletTab": {
@@ -913,6 +918,18 @@ export class TutorialSystem extends createSystem({
       if (unit.getValue(Unit, "kind") === kind) return unit;
     }
     return null;
+  }
+
+  /**
+   * Lift a resolved point to the top of its subject's bounds.
+   *
+   * Entity origins sit at a model's feet, and a flier's visual is lifted off
+   * its origin as well — so a cone placed at the origin ends up inside the
+   * body. No-op when there is nothing to measure (tile targets are ground).
+   */
+  private raiseToSubjectTop(subject: Object3D | null, out: Vector3): void {
+    const top = subjectTopWorldY(subject);
+    if (top !== null && top > out.y) out.y = top;
   }
 
   private worldOfEntity(

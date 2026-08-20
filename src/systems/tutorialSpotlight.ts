@@ -64,6 +64,7 @@ let spotlight: PointLight | null = null;
 const tmpLightPos = new Vector3();
 const tmpBounds = new Box3();
 const tmpSize = new Vector3();
+const tmpTop = new Vector3();
 
 const slots: HighlightSlot[] = [];
 /** The holder the slots were captured from; a reset rebuilds the base. */
@@ -212,13 +213,59 @@ function restoreSlots(): void {
  * deriving it means adding a new subject needs no new tuning. Falls back to the
  * default radius when there is nothing to measure (tile targets).
  */
+/**
+ * Height of a subject's bounds above its own origin, cached per object.
+ *
+ * A model's local shape does not change — only its transform — so this is
+ * measured **once per subject** rather than every frame. `setFromObject`
+ * traverses the whole subtree and expands over geometry bounds, which is not
+ * something to do three times a frame for a marker that only needs a number.
+ *
+ * Keyed weakly, so a disposed model does not keep an entry alive.
+ */
+const subjectHeights = new WeakMap<Object3D, number>();
+
+/**
+ * World Y of the TOP of a subject, or null if it has no measurable bounds.
+ *
+ * **Why not `ALIEN_DRAKE_VISUAL_ELEVATION`?** That constant, and
+ * `entityVisualElevation()` in `combatEffects.ts`, answer a different question:
+ * where a flier's body *starts* above its ground anchor. Aim points want that —
+ * you shoot at the body. A marker above the head wants where the body *ends*,
+ * which is the elevation PLUS the model's own height, and only the model knows
+ * the second half. Placing a cone with the constant alone puts it at 0.258 on a
+ * drake, which is still inside it.
+ *
+ * A per-type table of model heights would work and would rot the first time an
+ * asset was swapped. Measuring the model cannot.
+ */
+export function subjectTopWorldY(subject: Object3D | null): number | null {
+  if (!subject) return null;
+  let height = subjectHeights.get(subject);
+  if (height === undefined) {
+    tmpBounds.setFromObject(subject);
+    const top = tmpBounds.max.y;
+    if (!Number.isFinite(top)) return null;
+    subject.getWorldPosition(tmpTop);
+    height = top - tmpTop.y;
+    subjectHeights.set(subject, height);
+  }
+  subject.getWorldPosition(tmpTop);
+  return tmpTop.y + height;
+}
+
+const subjectRadii = new WeakMap<Object3D, number>();
+
 export function subjectRingRadius(subject: Object3D | null): number {
   if (!subject) return TUTORIAL_RING_RADIUS;
+  const cached = subjectRadii.get(subject);
+  if (cached !== undefined) return cached;
   tmpBounds.setFromObject(subject);
   tmpSize.set(0, 0, 0);
   tmpBounds.getSize(tmpSize);
   const footprint = Math.max(tmpSize.x, tmpSize.z) / 2;
   if (!Number.isFinite(footprint) || footprint <= 0) return TUTORIAL_RING_RADIUS;
+  subjectRadii.set(subject, footprint + TUTORIAL_RING_SUBJECT_MARGIN);
   // Must CLEAR the subject — a ring drawn inside the thing it surrounds reads
   // as a bug, which is exactly what happened with the command center's skirt.
   return footprint + TUTORIAL_RING_SUBJECT_MARGIN;

@@ -304,7 +304,11 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
           to: { kind: "nearestUnit", unit: "miner" },
         },
       ],
-      // Then both: what is coming, and where to put the answer.
+      // Then both: what is coming, and your answer heading for the same place.
+      // The blue route ends where the RED one does — the thing under threat —
+      // so the instruction is "get there before it does", not "stand on a tile".
+      // It only appears once the astronaut exists; until then it cannot resolve
+      // and nothing is drawn.
       doing: [
         {
           style: "hostile",
@@ -314,15 +318,16 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
         {
           style: "friendly",
           from: { kind: "nearestUnit", unit: "astronaut" },
-          to: { kind: "interceptTile" },
+          to: { kind: "nearestUnit", unit: "miner" },
         },
       ],
     },
     arrows: {
       intro: { kind: "nearestUnit", unit: "miner" },
-      meet: { kind: "nearestEnemy" },
-      // "Put it there, to stop that" — the tile, and the thing.
-      doing: [{ kind: "interceptTile" }, { kind: "nearestEnemy" }],
+      // The thing that arrived, and where it is walking — the two ends of the
+      // red route. "This is coming, and it is going THERE."
+      meet: [{ kind: "nearestEnemy" }, { kind: "nearestUnit", unit: "miner" }],
+      doing: [{ kind: "nearestEnemy" }, { kind: "nearestUnit", unit: "miner" }],
     },
     cards: {
       title: "Defend your miner",
@@ -360,14 +365,14 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
         {
           style: "friendly",
           from: { kind: "nearestUnit", unit: "racer" },
-          to: { kind: "nearestEnemy" },
+          to: { kind: "commandCenter" },
         },
       ],
     },
     arrows: {
       intro: { kind: "tabletTab", tab: "crafts" },
-      meet: { kind: "nearestEnemy" },
-      doing: [{ kind: "interceptTile" }, { kind: "nearestEnemy" }],
+      meet: [{ kind: "nearestEnemy" }, { kind: "commandCenter" }],
+      doing: [{ kind: "nearestEnemy" }, { kind: "commandCenter" }],
     },
     cards: {
       title: "Meet the flyer",
@@ -394,14 +399,10 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
       hunts: "commandCenter",
     },
     path: {
-      // From the base out toward the threat: "build on the side they come from".
-      intro: [
-        {
-          style: "friendly",
-          from: { kind: "commandCenter" },
-          to: { kind: "threatTile" },
-        },
-      ],
+      // No blue route on this drill. A turret is BUILT, not sent — there is no
+      // unit walking anywhere, so a blue trail would be drawing a journey that
+      // never happens. The `threatTile` cone already says where to put it.
+      intro: [],
       meet: [
         {
           style: "hostile",
@@ -415,17 +416,12 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
           from: { kind: "nearestEnemy" },
           to: { kind: "commandCenter" },
         },
-        {
-          style: "friendly",
-          from: { kind: "commandCenter" },
-          to: { kind: "threatTile" },
-        },
       ],
     },
     arrows: {
       intro: { kind: "tabletTab", tab: "build" },
-      meet: { kind: "nearestEnemy" },
-      doing: [{ kind: "threatTile" }, { kind: "nearestEnemy" }],
+      meet: [{ kind: "nearestEnemy" }, { kind: "commandCenter" }],
+      doing: [{ kind: "nearestEnemy" }, { kind: "threatTile" }],
     },
     cards: {
       title: "Build a turret",
