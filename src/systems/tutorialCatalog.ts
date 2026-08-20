@@ -29,6 +29,9 @@ export const TUTORIAL_ENABLED = true;
  * must resolve to "no target" in that case rather than falling back to the
  * origin — see `arrowNeedsCommandCenter`.
  */
+/** One target, several, or none. See `TutorialDrill.arrows`. */
+export type ArrowTargets = ArrowTarget | readonly ArrowTarget[] | null;
+
 export type ArrowTarget =
   | { kind: "commandCenter" }
   | { kind: "nearestUnit"; unit: string }
@@ -109,8 +112,12 @@ export interface TutorialDrill {
    * Where to point, per card phase — mirroring `cards`, because the script
    * genuinely needs two: "Build tab, THEN the tile you should place on".
    * `hasDrillStarted()` picks which. null means point at nothing.
+   *
+   * An ARRAY points at several things at once. Some instructions are about a
+   * relationship rather than a place — "send this unit to that patch" is two
+   * subjects, and one cone can only ever say half of it.
    */
-  arrows: { intro: ArrowTarget | null; doing: ArrowTarget | null };
+  arrows: { intro: ArrowTargets; doing: ArrowTargets };
 }
 
 /**
@@ -160,11 +167,18 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     trigger: { kind: "minerTrips", count: 4 },
     // The miner cannot attack, so this drill must have no opponent.
     opponent: null,
-    // Point at the crystals while asking; at the miner once it is working, so
-    // the arrow follows the thing the player should be watching.
+    // BOTH, in both phases: this drill is about a relationship — that craft
+    // goes to those crystals — and a single cone can only ever name one end of
+    // it. The miner first, because it is the thing the player has to click.
     arrows: {
-      intro: { kind: "nearestCrystal" },
-      doing: { kind: "nearestUnit", unit: "miner" },
+      intro: [
+        { kind: "nearestUnit", unit: "miner" },
+        { kind: "nearestCrystal" },
+      ],
+      doing: [
+        { kind: "nearestUnit", unit: "miner" },
+        { kind: "nearestCrystal" },
+      ],
     },
     cards: {
       title: "Mine your first crystals",

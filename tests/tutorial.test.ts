@@ -18,6 +18,7 @@ import {
   arrowNeedsCommandCenter,
   arrowProblem,
   arrowTargetFor,
+  arrowTargetsFor,
   canResolveArrow,
   drillCost,
   drillUnitCanFight,
@@ -230,13 +231,15 @@ test("every drill declares an arrow for both card phases", () => {
 
 test("the arrow follows the card from intro to doing", () => {
   const mine = drillById("mine");
-  // Asking: point at the crystals.
-  assert.deepEqual(arrowTargetFor(mine, snapshot()), { kind: "nearestCrystal" });
-  // Working: point at the miner doing the work.
-  assert.deepEqual(arrowTargetFor(mine, snapshot({ ordersIssued: 1 })), {
-    kind: "nearestUnit",
-    unit: "miner",
-  });
+  // Since 2a this drill points at BOTH ends of the relationship in both phases,
+  // so the assertion is about what is present rather than which single one.
+  const asking = arrowTargetsFor(mine, snapshot()).map((t) => t.kind);
+  const working = arrowTargetsFor(mine, snapshot({ ordersIssued: 1 })).map(
+    (t) => t.kind,
+  );
+  assert.ok(asking.includes("nearestCrystal"));
+  assert.ok(asking.includes("nearestUnit"));
+  assert.ok(working.includes("nearestUnit"));
 });
 
 test("orientation points at the base, which is the whole lesson", () => {
@@ -565,12 +568,14 @@ test("every drill's declared arrows are targets the system can resolve", () => {
     "interceptTile",
   ]);
   for (const drill of TUTORIAL_DRILLS) {
-    for (const target of [drill.arrows.intro, drill.arrows.doing]) {
-      if (!target) continue;
-      assert.ok(
-        known.has(target.kind),
-        `drill "${drill.id}" points at unknown kind "${target.kind}"`,
-      );
+    // A drill may declare one target or several; normalise before checking.
+    for (const started of [false, true]) {
+      for (const target of arrowTargetsFor(drill, snapshot(), started)) {
+        assert.ok(
+          known.has(target.kind),
+          `drill "${drill.id}" points at unknown kind "${target.kind}"`,
+        );
+      }
     }
   }
 });
@@ -579,9 +584,14 @@ test("a drill that names a tablet tab names one that exists", () => {
   // The pulse writes to `tab-<name>`; a typo would be a silent no-op in uikit.
   const tabs = new Set(["build", "crafts"]);
   for (const drill of TUTORIAL_DRILLS) {
-    for (const target of [drill.arrows.intro, drill.arrows.doing]) {
-      if (target?.kind !== "tabletTab") continue;
-      assert.ok(tabs.has(target.tab), `drill "${drill.id}" names tab "${target.tab}"`);
+    for (const started of [false, true]) {
+      for (const target of arrowTargetsFor(drill, snapshot(), started)) {
+        if (target.kind !== "tabletTab") continue;
+        assert.ok(
+          tabs.has(target.tab),
+          `drill "${drill.id}" names tab "${target.tab}"`,
+        );
+      }
     }
   }
 });
@@ -622,14 +632,12 @@ test("the latch does not start a drill that has not begun", () => {
 });
 
 test("the arrow follows the latch, not the live read", () => {
-  const drill = TUTORIAL_DRILLS[indexOf("mine")]!;
-  const arrived = snapshot({ ordersIssued: 0, crystalsMined: 0 });
-  // Live: back to the crystals. Latched: still the miner.
-  assert.deepEqual(arrowTargetFor(drill, arrived), { kind: "nearestCrystal" });
-  assert.deepEqual(arrowTargetFor(drill, arrived, true), {
-    kind: "nearestUnit",
-    unit: "miner",
-  });
+  // The mine drill now points at both ends in both phases, so this is checked
+  // on the racer drill, whose phases genuinely differ.
+  const drill = TUTORIAL_DRILLS[indexOf("racer")]!;
+  const idle = snapshot({ crystals: 0 });
+  assert.deepEqual(arrowTargetFor(drill, idle), { kind: "tabletTab", tab: "crafts" });
+  assert.deepEqual(arrowTargetFor(drill, idle, true), { kind: "nearestEnemy" });
 });
 
 // ── Phase 4: the wave gate, wave 0, and the bare start ──────────────────────
@@ -864,5 +872,51 @@ test("drills that are not gaze beats declare no focus", () => {
       null,
       `drill "${id}" should not hold the world dimmed`,
     );
+  }
+});
+
+// ── Future features 2a: more than one cone ──────────────────────────────────
+
+test("the mine drill points at BOTH the miner and the crystals", () => {
+  // The instruction is a relationship — that craft goes to those crystals — and
+  // one cone can only name one end of it.
+  const drill = TUTORIAL_DRILLS[indexOf("mine")]!;
+  const intro = arrowTargetsFor(drill, snapshot(), false);
+  const doing = arrowTargetsFor(drill, snapshot(), true);
+  for (const [phase, targets] of [["intro", intro], ["doing", doing]] as const) {
+    const kinds = targets.map((t) => t.kind);
+    assert.ok(kinds.includes("nearestUnit"), `${phase} should point at the miner`);
+    assert.ok(kinds.includes("nearestCrystal"), `${phase} should point at the crystals`);
+  }
+});
+
+test("a single declared target still yields exactly one arrow", () => {
+  // The array form must not force every drill to become a list.
+  const drill = TUTORIAL_DRILLS[indexOf("orient")]!;
+  assert.equal(arrowTargetsFor(drill, snapshot(), false).length, 1);
+  assert.equal(arrowTargetFor(drill, snapshot(), false)?.kind, "commandCenter");
+});
+
+test("a drill with no arrows yields none, and allocates nothing new", () => {
+  const drill = TUTORIAL_DRILLS[indexOf("done")]!;
+  const a = arrowTargetsFor(drill, snapshot(), false);
+  const b = arrowTargetsFor(drill, snapshot(), true);
+  assert.equal(a.length, 0);
+  // Same shared empty array both times — this runs at 4 Hz for the whole
+  // sign-off beat, and a fresh [] each call is garbage for nothing.
+  assert.equal(a, b);
+});
+
+test("no drill declares more arrows than the pool can show", () => {
+  // Extra targets would be silently dropped, which is worse than a loud failure.
+  const capacity = 3; // TUTORIAL_ARROW_POOL
+  for (const drill of TUTORIAL_DRILLS) {
+    for (const started of [false, true]) {
+      const count = arrowTargetsFor(drill, snapshot(), started).length;
+      assert.ok(
+        count <= capacity,
+        `drill "${drill.id}" declares ${count} arrows but the pool holds ${capacity}`,
+      );
+    }
   }
 });

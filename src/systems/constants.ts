@@ -653,3 +653,32 @@ export const TUTORIAL_RING_SUBJECT_MARGIN = TILE_SIZE * 0.9;
 
 /** Ring stroke as a fraction of its radius, so small subjects are not all stroke. */
 export const TUTORIAL_RING_THICKNESS_RATIO = 0.1;
+
+/**
+ * How many tutorial cones can be up at once.
+ *
+ * Two is what the script actually needs — "send this craft to those crystals"
+ * is a relationship, and one cone can only name one end of it. Sized as a pool
+ * rather than a pair so a later drill can point at three things without
+ * touching the module.
+ */
+export const TUTORIAL_ARROW_POOL = 3;
+/**
+ * Bob phase offset between cones, in radians.
+ *
+ * Without it two cones rise and fall in lockstep, which reads as one mechanism
+ * blinking rather than as two separate things being pointed at.
+ */
+export const TUTORIAL_ARROW_BOB_PHASE = 1.15;
+/**
+ * Render order for the cones and the gaze ring — **above the card**.
+ *
+ * The card is lifted over the scene (`liftAboveScene`) so terrain and buildings
+ * cannot bury it. That fix had a cost: the card then drew over the cones and the
+ * subjects they point at, so the label hid its own pointer. The cues therefore
+ * sit one layer higher again.
+ *
+ * `UNDER_ATTACK_BANNER_RENDER_ORDER` is 1000 and the card rides on it; +10 keeps
+ * headroom for anything else that needs to sit between them later.
+ */
+export const TUTORIAL_CUE_RENDER_ORDER = UNDER_ATTACK_BANNER_RENDER_ORDER + 10;

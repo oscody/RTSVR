@@ -520,7 +520,28 @@ export function arrowTargetFor(
   /** The caller's latched value — see latchDrillStarted. Omit to read live. */
   started = hasDrillStarted(drill, snapshot),
 ): ArrowTarget | null {
-  return started ? drill.arrows.doing : drill.arrows.intro;
+  return arrowTargetsFor(drill, snapshot, started)[0] ?? null;
+}
+
+/** Shared empty result, so the common no-arrow case allocates nothing. */
+const NO_ARROWS: readonly ArrowTarget[] = [];
+
+/**
+ * Every target this drill wants pointed at right now.
+ *
+ * A drill may name one target, several, or none — "send this craft to those
+ * crystals" needs two cones, because one cone can only name one end of a
+ * relationship. `arrowTargetFor` above is the single-target view, kept for the
+ * tab hint and the problem report, and defined in terms of this.
+ */
+export function arrowTargetsFor(
+  drill: TutorialDrill,
+  snapshot: TutorialSnapshot,
+  started = hasDrillStarted(drill, snapshot),
+): readonly ArrowTarget[] {
+  const declared = started ? drill.arrows.doing : drill.arrows.intro;
+  if (!declared) return NO_ARROWS;
+  return Array.isArray(declared) ? declared : [declared as ArrowTarget];
 }
 
 /**

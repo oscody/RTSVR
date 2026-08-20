@@ -15,6 +15,7 @@ import {
   TUTORIAL_RING_WEDGES,
   TUTORIAL_RING_WEDGE_GAP,
   TUTORIAL_RING_Y_OFFSET,
+  TUTORIAL_CUE_RENDER_ORDER,
 } from "./constants.ts";
 import { makeNonInteractive } from "./sharedGeometry.js";
 import { boardState } from "./state.js";
@@ -83,6 +84,9 @@ function ensureRing(radius: number): boolean {
     transparent: true,
     opacity: TUTORIAL_RING_OPACITY,
     depthWrite: false,
+    // Above the card and through the scene, same as the cones — see
+    // TUTORIAL_CUE_RENDER_ORDER.
+    depthTest: false,
     // NormalBlending + toneMapped:false: additive VFX render WHITE over the
     // bright Martian ground, which would cost the ring its tutorial hue.
     toneMapped: false,
@@ -111,6 +115,7 @@ function ensureRing(radius: number): boolean {
     wedge.rotateX(-Math.PI / 2);
     wedge.visible = false;
     wedge.frustumCulled = false;
+    wedge.renderOrder = TUTORIAL_CUE_RENDER_ORDER;
     wedge.userData.drawCat = "tutorial";
     // No ScenarioObject: reset parks these, it does not dispose them.
     ringWorld.createTransformEntity(wedge, { parent: root });

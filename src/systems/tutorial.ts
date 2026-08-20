@@ -81,7 +81,10 @@ import {
   attachTutorialArrowWorld,
   clearTutorialArrow,
   hideTutorialArrow,
+  hideTutorialArrowsFrom,
   showTutorialArrow,
+  tickTutorialArrows,
+  tutorialArrowCapacity,
 } from "./tutorialArrow.js";
 import {
   TUTORIAL_DRILLS,
@@ -92,7 +95,7 @@ import {
 import {
   advanceTutorial,
   arrowProblem,
-  arrowTargetFor,
+  arrowTargetsFor,
   canResolveArrow,
   advanceGazeProgress,
   gazeFraction,
@@ -142,7 +145,7 @@ let reportedArrowProblem = "";
  * POSITION is re-resolved every frame from this, so the arrow stays glued to a
  * walking alien rather than lagging it by up to a quarter second.
  */
-let activeArrowTarget: ArrowTarget | null = null;
+let activeArrowTargets: readonly ArrowTarget[] = [];
 /** The tab currently pulsing, so the hint is only pushed to the tablet on change. */
 let activeTabHint: string | null = null;
 /**
@@ -194,6 +197,8 @@ const tmpForward = new Vector3();
 const tmpCardWorld = new Vector3();
 const tmpToCard = new Vector3();
 const tmpArrow = new Vector3();
+/** Reused every sample — the resolvable subset of the drill's declared arrows. */
+const resolvableTargets: ArrowTarget[] = [];
 /** Where the focus effect is centred. Owner: updateGazeRing. */
 const tmpFocus = new Vector3();
 /** Whether tmpFocus holds a usable position this frame. */
@@ -312,7 +317,8 @@ export function resetTutorial(): void {
   paintedTitle = "";
   paintedBody = "";
   reportedArrowProblem = "";
-  activeArrowTarget = null;
+  resolvableTargets.length = 0;
+  activeArrowTargets = resolvableTargets;
   drillStarted = false;
   gazeProgress = 0;
   lastPublishedGaze = -1;
@@ -687,12 +693,17 @@ export class TutorialSystem extends createSystem({
    * its phase does.
    */
   private updateArrow(delta: number): void {
-    const target = activeArrowTarget;
-    if (!target || !this.resolveArrowTarget(target, tmpArrow)) {
-      hideTutorialArrow();
-      return;
+    tickTutorialArrows(delta);
+    let slot = 0;
+    for (const target of activeArrowTargets) {
+      if (slot >= tutorialArrowCapacity()) break;
+      if (!this.resolveArrowTarget(target, tmpArrow)) continue;
+      showTutorialArrow(slot, tmpArrow);
+      slot += 1;
     }
-    showTutorialArrow(tmpArrow, delta);
+    // Park whatever this drill did not use, so a cone from a previous drill
+    // cannot be left hanging over something no longer relevant.
+    hideTutorialArrowsFrom(slot);
   }
 
   /**
@@ -991,7 +1002,8 @@ export class TutorialSystem extends createSystem({
     if (cardMesh?.visible) cardMesh.visible = false;
     // The pointing layer has to go with the card, or a dormant tutorial leaves
     // an arrow hanging over the board and a tab lit that nothing will clear.
-    activeArrowTarget = null;
+    resolvableTargets.length = 0;
+    activeArrowTargets = resolvableTargets;
     hideTutorialArrow();
     hideTutorialRing();
     // Dormant means the headset is off or the tutorial is disabled — either way
@@ -1055,7 +1067,8 @@ export class TutorialSystem extends createSystem({
     if (cardMesh) cardMesh.visible = active;
 
     if (!active) {
-      activeArrowTarget = null;
+      resolvableTargets.length = 0;
+      activeArrowTargets = resolvableTargets;
       this.setTabHint(null);
       if (state && (state.getValue(TutorialState, "active") ?? false)) {
         state.setValue(TutorialState, "active", false);
@@ -1179,18 +1192,24 @@ export class TutorialSystem extends createSystem({
    */
   private applyArrow(drill: TutorialDrill, interrupted: boolean): void {
     if (interrupted) {
-      activeArrowTarget = null;
+      resolvableTargets.length = 0;
+      activeArrowTargets = resolvableTargets;
       this.setTabHint(null);
       return;
     }
-    const target = arrowTargetFor(drill, snapshot, drillStarted);
-    activeArrowTarget = canResolveArrow(target, snapshot) ? target : null;
-    if (activeArrowTarget?.kind === "nearestCrystal") {
+    // Keep only the targets that can actually be pointed at. An arrow aimed at
+    // nothing is worse than no arrow: the card still has words, but a confident
+    // pointer at the wrong place actively misleads.
+    resolvableTargets.length = 0;
+    for (const candidate of arrowTargetsFor(drill, snapshot, drillStarted)) {
+      if (canResolveArrow(candidate, snapshot)) resolvableTargets.push(candidate);
+    }
+    activeArrowTargets = resolvableTargets;
+    if (resolvableTargets.some((t) => t.kind === "nearestCrystal")) {
       this.refreshNearestCrystal();
     }
-    this.setTabHint(
-      activeArrowTarget?.kind === "tabletTab" ? activeArrowTarget.tab : null,
-    );
+    const tab = resolvableTargets.find((t) => t.kind === "tabletTab");
+    this.setTabHint(tab && tab.kind === "tabletTab" ? tab.tab : null);
   }
 
   /** Push a tab hint to the tablet only when it changes — not at 4 Hz. */

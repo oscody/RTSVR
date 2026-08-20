@@ -14,6 +14,9 @@ import {
   TUTORIAL_ARROW_RADIUS,
   TUTORIAL_ARROW_SPIN,
   TUTORIAL_ARROW_TIP_GAP,
+  TUTORIAL_ARROW_POOL,
+  TUTORIAL_ARROW_BOB_PHASE,
+  TUTORIAL_CUE_RENDER_ORDER,
 } from "./constants.ts";
 import { makeNonInteractive } from "./sharedGeometry.js";
 import { boardState } from "./state.js";
@@ -35,7 +38,11 @@ import { boardState } from "./state.js";
  * below is liveliness, not legibility.
  */
 
-let arrowMesh: Mesh | null = null;
+/**
+ * A small pool. Some instructions are about a relationship — "send this craft to
+ * those crystals" — and one cone can only ever name one end of it.
+ */
+const arrowMeshes: Mesh[] = [];
 let arrowGeometry: ConeGeometry | null = null;
 let arrowMaterial: MeshBasicMaterial | null = null;
 /** The board root the mesh currently hangs off, so a reset rebuild is detected. */
@@ -52,11 +59,12 @@ export function attachTutorialArrowWorld(world: World): void {
   arrowWorld = world;
 }
 
-function ensureArrow(): Mesh | null {
+function ensureArrows(): boolean {
   const root = boardState.boardRoot;
   const rootObject = root?.object3D ?? null;
-  if (!root || !rootObject || !arrowWorld) return null;
-  if (pooledRoot === rootObject && arrowMesh) return arrowMesh;
+  if (!root || !rootObject || !arrowWorld) return false;
+  if (pooledRoot === rootObject && arrowMeshes.length > 0) return true;
+  arrowMeshes.length = 0;
 
   arrowGeometry = new ConeGeometry(
     TUTORIAL_ARROW_RADIUS,
@@ -81,18 +89,24 @@ function ensureArrow(): Mesh | null {
     depthWrite: false,
   });
 
-  arrowMesh = new Mesh(arrowGeometry, arrowMaterial);
-  makeNonInteractive(arrowMesh);
-  arrowMesh.name = "TutorialArrow";
-  arrowMesh.visible = false;
-  arrowMesh.renderOrder = 3;
-  // Its own draw-call category, so the tutorial's cost stays visible in the
-  // profiler's Draw line rather than hiding in the "static" bucket.
-  arrowMesh.userData.drawCat = "tutorial";
-  // No ScenarioObject: reset should park this, not dispose it.
-  arrowWorld.createTransformEntity(arrowMesh, { parent: root });
+  for (let index = 0; index < TUTORIAL_ARROW_POOL; index += 1) {
+    const mesh = new Mesh(arrowGeometry, arrowMaterial);
+    makeNonInteractive(mesh);
+    mesh.name = `TutorialArrow_${index}`;
+    mesh.visible = false;
+    // Above the card, and through the scene: a pointer that the label covers,
+    // or that a hill hides, is not pointing at anything.
+    mesh.renderOrder = TUTORIAL_CUE_RENDER_ORDER;
+    arrowMaterial!.depthTest = false;
+    // Its own draw-call category, so the tutorial's cost stays visible in the
+    // profiler's Draw line rather than hiding in the "static" bucket.
+    mesh.userData.drawCat = "tutorial";
+    // No ScenarioObject: reset should park these, not dispose them.
+    arrowWorld.createTransformEntity(mesh, { parent: root });
+    arrowMeshes.push(mesh);
+  }
   pooledRoot = rootObject;
-  return arrowMesh;
+  return true;
 }
 
 /**
@@ -101,27 +115,52 @@ function ensureArrow(): Mesh | null {
  * `delta` drives bob and spin; `target` is the world-space point being pointed
  * at, and the cone's tip stops TUTORIAL_ARROW_TIP_GAP short of it.
  */
-export function showTutorialArrow(target: Vector3, delta: number): void {
-  const mesh = ensureArrow();
+/** Advance the shared bob/spin clock. Call once per frame, before showing. */
+export function tickTutorialArrows(delta: number): void {
+  animationClock += Math.max(0, delta);
+}
+
+/**
+ * Hover cone `slot` over a world position.
+ *
+ * Slots bob out of phase with each other: two cones rising and falling in
+ * lockstep read as one mechanism blinking, rather than as two separate things
+ * being pointed at.
+ */
+export function showTutorialArrow(slot: number, target: Vector3): void {
+  if (!ensureArrows()) return;
+  const mesh = arrowMeshes[slot];
   const rootObject = boardState.boardRoot?.object3D;
   if (!mesh || !rootObject) return;
 
-  animationClock += Math.max(0, delta);
+  const phase = slot * TUTORIAL_ARROW_BOB_PHASE;
   const bob =
-    Math.sin(animationClock * TUTORIAL_ARROW_BOB_HZ * Math.PI * 2) *
+    Math.sin(animationClock * TUTORIAL_ARROW_BOB_HZ * Math.PI * 2 + phase) *
     TUTORIAL_ARROW_BOB;
 
   tmpLocal.copy(target);
   rootObject.worldToLocal(tmpLocal);
   tmpLocal.y += TUTORIAL_ARROW_TIP_GAP + TUTORIAL_ARROW_BOB + bob;
   mesh.position.copy(tmpLocal);
-  mesh.rotation.y = animationClock * TUTORIAL_ARROW_SPIN;
+  mesh.rotation.y = animationClock * TUTORIAL_ARROW_SPIN + phase;
   mesh.visible = true;
 }
 
-/** Park it. Cheap enough to call unconditionally every frame. */
+/** Park every cone from `slot` on. Cheap enough to call every frame. */
+export function hideTutorialArrowsFrom(slot: number): void {
+  for (let index = slot; index < arrowMeshes.length; index += 1) {
+    if (arrowMeshes[index].visible) arrowMeshes[index].visible = false;
+  }
+}
+
+/** Park all of them. */
 export function hideTutorialArrow(): void {
-  if (arrowMesh?.visible) arrowMesh.visible = false;
+  hideTutorialArrowsFrom(0);
+}
+
+/** How many cones the pool can show at once. */
+export function tutorialArrowCapacity(): number {
+  return TUTORIAL_ARROW_POOL;
 }
 
 /**
@@ -130,9 +169,10 @@ export function hideTutorialArrow(): void {
  */
 export function clearTutorialArrow(): void {
   animationClock = 0;
-  if (!arrowMesh) return;
-  arrowMesh.visible = false;
-  arrowMesh.rotation.y = 0;
+  for (const mesh of arrowMeshes) {
+    mesh.visible = false;
+    mesh.rotation.y = 0;
+  }
 }
 
 /**
@@ -140,10 +180,10 @@ export function clearTutorialArrow(): void {
  * away — since a rebuilt root leaves the old mesh orphaned and unreachable.
  */
 export function disposeTutorialArrow(): void {
-  arrowMesh?.removeFromParent();
+  for (const mesh of arrowMeshes) mesh.removeFromParent();
   arrowGeometry?.dispose();
   arrowMaterial?.dispose();
-  arrowMesh = null;
+  arrowMeshes.length = 0;
   arrowGeometry = null;
   arrowMaterial = null;
   pooledRoot = null;
