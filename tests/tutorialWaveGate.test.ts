@@ -10,6 +10,7 @@ import {
   tutorialSpawnAnchor,
 } from "../src/systems/tutorialWaveGate.ts";
 import { getWaveSpec, getNextWaveSpec } from "../src/systems/waveCatalog.ts";
+import { tutorialGovernsWaves } from "../src/systems/tutorialRules.ts";
 
 /**
  * The gate is the tutorial's only reach into the wave system, which is the
@@ -106,4 +107,25 @@ test("no normal wave shares the tutorial's wave number", () => {
     assert.notEqual(getWaveSpec(wave)?.waveNumber, 0);
   }
   assert.equal(getWaveSpec(0)?.waveNumber, 0);
+});
+
+test("a finished tutorial lets go of the wave system entirely", () => {
+  // The bug this pins: the gate kept governing after the script ended, with a
+  // budget equal to the tutorial's own roster (3). Wave 1 has 11 aliens and
+  // resets its released count on spawn, so the gate released 3 and then stopped
+  // forever — countdown over, nothing attacking, wave uncleanable.
+  assert.equal(tutorialGovernsWaves(true, 0), true, "running: governs");
+  assert.equal(tutorialGovernsWaves(true, 4), true, "still running: governs");
+  assert.equal(tutorialGovernsWaves(true, -1), false, "finished: lets go");
+  assert.equal(tutorialGovernsWaves(false, 2), false, "disabled: never governs");
+});
+
+test("the tutorial's budget is smaller than a real wave, which is why this matters", () => {
+  // If these were the same size the bug would have been invisible.
+  const tutorialTotal = getWaveSpec(0)!.groups!.reduce((n, g) => n + g.count, 0);
+  const waveOneTotal = getWaveSpec(1)!.groups!.reduce((n, g) => n + g.count, 0);
+  assert.ok(
+    tutorialTotal < waveOneTotal,
+    `tutorial ${tutorialTotal} vs wave 1 ${waveOneTotal}`,
+  );
 });

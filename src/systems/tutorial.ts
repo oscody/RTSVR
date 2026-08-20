@@ -135,6 +135,7 @@ import {
   pathsFor,
   nearestCornerTo,
   releaseBudget,
+  tutorialGovernsWaves,
   tutorialHoldsWaveCountdown,
   threatTileFor,
   type TutorialSnapshot,
@@ -306,7 +307,9 @@ export function publishTutorialWaveGate(
 ): void {
   const budget = releaseBudget(drill, releaseCurrent);
   setTutorialWaveGate({
-    governing: isTutorialEnabled(),
+    // A FINISHED tutorial must let go of the wave system entirely. Leaving it
+    // governing caps every later wave at the tutorial's own budget of 3.
+    governing: tutorialGovernsWaves(isTutorialEnabled(), drill),
     holdsCountdown: tutorialHoldsWaveCountdown(drill, budget),
     releaseBudget: budget,
     spawnAnchor: resolveSpawnAnchor(),

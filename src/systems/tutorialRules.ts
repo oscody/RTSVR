@@ -522,6 +522,25 @@ export function releaseBudget(
  * Pacing does not go back to the clock: once active, the wave releases only up
  * to the budget, which is still driven entirely by the drills.
  */
+/**
+ * Should the tutorial be governing the wave system at all?
+ *
+ * **Only while a drill is actually running.** `drillIndex < 0` means the script
+ * is finished, and a finished tutorial must let go of the wave system
+ * completely — otherwise its release budget keeps capping every later wave.
+ *
+ * That is not hypothetical: the budget for a finished tutorial is its own total
+ * (3 aliens). Wave 1 has 11 and resets `releasedAlienCount` to 0 on spawn, so a
+ * still-governing gate would release 3, then stop forever — the wave can never
+ * clear, and the game stalls with the countdown finished and nothing attacking.
+ */
+export function tutorialGovernsWaves(
+  enabled: boolean,
+  drillIndex: number,
+): boolean {
+  return enabled && drillIndex >= 0;
+}
+
 export function tutorialHoldsWaveCountdown(
   drillIndex: number,
   budget: number,
