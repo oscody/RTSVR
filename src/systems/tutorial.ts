@@ -29,12 +29,13 @@ import {
   TUTORIAL_ARROW_COMMAND_CENTER_FALLBACK,
   TUTORIAL_ARROW_COMMAND_CENTER_GAP,
   TUTORIAL_ARROW_TABLET_LIFT,
+  TUTORIAL_DIM_FACTOR,
   TUTORIAL_RING_DRAIN_RATE,
   TUTORIAL_RING_WEDGES,
   TUTORIAL_SAMPLE_SECONDS,
   TUTORIAL_THREAT_TILE_STEPS,
 } from "./constants.ts";
-import { GRID_SIZE, gridToWorld, worldToGrid } from "./board.js";
+import { GRID_SIZE, gridToWorld, setBoardDim, worldToGrid } from "./board.js";
 import { commandCenterHudTopWorldY } from "./commandCenterHud.js";
 import { makeNonInteractive } from "./sharedGeometry.js";
 import { liftAboveScene } from "./underAttackBanner.js";
@@ -55,6 +56,7 @@ import {
   boardState,
 } from "./state.js";
 import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
+import { setEnvironmentDim } from "./skySystem.js";
 import { setTutorialTabHint } from "./tablet.js";
 import {
   clearTutorialWaveGate,
@@ -302,6 +304,8 @@ export function resetTutorial(): void {
   gazeProgress = 0;
   lastPublishedGaze = -1;
   clearTutorialRing();
+  setEnvironmentDim(1);
+  setBoardDim(1);
   spawnAnchor = null;
   // Re-arm the gate NOW, not on the next 4 Hz sample. Two reasons, both real:
   // for that quarter second the old budget would still be live (enough for a
@@ -504,8 +508,15 @@ export class TutorialSystem extends createSystem({
       gazeProgress = 0;
       hideTutorialRing();
       this.publishGaze(0);
+      // Whoever dims must restore. This is the path taken every time a gaze
+      // beat completes, so it is the one that matters most.
+      this.setWorldDim(1);
       return;
     }
+    // The world dims while the tutorial is waiting on the player's attention.
+    // The cone and ring are `toneMapped: false` and do not dim with it, which
+    // is what supplies the contrast.
+    this.setWorldDim(TUTORIAL_DIM_FACTOR);
     const required = gazeRequirement(drill);
     gazeProgress = advanceGazeProgress(
       gazeProgress,
@@ -532,6 +543,19 @@ export class TutorialSystem extends createSystem({
    * float does not write to ECS every frame — the value only moves when the
    * ring visibly does.
    */
+  /**
+   * Dim the world, both halves of it.
+   *
+   * The lit GLTF models respond to the sun; the board's ground, rim and dust are
+   * `MeshBasicMaterial` and ignore lights entirely. Dimming only the sun moved
+   * the measured ground brightness by **1.4%** — which is why this is two calls
+   * and not one.
+   */
+  private setWorldDim(factor: number): void {
+    setEnvironmentDim(factor);
+    setBoardDim(factor);
+  }
+
   private publishGaze(fraction: number): void {
     const state = boardState.tutorial;
     if (!state) return;
@@ -857,6 +881,9 @@ export class TutorialSystem extends createSystem({
     activeArrowTarget = null;
     hideTutorialArrow();
     hideTutorialRing();
+    // Dormant means the headset is off or the tutorial is disabled — either way
+    // the player must not be left in a darkened world with no explanation.
+    this.setWorldDim(1);
     this.setTabHint(null);
     const state = boardState.tutorial;
     if (!state) return;

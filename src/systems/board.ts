@@ -1,6 +1,7 @@
 import {
   BoxGeometry,
   BufferGeometry,
+  Color,
   DoubleSide,
   Float32BufferAttribute,
   Group,
@@ -79,6 +80,43 @@ export function worldToGrid(localX: number, localZ: number): [number, number] {
     Math.round((localX + offset) / TILE_SIZE),
     Math.round((localZ + offset) / TILE_SIZE),
   ];
+}
+
+/**
+ * The board's own unlit surfaces, and the colour each was authored with.
+ *
+ * These are `MeshBasicMaterial`, so they **ignore lights entirely** — dimming
+ * the sun does nothing to them, and they are what fills the player's view. The
+ * tutorial's dim therefore has to scale their colour directly.
+ *
+ * A small fixed set captured at build time, not a traverse of the scene: the
+ * concept art's "darken everything and relight one thing" over ~800 objects is
+ * a per-material pass plus a correctness problem every time something spawns.
+ * Three surfaces get the same read for a hundredth of the cost.
+ */
+const dimmableSurfaces: { material: MeshBasicMaterial; base: Color }[] = [];
+let appliedBoardDim = 1;
+
+function registerDimmable(mesh: Mesh): void {
+  const material = mesh.material as MeshBasicMaterial;
+  if (!material?.color) return;
+  dimmableSurfaces.push({ material, base: material.color.clone() });
+}
+
+/**
+ * Scale the board's unlit surfaces toward black. `1` restores them.
+ *
+ * Paired with `setEnvironmentDim()`, which handles the lit GLTF models; between
+ * them they cover everything the player can see. Idempotent, so it is safe to
+ * call every frame.
+ */
+export function setBoardDim(factor: number): void {
+  const clamped = Math.max(0, Math.min(1, factor));
+  if (clamped === appliedBoardDim) return;
+  appliedBoardDim = clamped;
+  for (const entry of dimmableSurfaces) {
+    entry.material.color.copy(entry.base).multiplyScalar(clamped);
+  }
 }
 
 function makeMarker(color: number): Mesh {
@@ -227,6 +265,7 @@ export class BoardSystem extends createSystem({}) {
     );
     makeNonInteractive(rim);
     rim.name = "BoardRim";
+    registerDimmable(rim);
     this.world.createTransformEntity(rim, { parent: root });
 
     // One irregular dark Martian surface surrounds the square 24x24 play area.
@@ -239,6 +278,7 @@ export class BoardSystem extends createSystem({}) {
     );
     makeNonInteractive(ground);
     ground.name = "BoardGround";
+    registerDimmable(ground);
     this.world.createTransformEntity(ground, { parent: root });
 
     // Three Rocket-style ellipses are combined into one visual mesh. They sit
@@ -259,6 +299,7 @@ export class BoardSystem extends createSystem({}) {
     );
     makeNonInteractive(dustPatches);
     dustPatches.name = "BoardDustPatches";
+    registerDimmable(dustPatches);
     dustPatches.renderOrder = 1;
     rootObject.add(dustPatches);
 

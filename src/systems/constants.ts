@@ -579,3 +579,21 @@ export const TUTORIAL_RING_OPACITY = 0.92;
  * a glance away should not wipe four seconds of progress.
  */
 export const TUTORIAL_RING_DRAIN_RATE = 1.6;
+
+/**
+ * How far the world dims while the tutorial is holding the player's attention.
+ *
+ * A fraction of normal sun and dome intensity, not a black-out: the player still
+ * has to see the thing they are being asked to look at. The cone and the ring
+ * are `toneMapped: false`, so they do NOT dim with the scene — which is where
+ * the contrast in the concept art comes from, for free.
+ */
+export const TUTORIAL_DIM_FACTOR = 0.34;
+/**
+ * Seconds to ease in and out of the dim.
+ *
+ * A hard cut to a third of the light is unpleasant in a headset, and an
+ * instant restore reads as a glitch. Long enough to feel deliberate, short
+ * enough not to lag the beat it belongs to.
+ */
+export const TUTORIAL_DIM_RAMP_SECONDS = 0.6;
