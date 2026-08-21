@@ -5,6 +5,7 @@ import {
   createSystem,
   type Entity,
 } from "@iwsdk/core";
+import { reportAudioContextIfSuspended } from "./audioUnlock.js";
 import {
   UNDER_ATTACK_ALARM_SRC,
   UNDER_ATTACK_ALARM_FADE_IN_SECONDS,
@@ -70,6 +71,7 @@ export function playAlertSting(category: AlertCategory): void {
         : UNDER_ATTACK_STING_VOLUME,
     ),
   );
+  reportAudioContextIfSuspended("under-attack sting");
   AudioUtils.play(sting);
 }
 
@@ -87,6 +89,7 @@ export function holdCommandCenterAlarm(): void {
     scaledAlertVolume(UNDER_ATTACK_ALARM_VOLUME),
   );
   alarmPlaying = true;
+  reportAudioContextIfSuspended("under-attack alarm");
   AudioUtils.play(alarm, UNDER_ATTACK_ALARM_FADE_IN_SECONDS);
 }
 

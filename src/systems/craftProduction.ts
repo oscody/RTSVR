@@ -202,7 +202,22 @@ export class CraftProductionSystem extends createSystem({
       updateCraftProductionAnimation(site, delta);
       if (transition === "completed") this.completed.push(site);
     }
-    for (const site of this.completed) this.completeCraft(site);
+    // A queued site may already be gone by the time the queue drains.
+    //
+    // Completion is deferred — a site that finishes is pushed here and disposed
+    // in a second pass, because disposing while iterating the query it came from
+    // is not safe. Anything that disposes a site in between (a cancel, a
+    // demolition, a scenario reset, or a cascade out of an earlier completion in
+    // this very loop) leaves a dead handle behind.
+    //
+    // **This is worse than a duplicate warning.** Entity indices are POOLED and
+    // reused, and the line below deletes from `boardState.buildersBySite` keyed
+    // on `site.index` — so a recycled index means deleting a *live* site's
+    // builder list. See the entity-index-recycling rule.
+    for (const site of this.completed) {
+      if (!site.active) continue;
+      this.completeCraft(site);
+    }
     this.completed.length = 0;
   }
 

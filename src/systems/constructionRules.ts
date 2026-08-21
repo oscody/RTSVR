@@ -183,3 +183,26 @@ export function cancelRefund(cost: number): number {
 export function destroyRefund(cost: number): number {
   return Math.max(0, Math.round(cost * DESTROY_REFUND_RATE));
 }
+
+/**
+ * Of the sites queued for completion, which are still safe to complete?
+ *
+ * Completion is **deferred**: a site that finishes is pushed onto a queue and
+ * disposed in a second pass, because disposing while iterating the query it came
+ * from is not safe. That gap is real — a cancel, a demolition, a scenario reset,
+ * or a cascade out of an earlier completion in the same drain can dispose a site
+ * that is already queued.
+ *
+ * Completing a dead handle is not merely a duplicate warning. Entity indices are
+ * **pooled and reused**, and completion deletes from a map keyed on
+ * `entity.index` — so a recycled index means deleting a *live* site's builder
+ * list. The console showed three of these in one 236-second run.
+ *
+ * Pure and index-agnostic so it can be tested without an ECS: it only asks
+ * whether each queued item still reports itself active.
+ */
+export function completableSites<T extends { active: boolean }>(
+  queued: readonly T[],
+): T[] {
+  return queued.filter((site) => site.active);
+}

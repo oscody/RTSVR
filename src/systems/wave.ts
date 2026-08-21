@@ -6,6 +6,7 @@ import {
   WAVE_PREP_PER_FRAME,
   TUTORIAL_WAVE_ACTIVATION_LEAD_SECONDS,
 } from "./constants.ts";
+import { warmObjectForRender } from "./gpuWarmup.js";
 import { ReusableGridPathfinder } from "./navigation.js";
 import { isTutorialFrozen } from "./tutorialFreeze.js";
 import {
@@ -389,6 +390,13 @@ export class WaveSystem extends createSystem({
     // the spawn tile, and scenarioReset disposes by ECS query rather than by
     // scene traversal — neither depends on the holder being attached.
     alien.object3D?.removeFromParent();
+    // Compile its shaders now, while it is still detached and nothing is waiting.
+    // The detach above is what keeps preparation cheap; it is also what defers
+    // every program compile to the frame the whole reserve is released on. This
+    // pays that cost here instead, a few aliens per frame across the countdown —
+    // and it lands inside the PAlien/PDrake/PMech measurement, so its price is
+    // visible in the profiler rather than hidden.
+    warmObjectForRender(alien.object3D);
     const buildMs = performance.now() - buildStart;
     if (buildMs > this.slowestBuildMs) {
       this.slowestBuildMs = buildMs;

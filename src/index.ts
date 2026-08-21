@@ -33,6 +33,8 @@ import { UnderAttackAudioSystem } from "./systems/underAttackAudio.js";
 import { UnderAttackBannerSystem } from "./systems/underAttackBanner.js";
 import { UnderAttackVfxSystem } from "./systems/underAttackVfx.js";
 import { UnitAnimationSystem } from "./systems/unitAnimation.js";
+import { attachAudioUnlock } from "./systems/audioUnlock.js";
+import { attachGpuWarmup } from "./systems/gpuWarmup.js";
 import { placeViewpoint } from "./systems/viewpoint.js";
 import { WaveSystem } from "./systems/wave.js";
 
@@ -110,6 +112,15 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
   // to that rig. Systems that measure against the viewer read the right pose
   // from their first update.
   placeViewpoint(world);
+  // Before any sound can be requested: browsers only honour an AudioContext
+  // resume inside a user gesture, and the SDK's resume-on-session-start is not
+  // reliably credited as one. Without this the under-attack alarm can be
+  // silently suspended for the whole session.
+  attachAudioUnlock(world);
+  // Lets WaveSystem compile a prepared alien's shaders while it is still
+  // detached, so the work happens during the countdown rather than on the frame
+  // the whole reserve is released.
+  attachGpuWarmup(world);
   // Collapse each GLB's kit-bashed parts into one mesh per (rigid group,
   // material) BEFORE any system clones an asset, so every instance inherits it.
   optimizeLoadedAssets(Object.keys(assets), true);

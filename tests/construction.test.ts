@@ -18,6 +18,7 @@ import {
 import {
   advanceSiteConstruction,
   buildRateMultiplier,
+  completableSites,
   cancelRefund,
   constructionProgress,
   destroyRefund,
@@ -234,4 +235,17 @@ test("astronaut production is exempt from the builder requirement", () => {
       "astronaut must stay out of the builder-requiring craft catalog",
     );
   }
+});
+
+test("a queued site that was disposed before the drain is skipped", () => {
+  // The three console warnings this guards against were all of this shape: a
+  // site queued for completion, disposed by some other path, then completed
+  // anyway. Indices are pooled, so the stale handle can come back as a
+  // DIFFERENT live entity — which is why skipping matters more than the warning.
+  const live = { active: true, id: "live" };
+  const disposed = { active: false, id: "disposed" };
+  assert.deepEqual(completableSites([live, disposed]), [live]);
+  assert.deepEqual(completableSites([disposed]), []);
+  // The ordinary case must be untouched.
+  assert.deepEqual(completableSites([live]), [live]);
 });
