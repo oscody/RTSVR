@@ -80,7 +80,6 @@ import {
 import { tabPulseOn } from "./tutorialRules.ts";
 import { tutorialHoldsCountdown } from "./tutorialWaveGate.js";
 import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
-import { getFrameProfileHudLines } from "./frameProfiler.js";
 import {
   clearUnitSelections,
   getSelectedUnits,
@@ -109,7 +108,6 @@ import {
   GameStats,
   Health,
   MatchState,
-  RuntimePerformance,
   SelectionState,
   TabletState,
   TutorialState,
@@ -121,9 +119,6 @@ import {
   type DebugSettingKey,
 } from "./state.js";
 
-// Number of `settings-frame-profile-N` spans in rts-tablet.uikitml. Keep in
-// sync with the markup; extra rows are blanked so the strip height is stable.
-const PROFILE_ROW_COUNT = 16;
 
 /**
  * Which tab the tutorial is currently pointing at, or null.
@@ -223,7 +218,6 @@ export class TabletSystem extends createSystem({
   private lastEnemyCount = Number.NaN;
   private lastKills = Number.NaN;
   private lastMined = Number.NaN;
-  private lastPerformanceRevision = Number.NaN;
   private lastSelectionRevision = Number.NaN;
   private lastTabletRevision = Number.NaN;
   private lastWaveNumber = Number.NaN;
@@ -316,7 +310,6 @@ export class TabletSystem extends createSystem({
 
     const game = boardState.gameState;
     const stats = boardState.gameStats;
-    const performance = boardState.runtimePerformance;
     const crystals = game?.getValue(GameState, "crystals") ?? 0;
     const mined = stats?.getValue(GameStats, "crystalsMined") ?? 0;
     let astronauts = 0;
@@ -353,8 +346,6 @@ export class TabletSystem extends createSystem({
       boardState.selection?.getValue(SelectionState, "revision") ?? 0;
     const debugRevision =
       boardState.debugSettings?.getValue(DebugSettings, "revision") ?? 0;
-    const performanceRevision =
-      performance?.getValue(RuntimePerformance, "revision") ?? 0;
     const lockRevision = tutorialLockRevision;
     // Before the dirty guard below: the pulse changes with time and nothing
     // else, so anything downstream of that early-out would never animate.
@@ -371,7 +362,6 @@ export class TabletSystem extends createSystem({
       kills === this.lastKills &&
       selectionRevision === this.lastSelectionRevision &&
       debugRevision === this.lastDebugRevision &&
-      performanceRevision === this.lastPerformanceRevision &&
       lockRevision === this.lastLockRevision
     ) {
       return;
@@ -387,7 +377,6 @@ export class TabletSystem extends createSystem({
     this.lastKills = kills;
     this.lastSelectionRevision = selectionRevision;
     this.lastDebugRevision = debugRevision;
-    this.lastPerformanceRevision = performanceRevision;
 
     this.setText("crystal-balance", `${crystals}`);
     this.setText("overview-crystals", `${crystals}`);
@@ -398,22 +387,6 @@ export class TabletSystem extends createSystem({
     this.setText("overview-astronauts", `${astronauts}`);
     this.setText("overview-enemies", `${enemyCount}`);
     this.setText("overview-kills", `${kills}`);
-    const profilerHudLines = getFrameProfileHudLines();
-    this.setText(
-      "settings-performance",
-      performanceRevision > 0
-        ? `FPS ${Math.round(performance?.getValue(RuntimePerformance, "fps") ?? 0)} | Avg ${(performance?.getValue(RuntimePerformance, "averageFrameMs") ?? 0).toFixed(1)} ms | Worst ${(performance?.getValue(RuntimePerformance, "worstFrameMs") ?? 0).toFixed(1)} ms | Moving ${performance?.getValue(RuntimePerformance, "movingEntities") ?? 0}`
-        : "FPS -- | Avg -- ms | Worst -- ms | Moving 0",
-    );
-    // One span per row: UIKit ignores "\n" in a text element, so a single span
-    // word-wraps the whole block and splits labels mid-row. Unused rows are
-    // blanked rather than removed so the layout height stays stable.
-    for (let row = 0; row < PROFILE_ROW_COUNT; row += 1) {
-      this.setText(
-        `settings-frame-profile-${row + 1}`,
-        profilerHudLines[row] ?? "",
-      );
-    }
     this.setText("tablet-status", tablet.getValue(TabletState, "status") ?? "");
     this.setProps("tablet-status", tablet.getValue(TabletState, "statusKind") ?? "", {
       color:
@@ -550,7 +523,6 @@ export class TabletSystem extends createSystem({
     this.lastEnemyCount = Number.NaN;
     this.lastKills = Number.NaN;
     this.lastMined = Number.NaN;
-    this.lastPerformanceRevision = Number.NaN;
     this.lastSelectionRevision = Number.NaN;
     this.lastTabletRevision = Number.NaN;
     this.lastWaveNumber = Number.NaN;

@@ -86,16 +86,32 @@ test("health bars keep their headset-verified geometry sizing path", () => {
   assert.match(healthBar, /fill\.position\.x = -\(width \* \(1 - ratio\)\) \/ 2/);
 });
 
-test("tablet exposes live headset performance diagnostics", () => {
+test("the profiler readout is off the tablet, but still measured and logged", () => {
   const markup = source("ui/rts-tablet.uikitml");
   const tablet = source("src/systems/tablet.ts");
   const frameProfiler = source("src/systems/frameProfiler.ts");
 
-  assert.match(markup, /id="settings-performance"/);
-  // One span per profiler row: UIKit ignores "\n" inside a text element, so a
-  // single span word-wraps the block and splits labels mid-row.
-  assert.match(markup, /id="settings-frame-profile-1"/);
-  assert.match(markup, /id="settings-frame-profile-12"/);
+  // Removed 2026-08-20. It was a developer readout in 8px type that the player
+  // cannot read, laid out every second by the system that owned 96% of the
+  // worst frames in a 236-second capture.
+  //
+  // The test this replaces asserted the strip sat OUTSIDE every view — which is
+  // precisely why it painted on all five tabs. It had pinned the defect as a
+  // requirement, so removing the strip made it fail. Worth remembering: a test
+  // can lock in the bug as firmly as the behaviour.
+  assert.doesNotMatch(markup, /id="settings-performance"/);
+  assert.doesNotMatch(markup, /id="settings-frame-profile-/);
+  assert.doesNotMatch(markup, /performance-profile-text/);
+  assert.doesNotMatch(tablet, /settings-frame-profile/);
+  assert.doesNotMatch(tablet, /getFrameProfileHudLines/);
+  // Repainting the tablet once a second purely to redraw the readout is gone
+  // with it — the perf revision no longer feeds the dirty guard.
+  assert.doesNotMatch(tablet, /RuntimePerformance/);
+
+  // ...but the measurement itself is untouched, and still goes to the console
+  // once per second. That is now the ONLY way to read these numbers.
+  assert.match(frameProfiler, /FRAME_PROFILER_ENABLED = true/);
+  assert.match(frameProfiler, /FRAME_PROFILER_LOG = true/);
   assert.match(frameProfiler, /"prepareWaveIncrementally", "WaveSystem\.prepare", "Prep"/);
   assert.match(frameProfiler, /"createPreparedAlien", waveBuildDescriptor/);
   assert.match(
@@ -114,15 +130,6 @@ test("tablet exposes live headset performance diagnostics", () => {
   for (const label of ["PAlien", "PDrake", "PMech"]) {
     assert.match(frameProfiler, new RegExp(`short: "${label}"`));
   }
-  const performanceIndex = markup.indexOf('id="settings-performance"');
-  for (const view of ["overview", "build", "crafts", "units", "settings"]) {
-    assert.ok(
-      performanceIndex < markup.indexOf(`id="${view}-view"`),
-      `performance diagnostics should remain outside the ${view} view`,
-    );
-  }
-  assert.match(tablet, /RuntimePerformance/);
-  assert.match(tablet, /movingEntities/);
 });
 
 test("waves prepare incrementally while reserves stay cheap", () => {
@@ -190,19 +197,10 @@ test("profiler reports one coherent worst-Update frame, averages, and ray target
   assert.match(profiler, /RayMesh \$\{rayTestableMeshes\}/);
   assert.match(profiler, /function isRaycastDisabled/);
 
-  // The HUD must have room for the two new rows.
-  const rows = markup.match(/id="settings-frame-profile-\d+"/g) ?? [];
-  assert.ok(rows.length >= 16, `expected >=16 profile rows, found ${rows.length}`);
-  assert.match(tablet, /PROFILE_ROW_COUNT = 16/);
-  assert.match(markup, /settings-frame-profile-4[^>]*>WorstUpd --</);
-  assert.match(
-    markup,
-    /settings-frame-profile-5[^>]*>Path -- \| Tablet -- \| Input -- \| PanelUI -- \| ScreenSpaceUI -- \| RayMesh --</,
-  );
-  assert.match(
-    markup,
-    /settings-frame-profile-6[^>]*>Avg Update -- \| Tablet -- \| Input -- \| PanelUI --</,
-  );
+  // The rows are built the same way; they are just no longer painted onto the
+  // tablet. Row CONTENT is asserted against the profiler's own row definitions
+  // rather than against markup, which is where it always belonged — the markup
+  // assertions were testing the display, not the measurement.
   assert.match(profiler, /const coreLine = \[rowLine\(CORE_ROW\), `RayMesh /);
   assert.match(
     profiler,
