@@ -403,55 +403,85 @@ export class TabletSystem extends createSystem({
         ? `Astronaut #${astronautIndex}`
         : "Place a building - an astronaut will come",
     );
-    this.applySiteActions(tablet);
-    this.applyView(tablet.getValue(TabletState, "view") ?? "overview");
-    this.applySelectedCard(
-      tablet.getValue(TabletState, "selectedBuildingKind") ?? "none",
-    );
-    const selectedBuildingKind =
-      tablet.getValue(TabletState, "selectedBuildingKind") ?? "none";
-    const building = getBuildingSpec(selectedBuildingKind);
-    const buildUnit = getProductionSpec(
-      tablet.getValue(TabletState, "selectedCraftKind") ?? "none",
-    );
-    const buildingUnitSelected =
-      tablet.getValue(TabletState, "view") === "build" &&
-      buildUnit?.kind === ASTRONAUT_PRODUCTION_SPEC.kind &&
-      selectedBuildingKind === "none";
-    const placingBuildUnit =
-      tablet.getValue(TabletState, "craftPlacementActive") ?? false;
-    const placingBuilding =
-      tablet.getValue(TabletState, "buildPlacementActive") ?? false;
-    this.setText(
-      "build-action-label",
-      buildingUnitSelected && buildUnit
-        ? placingBuildUnit
-          ? `Choose tile for ${buildUnit.label}`
-          : `Produce ${buildUnit.label} - ${buildUnit.cost}`
-        : building
-          ? placingBuilding
-            ? `Choose tile for ${building.label}`
-            : `Produce ${building.label} - ${building.cost}`
-          : "Choose a building",
-    );
-    // No production building is selected or required any more. The header now
-    // says what the tab actually does.
-    this.setText("craft-source-label", "Pick a craft, then pick a tile");
-    const craftKind = tablet.getValue(TabletState, "selectedCraftKind") ?? "none";
-    const craft = getCraftSpec(craftKind);
-    const placingCraft =
-      tablet.getValue(TabletState, "craftPlacementActive") ?? false;
-    this.setText(
-      "craft-action-label",
-      craft
-        ? placingCraft
-          ? `Choose tile for ${craft.label}`
-          : `Produce ${craft.label} - ${craft.cost}`
-        : "Choose a craft",
-    );
-    this.applyCraftPage(tablet, craftKind);
-    this.applyUnitPage(tablet);
-    this.applySettingsView();
+    const view = tablet.getValue(TabletState, "view") ?? "overview";
+    // Tabs and view visibility are always applied: they are what makes the
+    // switch happen, and they touch 10 elements, not 119.
+    this.applyView(view);
+
+    // ── Only touch the visible tab ──────────────────────────────────────────
+    //
+    // Everything below used to run on every repaint for all five views at once.
+    // The per-element write guards stopped the redundant `setProperties` calls,
+    // but the element lookup, the string building and the traversal still
+    // happened for ~245 elements to update the ~30 the player could see.
+    //
+    // `settings-view` alone is **119 of the tablet's 275 elements — 43%** — and
+    // it is the playtesting knobs, which are never open during play. It was
+    // being walked and rewritten every repaint from behind a `display: none`.
+    //
+    // Measured precedent: deleting the 17-span profiler strip (~6% of the
+    // document) took the p90 worst frame from 36.8 ms to 26.0 ms. This skips far
+    // more than that, though it skips *work on* elements rather than removing
+    // them — which is the distinction the next step has to settle.
+    if (view === "build") {
+      this.applySiteActions(tablet);
+      this.applySelectedCard(
+        tablet.getValue(TabletState, "selectedBuildingKind") ?? "none",
+      );
+      const astronautIndex = tablet.getValue(TabletState, "astronautIndex") ?? -1;
+      this.setText(
+        "builder-label",
+        astronautIndex >= 0
+          ? `Astronaut #${astronautIndex}`
+          : "Place a building - an astronaut will come",
+      );
+      const selectedBuildingKind =
+        tablet.getValue(TabletState, "selectedBuildingKind") ?? "none";
+      const building = getBuildingSpec(selectedBuildingKind);
+      const buildUnit = getProductionSpec(
+        tablet.getValue(TabletState, "selectedCraftKind") ?? "none",
+      );
+      const buildingUnitSelected =
+        buildUnit?.kind === ASTRONAUT_PRODUCTION_SPEC.kind &&
+        selectedBuildingKind === "none";
+      const placingBuildUnit =
+        tablet.getValue(TabletState, "craftPlacementActive") ?? false;
+      const placingBuilding =
+        tablet.getValue(TabletState, "buildPlacementActive") ?? false;
+      this.setText(
+        "build-action-label",
+        buildingUnitSelected && buildUnit
+          ? placingBuildUnit
+            ? `Choose tile for ${buildUnit.label}`
+            : `Produce ${buildUnit.label} - ${buildUnit.cost}`
+          : building
+            ? placingBuilding
+              ? `Choose tile for ${building.label}`
+              : `Produce ${building.label} - ${building.cost}`
+            : "Choose a building",
+      );
+    } else if (view === "crafts") {
+      const craftKind =
+        tablet.getValue(TabletState, "selectedCraftKind") ?? "none";
+      const craft = getCraftSpec(craftKind);
+      const placingCraft =
+        tablet.getValue(TabletState, "craftPlacementActive") ?? false;
+      // The header says what the tab does; no production building is required.
+      this.setText("craft-source-label", "Pick a craft, then pick a tile");
+      this.setText(
+        "craft-action-label",
+        craft
+          ? placingCraft
+            ? `Choose tile for ${craft.label}`
+            : `Produce ${craft.label} - ${craft.cost}`
+          : "Choose a craft",
+      );
+      this.applyCraftPage(tablet, craftKind);
+    } else if (view === "units") {
+      this.applyUnitPage(tablet);
+    } else if (view === "settings") {
+      this.applySettingsView();
+    }
   }
 
   // Keeps the three destructive actions honest about what they would do right
