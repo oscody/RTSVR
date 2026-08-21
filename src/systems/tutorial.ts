@@ -590,16 +590,11 @@ export class TutorialSystem extends createSystem({
     attachTutorialPathWorld(this.world);
     attachTutorialTurnCue(this.world);
 
-    // Restart the tutorial when the player actually puts the headset on.
-    //
-    // Without this it runs during the 2D preview and burns through steps before
-    // anyone is in VR: the desktop camera faces the base, so orientation
-    // completes in seconds and the player arrives in the headset already on
-    // "Mine your first crystals", never having been shown their command center.
-    //
-    // Only NonImmersive -> Visible resets. VisibleBlurred -> Visible is the
-    // headset being taken off and put back on mid-session; restarting the
-    // tutorial there would punish someone for adjusting the strap.
+    // Visibility only decides whether the tutorial is active; it never restarts
+    // it. Quest can report removing and replacing the headset as a brief
+    // NonImmersive -> Visible transition, so that transition is not a reliable
+    // signal that the player chose to replay the match. ScenarioResetSystem is
+    // the sole owner of a deliberate tutorial restart.
     // Claim the tutorial level for this run. Done here rather than in
     // BoardSystem because `boardState.waveSource` has to exist first, and
     // TutorialSystem is registered after it.
@@ -611,17 +606,6 @@ export class TutorialSystem extends createSystem({
     // Before the first update of ANY system: WaveSystem runs earlier in the
     // frame and prepares the wave once, so the anchor must already be published.
     publishTutorialWaveGate(drillIndex, false);
-
-    let previous = this.world.visibilityState.peek();
-    this.cleanupFuncs.push(
-      this.world.visibilityState.subscribe((next) => {
-        const entering =
-          previous === VisibilityState.NonImmersive &&
-          next === VisibilityState.Visible;
-        previous = next;
-        if (entering) resetTutorial();
-      }),
-    );
   }
 
   update(delta: number): void {

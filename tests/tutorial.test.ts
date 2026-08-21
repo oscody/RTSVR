@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -103,6 +104,25 @@ test("the settings tab exposes a tutorial toggle", () => {
   assert.equal(spec.max, 1);
   assert.equal(spec.step, 1);
   assert.equal(spec.decimals, 0);
+});
+
+test("headset visibility changes pause the tutorial instead of restarting it", () => {
+  const tutorial = readFileSync(
+    new URL("../src/systems/tutorial.ts", import.meta.url),
+    "utf8",
+  );
+  const scenarioReset = readFileSync(
+    new URL("../src/systems/scenarioReset.ts", import.meta.url),
+    "utf8",
+  );
+
+  // A headset removal may briefly look like exiting and re-entering XR. It
+  // must preserve the current drill; only the explicit Restart action replays
+  // the tutorial from the command-center drill.
+  assert.doesNotMatch(tutorial, /visibilityState\.subscribe/);
+  assert.match(tutorial, /visibilityState\.peek\(\) !== VisibilityState\.Visible/);
+  assert.match(tutorial, /this\.goDormant\(isTutorialEnabled\(\)\)/);
+  assert.match(scenarioReset, /resetTutorial\(\);/);
 });
 
 // ── Drill list invariants (plan tests 16, 17, 17b, 20, 21) ──────────────────
