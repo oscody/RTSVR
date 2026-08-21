@@ -112,6 +112,23 @@ export function createCraftProductionSite(
     const gltf = AssetManager.getGLTF(animationAsset);
     if (!gltf) throw new Error(`${animationAsset} not preloaded`);
     animatedModel = gltf.scene;
+    // Its own draw-call bucket, and this one earned it.
+    //
+    // Untagged, these meshes inherited `static` from the board root and hid
+    // inside the largest bucket in the census. A 15-minute capture shows `static`
+    // sitting at ~102 calls for 91% of the run and jumping to **150 and 188** for
+    // the rest — spikes of +50 and +86 that match these two models exactly
+    // (`craftRacerConstruction` 53 meshes, `craftMinerConstruction` 78).
+    //
+    // They are the leftover from the Phase B fix: moving the one-shot spawn FX
+    // OUT of the miner and racer is what let those collapse to 14 and 10 meshes,
+    // but the extracted FX models were never merged themselves (93 -> 78 and
+    // 69 -> 53) because every animated FX node is its own rigid group.
+    //
+    // The whole point of the Draw census is that no category can quietly become
+    // the most expensive thing on screen. This one did, for months, because it
+    // was not named.
+    animatedModel.userData.drawCat = "construction";
     animatedModel.rotation.y = Math.PI;
     const width = new Box3().setFromObject(animatedModel).getSize(new Vector3()).x;
     animatedModel.scale.setScalar((TILE_SIZE * 0.9) / width);
