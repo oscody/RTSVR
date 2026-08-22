@@ -213,7 +213,10 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const outDir = resolve(args.outDir ?? "../RTSVR_repos/devlog/chrome-performance");
   mkdirSync(outDir, { recursive: true });
-  const name = `${stamp()}${args.label ? `-${args.label}` : ""}.json.gz`;
+  // The `from_script` suffix distinguishes these from traces saved by hand out of
+  // the Performance panel. The two tools sample JavaScript at different rates, so
+  // knowing which produced a file matters when comparing them later.
+  const name = `${stamp()}${args.label ? `-${args.label}` : ""}-from_script.json.gz`;
   const outPath = resolve(outDir, name);
 
   const endpoint = await findEndpoint(args.host, args.page);
