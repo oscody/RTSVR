@@ -35,6 +35,7 @@ import { UnderAttackVfxSystem } from "./systems/underAttackVfx.js";
 import { UnitAnimationSystem } from "./systems/unitAnimation.js";
 import { attachAudioUnlock } from "./systems/audioUnlock.js";
 import { attachGpuWarmup, GpuWarmupSystem } from "./systems/gpuWarmup.js";
+import { ProgramChurnSystem } from "./systems/programChurn.js";
 import { placeViewpoint } from "./systems/viewpoint.js";
 import { WaveSystem } from "./systems/wave.js";
 
@@ -156,6 +157,9 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(ScenarioResetSystem)
     // Run last so systems can enqueue one target and the worker can start it
     // during the same frame, after their normal work has completed.
-    .registerSystem(GpuWarmupSystem);
+    .registerSystem(GpuWarmupSystem)
+    // Phase 2a step 1 diagnostic: reports why three.js re-derives shader
+    // programs. Flip PROGRAM_CHURN_ENABLED off once the branch is identified.
+    .registerSystem(ProgramChurnSystem);
   installFrameProfiler(world);
 });
