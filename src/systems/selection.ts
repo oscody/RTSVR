@@ -22,6 +22,7 @@ import {
   SELECTION_MARKER_COLOR,
 } from "./constants.ts";
 import { toggleSelectionMembership } from "./selectionRules.js";
+import { markOwnedResources, releaseEntity } from "./entityTeardown.js";
 import {
   BoardMarker,
   DebugSettings,
@@ -146,12 +147,12 @@ export function removeUnitFromSelection(unit: Entity): void {
 export function disposeUnitSelectionVisuals(unit: Entity): void {
   const ring = boardState.selectionRingByUnit.get(unit.index);
   if (ring) {
-    ring.dispose();
+    releaseEntity(ring);
     boardState.selectionRingByUnit.delete(unit.index);
   }
   const rangeRing = boardState.attackRangeRingByUnit.get(unit.index);
   if (rangeRing) {
-    rangeRing.dispose();
+    releaseEntity(rangeRing);
     boardState.attackRangeRingByUnit.delete(unit.index);
   }
 }
@@ -166,7 +167,7 @@ export function disposeTurretRangeRing(turret: Entity): void {
   }
   const ring = boardState.rangeRingByTurret.get(turret.index);
   if (!ring) return;
-  ring.dispose();
+  releaseEntity(ring);
   boardState.rangeRingByTurret.delete(turret.index);
 }
 
@@ -253,6 +254,7 @@ function showEnemyRangeRing(world: World, enemy: Entity): void {
     );
     makeNonInteractive(ring);
     ring.name = `EnemyRangeRing_${enemy.index}`;
+    markOwnedResources(ring);
     ring.rotateX(-Math.PI / 2);
     ring.position.y = ATTACK_RANGE_RING_Y_OFFSET;
     ringEntity = world
@@ -293,7 +295,7 @@ export function disposeEnemyRangeRing(enemy: Entity): void {
   if (boardState.selectedEnemy === enemy) boardState.selectedEnemy = null;
   const ring = boardState.rangeRingByEnemy.get(enemy.index);
   if (!ring) return;
-  ring.dispose();
+  releaseEntity(ring);
   boardState.rangeRingByEnemy.delete(enemy.index);
 }
 
@@ -333,6 +335,7 @@ function showTurretRangeRing(world: World, turret: Entity): void {
     ring.position.y = ATTACK_RANGE_RING_Y_OFFSET;
     const object = turret.object3D;
     if (object) ring.position.set(object.position.x, ring.position.y, object.position.z);
+    markOwnedResources(ring);
     ringEntity = world
       .createTransformEntity(ring, { parent: root })
       .addComponent(BoardMarker, { kind: "turret-range" });
@@ -409,6 +412,7 @@ function setUnitAttackRangeRingVisible(
     ring.name = `UnitAttackRangeRing_${unit.index}`;
     ring.rotateX(-Math.PI / 2);
     ring.position.y = ATTACK_RANGE_RING_Y_OFFSET;
+    markOwnedResources(ring);
     ringEntity = world
       .createTransformEntity(ring, { parent: root })
       .addComponent(BoardMarker, { kind: "unit-attack-range" });
@@ -437,6 +441,7 @@ function setRingVisible(world: World, unit: Entity, visible: boolean): void {
     ring.name = `UnitSelectionRing_${unit.index}`;
     ring.rotateX(-Math.PI / 2);
     ring.position.y = 0.026;
+    markOwnedResources(ring);
     ringEntity = world
       .createTransformEntity(ring, { parent: root })
       .addComponent(BoardMarker, { kind: "unit-selection" });

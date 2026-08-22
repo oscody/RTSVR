@@ -9,6 +9,7 @@ import {
   type Object3D,
 } from "@iwsdk/core";
 import { TILE_SIZE } from "./board.ts";
+import { markOwnedResources } from "./entityTeardown.js";
 import { makeNonInteractive } from "./sharedGeometry.js";
 import {
   HEALTH_BAR_BACKGROUND_COLOR,
@@ -36,7 +37,7 @@ export function attachHealthBar(holder: Object3D): void {
     new MeshBasicMaterial({ color: HEALTH_BAR_BACKGROUND_COLOR, depthWrite: false }),
   );
 
-  makeNonInteractive(background);
+  makeNonInteractive(markOwnedResources(background));
   background.name = "HealthBarBackground";
   bar.add(background);
 
@@ -45,7 +46,7 @@ export function attachHealthBar(holder: Object3D): void {
     new MeshBasicMaterial({ color: HEALTH_BAR_HEALTHY_COLOR, depthWrite: false }),
   );
 
-  makeNonInteractive(fill);
+  makeNonInteractive(markOwnedResources(fill));
   fill.name = HEALTH_BAR_FILL_NAME;
   fill.position.y = 0.009;
   bar.add(fill);

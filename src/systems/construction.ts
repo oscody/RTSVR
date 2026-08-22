@@ -38,6 +38,7 @@ import {
   type SiteStage,
 } from "./constructionRules.js";
 import { findGridPath, type GridPosition } from "./navigation.js";
+import { markOwnedResources, releaseEntity } from "./entityTeardown.js";
 import {
   ConstructionSite,
   ConstructionState,
@@ -86,7 +87,7 @@ export function createConstructionSite(
       depthWrite: false,
     }),
   );
-  makeNonInteractive(foundation);
+  makeNonInteractive(markOwnedResources(foundation));
   foundation.name = "ConstructionFoundation";
   holder.add(foundation);
 
@@ -95,7 +96,7 @@ export function createConstructionSite(
     new MeshBasicMaterial({ color: PROGRESS_BACKGROUND_COLOR }),
   );
 
-  makeNonInteractive(progressBackground);
+  makeNonInteractive(markOwnedResources(progressBackground));
   progressBackground.name = "ConstructionProgressBackground";
   progressBackground.position.set(0, TILE_SIZE * 0.8, 0);
   // A pending site has no progress to show. The bar appears the moment the
@@ -106,7 +107,7 @@ export function createConstructionSite(
     new BoxGeometry(footprintSize, 0.032, 0.04),
     new MeshBasicMaterial({ color: PROGRESS_FILL_COLOR }),
   );
-  makeNonInteractive(progressFill);
+  makeNonInteractive(markOwnedResources(progressFill));
   progressFill.name = "ConstructionProgressFill";
   progressFill.position.set(-footprintSize / 2, TILE_SIZE * 0.8, 0.001);
   progressFill.scale.x = 0.001;
@@ -326,7 +327,7 @@ export function cancelConstructionSite(site: Entity, refund = true): number {
     ? cancelRefund(site.getValue(ConstructionSite, "cost") ?? 0)
     : 0;
   if (amount > 0) grantCrystals(amount);
-  site.dispose();
+  releaseEntity(site);
   return amount;
 }
 
@@ -543,7 +544,7 @@ export class ConstructionSystem extends createSystem({
     releaseSiteBuilders(site);
     clearSelectedSite(site);
     boardState.buildersBySite.delete(site.index);
-    site.dispose();
+    releaseEntity(site);
     if (!spec || !root) return;
     createBuildingEntity(this.world, root, spec, x, y);
     this.setTabletStatus(`${spec.label} complete`, "success");

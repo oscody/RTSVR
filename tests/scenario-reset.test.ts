@@ -99,8 +99,12 @@ test("restart clears transient state and rebuilds the initial scenario", () => {
     new URL("../src/systems/scenarioReset.ts", import.meta.url),
     "utf8",
   );
-  assert.match(source, /entity\.removeComponent\(RayInteractable\)/);
-  assert.match(source, /entity\.dispose\(\)/);
+  // Teardown goes through releaseEntity, which drops RayInteractable and frees
+  // only the resources the entity owns. `entity.dispose()` must NOT come back:
+  // IWSDK's dispose traverse-disposes the whole subtree, taking shared GLTF
+  // assets, the shared proxy cube and the queue-badge plane with it.
+  assert.match(source, /releaseEntity\(entity\)/);
+  assert.doesNotMatch(source, /entity\.dispose\(\)/);
   assert.match(source, /selectionRingByUnit\.clear\(\)/);
   assert.match(source, /attackRangeRingByUnit\.clear\(\)/);
   assert.match(source, /rangeRingByTurret\.clear\(\)/);

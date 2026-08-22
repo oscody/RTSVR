@@ -1,4 +1,4 @@
-import { RayInteractable, createSystem, type Entity } from "@iwsdk/core";
+import { createSystem, type Entity } from "@iwsdk/core";
 import { clearAlienAnimations } from "./alienAnimation.js";
 import { clearCombatEffects } from "./combatEffects.js";
 import { clearCommandCenterHud } from "./commandCenterHud.js";
@@ -39,6 +39,7 @@ import { clearDimmableScenario } from "./board.js";
 import { createInitialScenario } from "./structures.js";
 import { INITIAL_WAVE_DELAY_SECONDS } from "./waveRules.js";
 import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
+import { releaseEntity } from "./entityTeardown.js";
 
 const SCENARIO_RESET_DEFAULTS = createScenarioResetDefaults(
   STARTING_CRYSTALS,
@@ -88,13 +89,13 @@ export class ScenarioResetSystem extends createSystem({
     clearSpotlightSubject();
     clearDimmableScenario();
     resetUnderAttackAlert();
-    for (const ring of boardState.selectionRingByUnit.values()) ring.dispose();
+    for (const ring of boardState.selectionRingByUnit.values()) releaseEntity(ring);
     boardState.selectionRingByUnit.clear();
-    for (const ring of boardState.attackRangeRingByUnit.values()) ring.dispose();
+    for (const ring of boardState.attackRangeRingByUnit.values()) releaseEntity(ring);
     boardState.attackRangeRingByUnit.clear();
-    for (const ring of boardState.rangeRingByTurret.values()) ring.dispose();
+    for (const ring of boardState.rangeRingByTurret.values()) releaseEntity(ring);
     boardState.rangeRingByTurret.clear();
-    for (const ring of boardState.rangeRingByEnemy.values()) ring.dispose();
+    for (const ring of boardState.rangeRingByEnemy.values()) releaseEntity(ring);
     boardState.rangeRingByEnemy.clear();
     boardState.selectedEnemy = null;
 
@@ -112,10 +113,7 @@ export class ScenarioResetSystem extends createSystem({
 
     const staleObjects = Array.from(this.queries.objects.entities);
     for (const entity of staleObjects) {
-      if (entity.hasComponent(RayInteractable)) {
-        entity.removeComponent(RayInteractable);
-      }
-      entity.dispose();
+      releaseEntity(entity);
     }
 
     boardState.commandCenter = null;

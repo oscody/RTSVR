@@ -64,6 +64,7 @@ import {
 } from "./waveRules.js";
 import { isTutorialFrozen } from "./tutorialFreeze.js";
 import { getNextWaveSpec } from "./waveCatalog.js";
+import { releaseEntity } from "./entityTeardown.js";
 
 export class CombatSystem extends createSystem({
   attackers: {
@@ -310,9 +311,11 @@ export class CombatSystem extends createSystem({
       this.completeDefeatIfNoFriendlies();
     }
 
-    // GLTF geometry and materials are shared AssetManager resources. Removing
-    // the ECS entity/object is safe; traversing and disposing those resources
-    // here would corrupt every clone using the same asset.
+    // GLTF geometry and materials are shared AssetManager resources, so this
+    // must NOT use `entity.dispose()` — that traverse-disposes the whole
+    // subtree and takes the shared asset (and the shared proxy cube, and the
+    // queue-badge plane) with it. `releaseEntity` frees only what this entity
+    // owns. See entityTeardown.ts for the measurement behind that.
     if (target.hasComponent(RayInteractable)) {
       target.removeComponent(RayInteractable);
     }
@@ -325,7 +328,7 @@ export class CombatSystem extends createSystem({
     if (target.hasComponent(Building) && target.getValue(Building, "kind") === "turret") {
       detachTurretAnimation(target);
     }
-    target.dispose();
+    releaseEntity(target);
   }
 
   private markCommandCenterDestroyed(): void {

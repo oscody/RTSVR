@@ -32,6 +32,7 @@ import {
 import { buildRateMultiplier } from "./constructionRules.js";
 import { releaseSiteBuilders, takeQueueOrder } from "./construction.js";
 import { attachQueueBadge } from "./queueBadge.js";
+import { markOwnedResources, releaseEntity } from "./entityTeardown.js";
 import {
   attachCraftProductionAnimation,
   detachCraftProductionAnimation,
@@ -77,7 +78,7 @@ export function createCraftProductionSite(
     }),
   );
 
-  makeNonInteractive(foundation);
+  makeNonInteractive(markOwnedResources(foundation));
   foundation.name = "CraftProductionFoundation";
   holder.add(foundation);
 
@@ -86,14 +87,14 @@ export function createCraftProductionSite(
     new MeshBasicMaterial({ color: PROGRESS_BACKGROUND_COLOR }),
   );
 
-  makeNonInteractive(progressBackground);
+  makeNonInteractive(markOwnedResources(progressBackground));
   progressBackground.position.set(0, TILE_SIZE * 0.8, 0);
   holder.add(progressBackground);
   const progressFill = new Mesh(
     new BoxGeometry(size, 0.032, 0.04),
     new MeshBasicMaterial({ color: PROGRESS_FILL_COLOR }),
   );
-  makeNonInteractive(progressFill);
+  makeNonInteractive(markOwnedResources(progressFill));
   progressFill.name = "CraftProductionProgressFill";
   progressFill.position.set(-size / 2, TILE_SIZE * 0.8, 0.001);
   progressFill.scale.x = 0.001;
@@ -267,7 +268,7 @@ export class CraftProductionSystem extends createSystem({
     // dangling `ConstructionState.site` until the next frame notices.
     releaseSiteBuilders(site);
     boardState.buildersBySite.delete(site.index);
-    site.dispose();
+    releaseEntity(site);
     createCraftEntity(
       this.world,
       root,

@@ -1,4 +1,4 @@
-import { RayInteractable, type Entity } from "@iwsdk/core";
+import { type Entity } from "@iwsdk/core";
 import { getBuildingSpec } from "./buildingCatalog.js";
 import { getProductionSpec } from "./craftCatalog.js";
 import {
@@ -13,6 +13,7 @@ import { detachCraftProductionAnimation } from "./craftProductionAnimation.js";
 import { detachMinerAnimation } from "./minerAnimation.js";
 import { detachTurretAnimation } from "./turretAnimation.js";
 import { detachUnitAnimation } from "./unitAnimation.js";
+import { releaseEntity } from "./entityTeardown.js";
 import {
   disposeTurretRangeRing,
   disposeUnitSelectionVisuals,
@@ -148,10 +149,8 @@ function destroyCraftProductionSite(site: Entity): DemolitionResult {
 }
 
 function disposeEntity(entity: Entity): void {
-  // Mirrors CombatSystem's destroy path: drop the ray target before disposing,
-  // and never traverse-dispose GLTF resources shared with other clones.
-  if (entity.hasComponent(RayInteractable)) {
-    entity.removeComponent(RayInteractable);
-  }
-  entity.dispose();
+  // Mirrors CombatSystem's destroy path: drop the ray target, then tear the
+  // entity down WITHOUT traverse-disposing GLTF resources shared with every
+  // other clone of the same asset. Both are `releaseEntity`'s job.
+  releaseEntity(entity);
 }
