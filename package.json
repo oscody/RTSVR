@@ -12,6 +12,7 @@
     "dev:status": "bash scripts/with-supported-node.sh iwsdk dev status",
     "reference:status": "bash scripts/with-supported-node.sh iwsdk reference status",
     "reference:warmup": "bash scripts/with-supported-node.sh iwsdk reference warmup",
+    "trace:capture": "bash scripts/with-supported-node.sh node scripts/capture-trace.mjs",
     "asset:optimize-miner": "bash scripts/with-supported-node.sh node scripts/optimize-craft-miner.mjs",
     "asset:optimize-racer": "bash scripts/with-supported-node.sh node scripts/optimize-craft-racer.mjs",
     "asset:optimize-aliens": "bash scripts/with-supported-node.sh node scripts/optimize-aliens.mjs",
