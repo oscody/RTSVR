@@ -155,6 +155,28 @@ test("waves prepare incrementally while reserves stay cheap", () => {
   assert.equal(enemyFactory.match(/setFromObject\(model\)/g)?.length, 1);
 });
 
+test("GPU warm-up is queued, labelled, and covers first-use effect resources", () => {
+  const gpuWarmup = source("src/systems/gpuWarmup.ts");
+  const index = source("src/index.ts");
+  const wave = source("src/systems/wave.ts");
+  const combatEffects = source("src/systems/combatEffects.ts");
+  const meteor = source("src/systems/meteorSystem.ts");
+  const underAttack = source("src/systems/underAttackVfx.ts");
+
+  assert.match(gpuWarmup, /class GpuWarmupSystem/);
+  assert.match(gpuWarmup, /advanceGpuWarmup\(\)/);
+  assert.match(gpuWarmup, /performance\.mark\(`gpu-warmup:/);
+  assert.match(gpuWarmup, /initTexture/);
+  assert.match(index, /registerSystem\(GpuWarmupSystem\)/);
+  assert.match(wave, /warmObjectForRender\(alien\.object3D, `alien:\$\{spawn\.asset\}`\)/);
+  assert.match(combatEffects, /"combat-bolt"/);
+  assert.match(combatEffects, /"combat-flash"/);
+  assert.match(meteor, /"meteor:base"/);
+  assert.match(meteor, /"meteor:impact"/);
+  assert.match(underAttack, /warmTextureForRender\(lockedTexture/);
+  assert.match(underAttack, /warmTextureForRender\(attackTexture/);
+});
+
 test("alien pathfinding is bounded, shared, and follows cached routes", () => {
   const constants = source("src/systems/constants.ts");
   const navigation = source("src/systems/navigation.ts");
@@ -308,4 +330,3 @@ test("decoration is not ray-testable, pick targets still are", () => {
   // Same for the tablet's grab handle.
   assert.doesNotMatch(read("src/systems/tablet.ts"), /makeNonInteractive\(handle\)/);
 });
-

@@ -1,99 +1,185 @@
-import type { Object3D, World } from "@iwsdk/core";
+import { createSystem, type Object3D, type Texture, type World } from "@iwsdk/core";
 
 /**
- * Compiles a prepared object's shader programs **before** it is first rendered.
+ * Queued, labelled pre-warm work for resources that would otherwise first
+ * appear during a live Quest frame.
  *
- * ## Why this exists
- *
- * `WaveSystem.prepareWaveIncrementally()` already builds each wave's aliens a few
- * at a time during the countdown, and it is close to free — the profiler's
- * `Prep | PAlien | PDrake | PMech` row reads 0.0–0.1 ms. That preparation is
- * working exactly as designed.
- *
- * But it prepares the **CPU** side only. `createPreparedAlien()` finishes with
- * `alien.object3D?.removeFromParent()`, and that detach is deliberate: an
- * attached-but-invisible alien still costs a matrix recompose over ~79 nodes
- * every frame, because `updateMatrixWorld` recurses into invisible subtrees.
- * Detaching removed that cost entirely and was the right call.
- *
- * The side effect is that a detached object is never in the render pass, so its
- * **GPU** work — program compilation, texture upload — is deferred to first
- * render, which is the moment the whole reserve is released at once.
- *
- * This closes that gap without undoing the optimisation: `compileAsync` compiles
- * an object's materials **without attaching or rendering it**, so the reserve
- * stays detached and the work lands during the idle countdown instead.
- *
- * ## Honesty about what this fixes
- *
- * A 2.5-second stall was measured at the tutorial → wave 1 handoff
- * (`devlog/plan/2026-08-20-Console-Log-Review-And-Optimisation-Plan.md`,
- * Finding 2), and shader compilation was the first hypothesis. It is **not
- * confirmed** — the tutorial already releases one of every alien type wave 1
- * uses, so those programs arguably should have compiled earlier, and the
- * profiler's `Other` bucket cannot separate compilation from GC or GPU upload.
- *
- * This is worth doing regardless, because moving compilation off the release
- * frame is correct whatever the stall turns out to be. It should not be reported
- * as the fix for that stall until a DevTools Performance trace attributes it.
+ * Quest Browser does not expose `KHR_parallel_shader_compile`, so Three.js's
+ * `compileAsync()` still performs its setup synchronously. One target is
+ * therefore started at a time. This moves and spreads the work into setup or a
+ * wave countdown instead of letting several preparation calls block one frame.
  */
 
+interface WarmupRenderer {
+  compileAsync?: (
+    object: Object3D,
+    camera: unknown,
+    targetScene: unknown,
+  ) => Promise<unknown>;
+  initTexture?: (texture: Texture) => void;
+}
+
 interface WarmupTargets {
-  renderer?: {
-    compileAsync?: (
-      object: Object3D,
-      camera: unknown,
-      targetScene: unknown,
-    ) => Promise<unknown>;
-  };
+  renderer?: WarmupRenderer;
   scene?: unknown;
   camera?: unknown;
 }
 
+interface ObjectWarmupTarget {
+  kind: "object";
+  label: string;
+  object: Object3D;
+}
+
+interface TextureWarmupTarget {
+  kind: "texture";
+  label: string;
+  texture: Texture;
+}
+
+type WarmupTarget = ObjectWarmupTarget | TextureWarmupTarget;
+
 let targets: WarmupTargets | null = null;
-/** Counts what we warmed, so the effect can be checked rather than assumed. */
+let queue: WarmupTarget[] = [];
+let pendingObjects = new WeakSet<Object3D>();
+let pendingTextures = new WeakSet<Texture>();
+let active = false;
 let warmedCount = 0;
-let failed = false;
+let failedCount = 0;
+let activeLabel = "";
+
+function mark(phase: "queued" | "start" | "complete" | "failed", label: string): void {
+  // Custom trace events make a later Quest capture answer which application
+  // resource was being prepared without turning every frame into a console log.
+  if (typeof performance.mark === "function") {
+    performance.mark(`gpu-warmup:${phase}:${label}`);
+  }
+}
 
 /** Call once from `index.ts` after `World.create` resolves. */
 export function attachGpuWarmup(world: World): void {
   targets = world as unknown as WarmupTargets;
+  queue = [];
+  pendingObjects = new WeakSet<Object3D>();
+  pendingTextures = new WeakSet<Texture>();
+  active = false;
   warmedCount = 0;
-  failed = false;
+  failedCount = 0;
+  activeLabel = "";
 }
 
-/**
- * Compile `object`'s materials now, off the render path.
- *
- * Fire-and-forget by design. The synchronous half of `compile()` runs on the
- * calling frame, which is the point: callers invoke this from the *incremental*
- * preparation loop, so the cost is already spread a few objects per frame across
- * a 30-second countdown. Awaiting it would only move the same work later.
- *
- * Safe to call with a detached object — that is the whole reason it is used here.
- */
-export function warmObjectForRender(object: Object3D | null | undefined): void {
-  if (!object || !targets || failed) return;
-  const { renderer, scene, camera } = targets;
-  if (!renderer?.compileAsync || !scene || !camera) return;
-  // Same stale-matrix rule as everywhere else in this project: `compile`
-  // traverses and reads transforms, and this object was assembled moments ago.
-  object.updateMatrixWorld(true);
-  try {
-    void renderer.compileAsync(object, camera, scene).then(
-      () => {},
-      () => {},
-    );
+/** Queue one object's shader variants. Duplicate object requests are ignored. */
+export function warmObjectForRender(
+  object: Object3D | null | undefined,
+  label = "unlabelled-object",
+): void {
+  if (!object || pendingObjects.has(object)) return;
+  pendingObjects.add(object);
+  queue.push({ kind: "object", label, object });
+  mark("queued", label);
+}
+
+/** Queue one texture upload. Duplicate texture requests are ignored. */
+export function warmTextureForRender(
+  texture: Texture | null | undefined,
+  label = "unlabelled-texture",
+): void {
+  if (!texture || pendingTextures.has(texture)) return;
+  pendingTextures.add(texture);
+  queue.push({ kind: "texture", label, texture });
+  mark("queued", label);
+}
+
+function finish(label: string, success: boolean): void {
+  active = false;
+  activeLabel = "";
+  if (success) {
     warmedCount += 1;
-  } catch {
-    // One failure disables the rest. A warm-up that throws per alien would turn
-    // a performance nicety into a spam source, and the game is correct without
-    // it — the programs simply compile at release, as they did before.
-    failed = true;
+    mark("complete", label);
+  } else {
+    failedCount += 1;
+    mark("failed", label);
   }
 }
 
-/** How many objects have been pre-compiled this session, for diagnostics. */
+/** Start at most one warm-up target. Called once per normal world update. */
+export function advanceGpuWarmup(): void {
+  if (active || !targets) return;
+  const target = queue.shift();
+  if (!target) return;
+
+  const { renderer, scene, camera } = targets;
+  active = true;
+  activeLabel = target.label;
+  mark("start", target.label);
+
+  try {
+    if (target.kind === "texture") {
+      if (!renderer?.initTexture) {
+        finish(target.label, false);
+        return;
+      }
+      renderer.initTexture(target.texture);
+      finish(target.label, true);
+      return;
+    }
+
+    if (!renderer?.compileAsync || !scene || !camera) {
+      finish(target.label, false);
+      return;
+    }
+
+    // `compile()` skips invisible objects. Pool members are normally parked,
+    // so make this detached/hidden target traversable just for synchronous
+    // compile setup, then restore it before the renderer can draw another frame.
+    const visibility: Array<[Object3D, boolean]> = [];
+    target.object.traverse((child) => {
+      visibility.push([child, child.visible]);
+      child.visible = true;
+    });
+    target.object.updateMatrixWorld(true);
+    let compilation: Promise<unknown>;
+    try {
+      compilation = renderer.compileAsync(target.object, camera, scene);
+    } finally {
+      for (const [child, wasVisible] of visibility) child.visible = wasVisible;
+    }
+    void compilation.then(
+      () => finish(target.label, true),
+      () => finish(target.label, false),
+    );
+  } catch {
+    // A failed optional warm-up must never stop normal gameplay or the targets
+    // queued after it. The performance mark retains the failure for the trace.
+    finish(target.label, false);
+  }
+}
+
+/** How many completed warm-up targets this session has processed. */
 export function gpuWarmupCount(): number {
   return warmedCount;
+}
+
+/** Small diagnostic surface for a hitch record or automated test. */
+export function gpuWarmupStatus(): Readonly<{
+  queued: number;
+  active: boolean;
+  activeLabel: string;
+  completed: number;
+  failed: number;
+}> {
+  return {
+    queued: queue.length,
+    active,
+    activeLabel,
+    completed: warmedCount,
+    failed: failedCount,
+  };
+}
+
+/** Drives the queue after normal systems have had a chance to add targets. */
+export class GpuWarmupSystem extends createSystem({}) {
+  update(): void {
+    advanceGpuWarmup();
+  }
 }

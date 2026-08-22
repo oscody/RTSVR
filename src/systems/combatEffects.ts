@@ -39,6 +39,7 @@ import {
   COMBAT_VFX_TURRET_MUZZLE_COLOR,
   RACER_CANNON_MUZZLE_NODES,
 } from "./constants.ts";
+import { warmObjectForRender } from "./gpuWarmup.js";
 import { Building, Enemy, Unit, boardState } from "./state.js";
 import { makeNonInteractive } from "./sharedGeometry.js";
 
@@ -136,6 +137,7 @@ const boltSlots: BoltSlot[] = [];
 const flashSlots: FlashSlot[] = [];
 let pooledRoot: Object3D | null = null;
 let effectsWorld: World | null = null;
+let combatWarmupQueued = false;
 
 // Scratch — reused across emit/update, never allocated per frame.
 const tmpMuzzle = new Vector3();
@@ -212,6 +214,36 @@ function ensurePool(): boolean {
 
   pooledRoot = rootObject;
   return true;
+}
+
+/**
+ * Compile the two combat material variants without attaching the real pool.
+ * Attaching invisible reserve meshes would put them back into every-frame
+ * matrix traversal, undoing the optimisation that keeps pools lazy.
+ */
+function queueCombatWarmup(): void {
+  if (combatWarmupQueued) return;
+  combatWarmupQueued = true;
+
+  const bolt = new Mesh(
+    new SphereGeometry(1, 8, 8),
+    new MeshBasicMaterial({
+      color: COMBAT_VFX_BOLT_COLOR,
+      toneMapped: false,
+    }),
+  );
+  const flash = new Mesh(
+    new SphereGeometry(COMBAT_VFX_FLASH_RADIUS, 8, 8),
+    new MeshBasicMaterial({
+      color: COMBAT_VFX_MUZZLE_COLOR,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      toneMapped: false,
+    }),
+  );
+  warmObjectForRender(bolt, "combat-bolt");
+  warmObjectForRender(flash, "combat-flash");
 }
 
 function toRootLocal(worldPoint: Vector3): void {
@@ -428,6 +460,7 @@ export function clearCombatEffects(): void {
 export class CombatEffectsSystem extends createSystem({}) {
   init(): void {
     effectsWorld = this.world;
+    queueCombatWarmup();
   }
 
   update(delta: number): void {

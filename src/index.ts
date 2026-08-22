@@ -34,7 +34,7 @@ import { UnderAttackBannerSystem } from "./systems/underAttackBanner.js";
 import { UnderAttackVfxSystem } from "./systems/underAttackVfx.js";
 import { UnitAnimationSystem } from "./systems/unitAnimation.js";
 import { attachAudioUnlock } from "./systems/audioUnlock.js";
-import { attachGpuWarmup } from "./systems/gpuWarmup.js";
+import { attachGpuWarmup, GpuWarmupSystem } from "./systems/gpuWarmup.js";
 import { placeViewpoint } from "./systems/viewpoint.js";
 import { WaveSystem } from "./systems/wave.js";
 
@@ -153,6 +153,9 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(CraftVisualRiseSystem)
     .registerSystem(MeteorSystem)
     .registerSystem(MatchResultSystem)
-    .registerSystem(ScenarioResetSystem);
+    .registerSystem(ScenarioResetSystem)
+    // Run last so systems can enqueue one target and the worker can start it
+    // during the same frame, after their normal work has completed.
+    .registerSystem(GpuWarmupSystem);
   installFrameProfiler(world);
 });

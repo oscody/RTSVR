@@ -26,6 +26,7 @@ import {
   UNDER_ATTACK_BADGE_TEXTURE_SIZE,
   UNDER_ATTACK_BADGE_Y_OFFSET,
 } from "./constants.ts";
+import { warmObjectForRender, warmTextureForRender } from "./gpuWarmup.js";
 import { makeNonInteractive } from "./sharedGeometry.js";
 import {
   ALERT_PRIORITY,
@@ -168,6 +169,12 @@ function ensurePool(): boolean {
   }
 
   pooledRoot = rootObject;
+  // Both badge states share the same shader variant (`map` is present), but
+  // their canvas textures are distinct GPU uploads. Initialising them here
+  // keeps a first alert from paying that upload in a combat frame.
+  warmObjectForRender(badgeSlots[0]?.mesh, "under-attack-badge");
+  warmTextureForRender(lockedTexture, "under-attack-badge:locked-texture");
+  warmTextureForRender(attackTexture, "under-attack-badge:attack-texture");
   return true;
 }
 

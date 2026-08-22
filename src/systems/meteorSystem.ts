@@ -34,6 +34,7 @@ import {
   METEOR_TRAIL_LENGTH,
   METEOR_TRAIL_THICKNESS,
 } from "./constants.ts";
+import { warmObjectForRender } from "./gpuWarmup.js";
 import { MatchState, WaveSource, boardState, getTerrainAt } from "./state.js";
 import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
 
@@ -175,6 +176,12 @@ function ensurePool(): boolean {
   }
 
   pooledRoot = rootObject;
+  // Compile the two meteor model variants plus their trail/impact materials
+  // before a normal match's first ambient shower.
+  warmObjectForRender(meteorSlots[0]?.spinner, "meteor:base");
+  warmObjectForRender(meteorSlots[1]?.spinner, "meteor:detailed");
+  warmObjectForRender(meteorSlots[0]?.trail, "meteor:trail");
+  warmObjectForRender(flashSlots[0]?.mesh, "meteor:impact");
   return true;
 }
 

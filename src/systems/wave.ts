@@ -396,7 +396,7 @@ export class WaveSystem extends createSystem({
     // pays that cost here instead, a few aliens per frame across the countdown —
     // and it lands inside the PAlien/PDrake/PMech measurement, so its price is
     // visible in the profiler rather than hidden.
-    warmObjectForRender(alien.object3D);
+    warmObjectForRender(alien.object3D, `alien:${spawn.asset}`);
     const buildMs = performance.now() - buildStart;
     if (buildMs > this.slowestBuildMs) {
       this.slowestBuildMs = buildMs;
