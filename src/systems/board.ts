@@ -331,6 +331,12 @@ export class BoardSystem extends createSystem({}) {
         opacity: MARS_DUST_OPACITY,
         depthWrite: false,
         side: DoubleSide,
+        // Flat ground decal: its back faces never overlap its front faces, so
+        // three.js's two-pass double-sided transparency buys nothing and costs
+        // a second draw call plus two program re-derivations every frame
+        // (three.cjs:76518). Measured as the last churning material on Quest
+        // 2026-08-22, at 2.0 re-derives/frame, once the GLB materials were done.
+        forceSinglePass: true,
       }),
     );
     makeNonInteractive(dustPatches);

@@ -74,6 +74,10 @@ export function attachTutorialTurnCue(world: World): void {
     // DoubleSide is what keeps that from turning it invisible. (Back-face
     // culling has eaten one flat glyph in this feature already.)
     side: DoubleSide,
+    // A flat glyph, so single-pass is pixel-identical — and it avoids the two
+    // draw calls and two program re-derivations per frame that three.js spends
+    // on transparent double-sided materials (three.cjs:76518).
+    forceSinglePass: true,
   });
   cueMesh = new Mesh(cueGeometry, cueMaterial);
   makeNonInteractive(cueMesh);
