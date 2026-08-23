@@ -102,3 +102,18 @@ test("shared singletons are never marked as owned", () => {
     );
   }
 });
+
+// three.js draws a `transparent && side === DoubleSide` material twice — back
+// faces then front — and forces a program re-derivation before each pass
+// (`three.cjs:76518`). Measured on Quest 2026-08-22, that was the whole of the
+// remaining program-selection cost: every churning material was one of these,
+// re-deriving exactly twice per object per frame. `forceSinglePass` collapses it.
+test("transparent double-sided materials are collapsed to a single pass", () => {
+  const source = read("meshMerge.ts");
+  assert.match(source, /forceSinglePass = true/);
+  assert.match(source, /material\.transparent !== true\) continue/);
+  assert.match(source, /material\.side !== DoubleSide\) continue/);
+  // Must run on the SHARED instance, or clones keep the two-pass materials.
+  assert.match(source, /getGLTF\(key, \{ shared: true \}\)/);
+  assert.match(source, /useSinglePassTransparency\(gltf\.scene\)/);
+});

@@ -11,7 +11,7 @@ export default defineConfig({
         device: "metaQuest3",
       },
       ai: {         
-        mode: "oversight",
+        mode: "agent",
         tools: ["claude", "codex"], 
       },
       verbose: true,

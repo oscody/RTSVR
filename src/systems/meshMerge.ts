@@ -20,14 +20,15 @@
  * later `AssetManager.getGLTF(key)` clone inherits the merged form for free.
  */
 import {
+  type AnimationClip,
   AssetManager,
+  type BufferGeometry,
+  DoubleSide,
+  type Material,
   Matrix4,
   Mesh,
-  PropertyBinding,
-  type AnimationClip,
-  type BufferGeometry,
-  type Material,
   type Object3D,
+  PropertyBinding,
 } from "@iwsdk/core";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
@@ -62,6 +63,51 @@ function isMergeable(node: Object3D): node is Mesh {
   if (Array.isArray(mesh.material)) return false;
   if (mesh.morphTargetInfluences?.length) return false;
   return true;
+}
+
+
+/**
+ * Render transparent double-sided materials in one pass instead of two.
+ *
+ * three.js draws a `transparent && side === DoubleSide` material **twice** —
+ * once back faces, once front — and forces a shader-program re-derivation before
+ * each pass (`three.cjs:76518`):
+ *
+ * ```
+ * material.side = BackSide;  material.needsUpdate = true;  renderBufferDirect(...)
+ * material.side = FrontSide; material.needsUpdate = true;  renderBufferDirect(...)
+ * ```
+ *
+ * That is two draw calls and two full `getParameters` rebuilds per object per
+ * frame, forever. Measured on Quest 2026-08-22 it was the entire remaining
+ * program-selection cost: every churning material was one of these — glass,
+ * thruster glows, heat haze, embers, laser beams — re-deriving exactly twice per
+ * object per frame, and `__version` was the field that differed.
+ *
+ * `forceSinglePass` (three r151+) collapses it to one pass. The two-pass form
+ * exists to depth-sort a transparent object's own back faces behind its front
+ * faces; for the additive and emissive glows this affects, blending is
+ * order-independent and the result is identical. Anything where it is not
+ * identical should set `forceSinglePass = false` again on that material by name.
+ */
+export function useSinglePassTransparency(root: Object3D): string[] {
+  const changed: string[] = [];
+  const seen = new Set<Material>();
+  root.traverse((node) => {
+    const mesh = node as Mesh;
+    if (!mesh.isMesh || !mesh.material) return;
+    const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const material of list) {
+      if (!material || seen.has(material)) continue;
+      seen.add(material);
+      if (material.transparent !== true) continue;
+      if (material.side !== DoubleSide) continue;
+      if (material.forceSinglePass === true) continue;
+      material.forceSinglePass = true;
+      changed.push(material.name || material.type);
+    }
+  });
+  return changed;
 }
 
 /**
@@ -187,6 +233,7 @@ export function mergeRigidGroups(
 export function optimizeLoadedAssets(keys: string[], verbose = false): void {
   let before = 0;
   let after = 0;
+  const twoPass: string[] = [];
   for (const key of keys) {
     // `shared: true` returns the cached instance rather than a clone, so the
     // merge is inherited by every later clone of this key.
@@ -195,6 +242,14 @@ export function optimizeLoadedAssets(keys: string[], verbose = false): void {
     const stats = mergeRigidGroups(gltf.scene, gltf.animations ?? []);
     before += stats.before;
     after += stats.after;
+    // Same one-time, shared-instance hook: every later clone inherits the flag.
+    const singlePass = useSinglePassTransparency(gltf.scene);
+    if (singlePass.length > 0) {
+      twoPass.push(...singlePass);
+      if (verbose) {
+        console.log(`[SinglePass] ${key}: ${singlePass.join(", ")}`);
+      }
+    }
     if (verbose) {
       console.log(
         `[MeshMerge] ${key}: ${stats.before} -> ${stats.after} meshes`,
@@ -203,5 +258,13 @@ export function optimizeLoadedAssets(keys: string[], verbose = false): void {
   }
   if (verbose) {
     console.log(`[MeshMerge] total: ${before} -> ${after} meshes`);
+  }
+  // Always report this one: it halves the draw calls for those objects and
+  // removes two program re-derivations each per frame, so a change in the count
+  // is a change in frame cost worth noticing in a log.
+  if (twoPass.length > 0) {
+    console.log(
+      `[SinglePass] ${twoPass.length} transparent double-sided materials collapsed to one pass`,
+    );
   }
 }
