@@ -33,12 +33,14 @@ import {
 } from "./traceIds.js";
 import {
   currentTraceSlot,
+  flushPendingDump,
   isTraceRecording,
   meters,
   recordEvent,
   recordSystemSkipped,
   requestDump,
 } from "./traceRecorder.js";
+import { systemNameFor } from "./traceSystemIds.js";
 
 /**
  * Per-entity lifecycle stage, so a transition can be validated against what
@@ -416,7 +418,12 @@ export function traceRuntime(
 
 /** Ask for a dump by hand. Exposed for the console and for tests. */
 export function traceManualDump(note = "manual"): boolean {
-  return requestDump(Reason.ManualDump, note);
+  // Manual inspection is intentionally synchronous: preserve what is available
+  // now, then print it before the DevTools expression returns. Automatic
+  // triggers keep their post-trigger collection window and deferred formatting.
+  const accepted = requestDump(Reason.ManualDump, note, false);
+  if (accepted) flushPendingDump(systemNameFor);
+  return accepted;
 }
 
 // ---------------------------------------------------------------------------

@@ -264,6 +264,8 @@ let currentWaveStage = 0;
 const lastDumpAt = new Float64Array(256);
 /** Dumps suppressed by cooldown, reported so a storm is never silent. */
 let suppressedDumps = 0;
+/** Dump requests refused because an earlier snapshot is still being preserved. */
+let busyDumps = 0;
 
 /** A snapshot is filling (post-trigger events still being collected). */
 let snapshotFilling = false;
@@ -326,6 +328,9 @@ export function disposeTraceRecorder(): void {
   snapshotPostRemaining = 0;
   dumpPending = false;
   dumpsPrinted = 0;
+  suppressedDumps = 0;
+  busyDumps = 0;
+  lastDumpMs = 0;
   lastDumpAt.fill(0);
 }
 
@@ -546,16 +551,41 @@ export function executionOrderLine(
  * The evidence is copied immediately — before anything is formatted, before
  * anything is printed — because the alternative is losing it to the next burst
  * while a string is being built. Formatting is deferred to
- * {@link flushPendingDump}, which runs on the profiler's ~1 Hz tick.
+ * {@link flushPendingDump}, which normally runs on the profiler's ~1 Hz tick.
  *
- * Returns `true` when a snapshot was taken, `false` when the cooldown
- * suppressed it.
+ * Automatic triggers collect the configured post-trigger event window before
+ * they become printable. A manual request passes `collectPostTrigger = false`,
+ * so it is sealed immediately. The console-facing manual helper deliberately
+ * flushes that sealed snapshot synchronously; automatic snapshots stay deferred
+ * so their formatting cannot add cost to the triggering frame.
+ *
+ * Returns `true` when a snapshot was started, `false` when a snapshot is
+ * already filling/awaiting export or an automatic trigger is cooled down.
  */
-export function requestDump(reason: number, note = ""): boolean {
+export function requestDump(
+  reason: number,
+  note = "",
+  collectPostTrigger = true,
+): boolean {
   if (!recording || !events || !snapshot) return false;
+
+  // A snapshot owns the emergency buffer until it is exported. Replacing it
+  // loses the original trigger and makes a sustained slowdown starve every
+  // dump forever, so later requests must leave it untouched.
+  if (snapshotFilling || dumpPending) {
+    busyDumps += 1;
+    return false;
+  }
+
   const now = performance.now();
   const slot = reason & 0xff;
-  if (now - lastDumpAt[slot] < DUMP_COOLDOWN_SECONDS * 1000) {
+  // The operator explicitly asked for a manual export, so do not make that
+  // command wait behind the automatic per-reason cooldown. Automatic triggers
+  // retain the cooldown that prevents a hitch from becoming a log storm.
+  if (
+    collectPostTrigger &&
+    now - lastDumpAt[slot] < DUMP_COOLDOWN_SECONDS * 1000
+  ) {
     suppressedDumps += 1;
     return false;
   }
@@ -576,8 +606,8 @@ export function requestDump(reason: number, note = ""): boolean {
     snapshot.writes += 1;
   }
 
-  snapshotFilling = SNAPSHOT_POST_EVENTS > 0;
-  snapshotPostRemaining = SNAPSHOT_POST_EVENTS;
+  snapshotFilling = collectPostTrigger && SNAPSHOT_POST_EVENTS > 0;
+  snapshotPostRemaining = snapshotFilling ? SNAPSHOT_POST_EVENTS : 0;
   dumpTriggerReason = reason;
   dumpTriggerFrame = traceFrame();
   dumpTriggerSeq = sequence;
@@ -735,6 +765,7 @@ export interface TraceCostReport {
   dumpMs: number;
   dumps: number;
   suppressed: number;
+  busy: number;
 }
 
 /** Read and reset the window counters. Called once per `[Profile]` flush. */
@@ -768,6 +799,7 @@ export function flushTraceCost(): TraceCostReport | null {
     dumpMs: lastDumpMs,
     dumps: dumpsPrinted,
     suppressed: suppressedDumps,
+    busy: busyDumps,
   };
   eventsThisWindow = 0;
   return report;
@@ -788,6 +820,7 @@ export function formatTraceCostLine(report: TraceCostReport | null): string {
     `Ev ${report.events} @${report.eventsPerSecond.toFixed(0)}/s | ` +
     `Drop ${report.dropped} | Cap ${report.capacity} (${held}s) | ` +
     `Dump ${report.dumpMs.toFixed(1)}ms x${report.dumps}` +
-    (report.suppressed > 0 ? ` | Cooled ${report.suppressed}` : "")
+    (report.suppressed > 0 ? ` | Cooled ${report.suppressed}` : "") +
+    (report.busy > 0 ? ` | Busy ${report.busy}` : "")
   );
 }
