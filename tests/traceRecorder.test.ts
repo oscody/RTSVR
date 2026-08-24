@@ -39,10 +39,37 @@ execFileSync(
   { cwd: ROOT_PATH, stdio: "pipe" },
 );
 
-const recorder = await import(
-  pathToFileURL(join(BUILD_DIR, "traceRecorder.js")).href,
-);
 const ids = await import(pathToFileURL(join(BUILD_DIR, "traceIds.js")).href);
+
+/**
+ * Both variants are built by rewriting the compiled flags module, and NEITHER
+ * reads the shipped values.
+ *
+ * That symmetry is the point. These tests are about the recorder's dump
+ * behaviour, which has to hold whatever `traceFlags.ts` happens to be set to on
+ * the branch — and the branch legitimately ships with every flag off while an
+ * A/B control run is being captured. Importing the real module here made seven
+ * of these tests fail the moment the flags were flipped for that run: a
+ * shipping configuration switch was silently deciding whether the test suite
+ * was green, which is exactly the coupling a behaviour test must not have.
+ */
+const enabledFlagsPath = join(BUILD_DIR, "traceFlags.enabled.js");
+const enabledRecorderPath = join(BUILD_DIR, "traceRecorder.enabled.js");
+writeFileSync(
+  enabledFlagsPath,
+  readFileSync(join(BUILD_DIR, "traceFlags.js"), "utf8").replace(
+    /export const ([A-Z_]+) = false;/g,
+    "export const $1 = true;",
+  ),
+);
+writeFileSync(
+  enabledRecorderPath,
+  readFileSync(join(BUILD_DIR, "traceRecorder.js"), "utf8").replace(
+    'from "./traceFlags.js";',
+    'from "./traceFlags.enabled.js";',
+  ),
+);
+const recorder = await import(pathToFileURL(enabledRecorderPath).href);
 
 const disabledFlagsPath = join(BUILD_DIR, "traceFlags.disabled.js");
 const disabledRecorderPath = join(BUILD_DIR, "traceRecorder.disabled.js");
