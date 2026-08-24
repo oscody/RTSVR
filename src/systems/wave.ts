@@ -10,9 +10,32 @@ import { warmObjectForRender } from "./gpuWarmup.js";
 import { ReusableGridPathfinder } from "./navigation.js";
 import { isTutorialFrozen } from "./tutorialFreeze.js";
 import {
+  isTutorialGoverningWaves,
   tutorialHoldsCountdown,
   tutorialReleaseAllowance,
 } from "./tutorialWaveGate.js";
+import {
+  traceDecision,
+  traceEntityCreated,
+  traceEntityRequested,
+  traceEntityTransition,
+  traceError,
+  traceRead,
+  traceSkipped,
+  traceStateChange,
+} from "./trace.js";
+import { checkContract } from "./traceContracts.js";
+import {
+  Contract,
+  EntityKind,
+  Lifecycle,
+  Reason,
+  State,
+  entityKindId,
+  waveStageId,
+} from "./traceIds.js";
+import { setTraceWaveContext } from "./traceRecorder.js";
+import { setShaderPhaseWaveStage } from "./traceShader.js";
 
 /**
  * "No wave" — for the preparation sentinels and the spawned-wave marker.
@@ -136,6 +159,13 @@ export class WaveSystem extends createSystem({
   private slowestBuildName = "";
   private prepSourceRevision = -1;
   private preparationFailedWaveNumber = NO_WAVE;
+  /** Last traced gate values, so an unchanged read is not re-recorded. */
+  private tracedHeld = false;
+  private tracedGoverning = false;
+  /** Last traced release reason, same anti-spam rule. */
+  private tracedReleaseReason = -1;
+  /** Highest simultaneous active count this wave, for the release record. */
+  private highestActiveObserved = 0;
 
   init(): void {
     routeRegistry = this.routeByAlien;
@@ -162,7 +192,10 @@ export class WaveSystem extends createSystem({
     const source = this.queries.sources.entities.values().next().value as
       | Entity
       | undefined;
-    if (!source) return;
+    if (!source) {
+      traceSkipped(Reason.NoSource);
+      return;
+    }
 
     this.clock.waveNumber = source.getValue(WaveSource, "waveNumber") ?? 1;
     this.clock.timer = source.getValue(WaveSource, "timer") ?? 0;
@@ -170,6 +203,11 @@ export class WaveSystem extends createSystem({
       "countdown") as WaveStage;
     const matchStatus = (source.getValue(MatchState, "status") ??
       "playing") as MatchStatus;
+    // Published once per frame so every event recorded anywhere in the app
+    // carries the wave it belongs to, without any caller passing it along.
+    const stageId = waveStageId(this.clock.stage);
+    setTraceWaveContext(this.clock.waveNumber, stageId);
+    setShaderPhaseWaveStage(stageId);
     // ---- Tutorial hold. The ONLY intrusion into the wave clock. ------------
     // With the tutorial off, `tutorialHoldsCountdown()` is false and the two
     // lines below are byte-for-byte today's behaviour.
@@ -180,6 +218,16 @@ export class WaveSystem extends createSystem({
     // than clamping) is idempotent and can never reach 0 while held, which
     // would activate the wave on the next tick.
     const held = matchStatus === "playing" && tutorialHoldsCountdown();
+    // The contract read, recorded when it CHANGES rather than every frame: at
+    // 90 Hz a per-frame record of an unchanging boolean would be ~5,400 events
+    // a minute of pure noise, and would evict the events a hitch needs.
+    const governing = isTutorialGoverningWaves();
+    if (held !== this.tracedHeld || governing !== this.tracedGoverning) {
+      this.tracedHeld = held;
+      this.tracedGoverning = governing;
+      traceRead(State.TutorialGoverning, governing ? 1 : 0);
+      traceRead(State.TutorialHoldsCountdown, held ? 1 : 0);
+    }
     if (held) this.clock.timer = TUTORIAL_WAVE_ACTIVATION_LEAD_SECONDS;
     const activated = advanceWaveClock(
       this.clock,
@@ -205,6 +253,12 @@ export class WaveSystem extends createSystem({
 
     if (this.clock.stage !== "active" || matchStatus !== "playing") {
       if (matchStatus !== "playing") this.stopAliens();
+      // A normal, expected early return — the wave is counting down or the
+      // match is over. Recorded as a skip with its reason so the trace shows
+      // the system reasoning, never as a failure.
+      traceSkipped(
+        matchStatus !== "playing" ? Reason.MatchNotPlaying : Reason.WaveNotActive,
+      );
       return;
     }
 
@@ -263,9 +317,12 @@ export class WaveSystem extends createSystem({
     }
     const spec = getWaveSpec(this.clock.waveNumber);
     if (!spec) {
+      traceDecision(Reason.NoWaveSpec, this.clock.waveNumber);
       source.setValue(WaveSource, "spawnedWaveNumber", this.clock.waveNumber);
       return;
     }
+    this.highestActiveObserved = 0;
+    this.tracedReleaseReason = -1;
 
     let spawns: ResolvedWaveSpawn[];
     let buildMs: number;
@@ -294,6 +351,12 @@ export class WaveSystem extends createSystem({
       : "";
     console.log(
       `[WaveBuild] wave ${this.clock.waveNumber}: ${spawns.length} aliens built in ${buildMs.toFixed(2)}ms total across preparation frames (${activationFinishMs.toFixed(2)}ms activation finish, ${perAlien.toFixed(2)}ms/alien${slowestBuild})`,
+    );
+    traceStateChange(
+      State.RequiredAlienTotal,
+      0,
+      spawns.length,
+      Reason.Accepted,
     );
     this.resetWavePreparation();
     source.setValue(WaveSource, "spawnedWaveNumber", this.clock.waveNumber);
@@ -343,6 +406,13 @@ export class WaveSystem extends createSystem({
         });
       } catch (error) {
         this.preparationFailedWaveNumber = waveNumber;
+        // An unexpected failure, not a normal skip: preserves a snapshot so the
+        // frames leading up to it survive.
+        traceError(
+          Reason.PreparationFailed,
+          waveNumber,
+          `wave ${waveNumber} countdown preparation threw; activation will retry`,
+        );
         console.warn(
           `[WaveBuild] wave ${waveNumber}: countdown preparation failed; activation will retry`,
           error,
@@ -351,6 +421,21 @@ export class WaveSystem extends createSystem({
       }
       this.prepMs += performance.now() - resolveStart;
       this.preparedWaveNumber = waveNumber;
+      // The Requested step of the alien lifecycle: the spec exists, the
+      // entities do not yet. Recorded once per wave, not once per frame.
+      for (let index = 0; index < this.pendingSpawns.length; index += 1) {
+        traceEntityRequested(
+          index,
+          entityKindId(this.pendingSpawns[index].enemy),
+          Reason.Queued,
+        );
+      }
+      traceStateChange(
+        State.PreparationLimit,
+        0,
+        WAVE_PREP_PER_FRAME,
+        Reason.Accepted,
+      );
     }
 
     const end = Math.min(
@@ -379,7 +464,14 @@ export class WaveSystem extends createSystem({
       yawDeg: spawn.yawDeg,
       healthMultiplier: spawn.healthMultiplier,
     });
+    const kindId = entityKindId(spawn.enemy);
+    traceEntityCreated(alien.index, kindId, Lifecycle.Created);
     alien.setValue(WaveUnit, "stage", "waiting");
+    // Created -> Waiting, in that order and in this call, which is the whole of
+    // `Contract.AlienCreatedBeforeWaiting`. The transition validates itself
+    // against the stage the trace already recorded, so a system cannot claim a
+    // transition it did not make.
+    traceEntityTransition(alien.index, kindId, Lifecycle.Waiting, Reason.Queued);
     alien.setValue(WaveUnit, "releaseDelay", spawn.releaseDelaySeconds);
     alien.setValue(WaveUnit, "speedMultiplier", spawn.speedMultiplier);
     // `visible = false` keeps a reserve out of the render pass, but
@@ -397,6 +489,18 @@ export class WaveSystem extends createSystem({
     // and it lands inside the PAlien/PDrake/PMech measurement, so its price is
     // visible in the profiler rather than hidden.
     warmObjectForRender(alien.object3D, `alien:${spawn.asset}`);
+    // A reserve that is still attached, or still visible, is the failure this
+    // detach exists to prevent — it costs a matrix recompose for ~79 nodes every
+    // frame and can be drawn. Checked here, at the only moment it is decidable.
+    checkContract(
+      Contract.WaitingAlienDetached,
+      alien.object3D?.parent == null && alien.object3D?.visible === false,
+      alien.index,
+      0,
+      alien.object3D?.parent != null
+        ? Reason.WaitingAlienAttached
+        : Reason.WaitingAlienVisible,
+    );
     const buildMs = performance.now() - buildStart;
     if (buildMs > this.slowestBuildMs) {
       this.slowestBuildMs = buildMs;
@@ -440,20 +544,68 @@ export class WaveSystem extends createSystem({
             ) ?? 8,
         }
       : resolveWavePacing(spec);
+    const activeLiving = this.activeLivingAlienCount();
+    if (activeLiving > this.highestActiveObserved) {
+      this.highestActiveObserved = activeLiving;
+    }
     const releaseCount = advanceWaveRelease(
       state,
-      {
-        activeLiving: this.activeLivingAlienCount(),
-        waitingReady: waitingReady.length,
-      },
+      { activeLiving, waitingReady: waitingReady.length },
       pacing,
       delta,
     );
+    this.traceReleaseDecision(
+      activeLiving,
+      waitingReady.length,
+      pacing.maxActiveAliens,
+      releaseCount,
+      state.releasedAlienCount,
+    );
     if (releaseCount > 0) {
-      this.releaseReserveAliens(waitingReady, releaseCount);
+      this.releaseReserveAliens(waitingReady, releaseCount, pacing.maxActiveAliens);
     }
     source.setValue(WaveSource, "releaseTimer", state.releaseTimer);
     source.setValue(WaveSource, "releasedAlienCount", state.releasedAlienCount);
+  }
+
+  /**
+   * The release reasoning, recorded when it CHANGES.
+   *
+   * `updateWaveRelease` runs every frame of an active wave. Emitting the full
+   * eight-field bundle each time would be ~720 events a second of a decision
+   * that has not moved — enough on its own to evict the events a hitch needs
+   * from the flight recorder. So the bundle goes in when the answer changes or
+   * when aliens actually enter, and the steady state is silence.
+   *
+   * A cap that is full is a NORMAL decision. It records its reasoning and its
+   * contract PASS, and preserves nothing.
+   */
+  private traceReleaseDecision(
+    activeLiving: number,
+    waitingReady: number,
+    cap: number,
+    releaseCount: number,
+    releasedSoFar: number,
+  ): void {
+    const reason =
+      releaseCount > 0
+        ? Reason.Released
+        : waitingReady <= 0
+          ? tutorialReleaseAllowance(releasedSoFar) <= 0
+            ? Reason.TutorialBudgetSpent
+            : Reason.NoReserveReady
+          : Reason.ActiveCapReached;
+    if (reason === this.tracedReleaseReason && releaseCount === 0) return;
+    this.tracedReleaseReason = reason;
+    traceRead(State.ActiveAliens, activeLiving);
+    traceRead(State.AlienCap, cap);
+    traceRead(State.WaitingReady, waitingReady);
+    traceRead(State.HighWaterActive, this.highestActiveObserved);
+    traceDecision(reason, releaseCount, State.RequestedRelease);
+    // The cap contract, recorded on the same tick as the decision that respects
+    // it — so a reader sees "3 active, cap 3, released 0, PASS" rather than
+    // having to infer that nothing went wrong from the absence of a record.
+    checkContract(Contract.ActiveNeverAboveCap, activeLiving <= cap, activeLiving, cap, Reason.CapViolated);
   }
 
   private tickWaitingReleaseDelays(delta: number): void {
@@ -483,6 +635,9 @@ export class WaveSystem extends createSystem({
     const allowance = tutorialReleaseAllowance(alreadyReleased);
     this.waitingReadyBuffer.length = 0;
     if (allowance <= 0) return this.waitingReadyBuffer;
+    if (Number.isFinite(allowance)) {
+      traceRead(State.TutorialReleaseBudget, allowance);
+    }
     for (const alien of this.queries.aliens.entities) {
       if ((alien.getValue(Health, "current") ?? 0) <= 0) continue;
       if (alien.getValue(WaveUnit, "stage") !== "waiting") continue;
@@ -513,8 +668,20 @@ export class WaveSystem extends createSystem({
   private releaseReserveAliens(
     waitingReady: readonly Entity[],
     count: number,
+    cap: number,
   ): void {
     const releaseCount = Math.min(waitingReady.length, Math.max(0, count));
+    // The stage must be `active` at the moment of release. Checked here rather
+    // than trusted from the caller, because this is the last place the two can
+    // still disagree.
+    checkContract(
+      Contract.NoActivationInInvalidStage,
+      this.clock.stage === "active",
+      waveStageId(this.clock.stage),
+      waveStageId("active"),
+      Reason.ActivationInInvalidStage,
+    );
+    let active = this.activeLivingAlienCount();
     const boardRoot = boardState.boardRoot?.object3D;
     for (let index = 0; index < releaseCount; index += 1) {
       const alien = waitingReady[index];
@@ -531,7 +698,29 @@ export class WaveSystem extends createSystem({
       this.clearAlienTarget(alien, "released");
       alien.setValue(WaveUnit, "releaseDelay", 0);
       alien.setValue(WaveUnit, "repathTimer", 0);
+      // Waiting -> Active, and the cap checked at the EXACT transition. A
+      // violation that lasted less than a frame would be invisible to a
+      // once-per-frame check, which is the whole reason it is done here and
+      // incrementally rather than from the census.
+      active += 1;
+      traceEntityTransition(
+        alien.index,
+        entityKindId(alien.getValue(Enemy, "kind") ?? "alien"),
+        Lifecycle.Active,
+        Reason.Released,
+      );
+      if (active > this.highestActiveObserved) {
+        this.highestActiveObserved = active;
+      }
+      checkContract(
+        Contract.ActiveNeverAboveCap,
+        active <= cap,
+        active,
+        cap,
+        Reason.CapViolated,
+      );
     }
+    traceStateChange(State.ActualRelease, count, releaseCount, Reason.Released);
   }
 
   private advanceAlien(alien: Entity, delta: number): void {

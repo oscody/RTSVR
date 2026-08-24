@@ -6,6 +6,41 @@ import {
   boardState,
 } from "./state.js";
 import { WaveSystem } from "./wave.js";
+import { SYSTEM_EXECUTION_TRACE_ENABLED } from "./traceFlags.js";
+import { Reason, TraceKind } from "./traceIds.js";
+import {
+  beginTraceFrame,
+  diagnosticHeader,
+  endTraceFrame,
+  flushPendingDump,
+  flushTraceCost,
+  formatTraceCostLine,
+  installTraceRecorder,
+  isTraceRecording,
+  meters,
+  recordEvent,
+  recordSystemBegin,
+  recordSystemEnd,
+  setTraceSystemContext,
+} from "./traceRecorder.js";
+import {
+  NO_SYSTEM_ID,
+  registerSystemIdentities,
+  registrationIndexFor,
+  reportSystemMap,
+  systemIdFor,
+  systemNameFor,
+} from "./traceSystemIds.js";
+import {
+  allocationLine,
+  attachRuntimeTracing,
+  noteFramePeriod,
+  sampleAllocations,
+  setCensusSnapshot,
+} from "./traceRuntime.js";
+import { attachShaderTracing } from "./traceShader.js";
+import { attachInteractionTracing } from "./traceInteraction.js";
+import { exposeTraceConsoleHandles } from "./traceDiagnosticsSystem.js";
 
 // Lightweight per-system frame profiler. Wraps the update() of EVERY registered
 // system and records how long each takes, so on-device pauses can be attributed
@@ -14,6 +49,20 @@ import { WaveSystem } from "./wave.js";
 // tick to refresh the HUD text, which the tablet's Settings tab shows via
 // getFrameProfileHud(). Flip FRAME_PROFILER_ENABLED off to disable.
 const FRAME_PROFILER_ENABLED = true;
+
+/**
+ * Whether the `[Profile]` instrument is on.
+ *
+ * Exported because `PerformanceSystem` gates the force census on it: the census
+ * feeds the `[Profile]` line, so switching the profiler off must switch the
+ * census off too, independently of `ENTITY_CENSUS_ENABLED`. The flag itself
+ * stays here rather than moving to `traceFlags.ts` — this file has owned the
+ * `[Profile]` output since long before the trace existed, and the capture
+ * scripts key on it.
+ */
+export function isFrameProfilerEnabled(): boolean {
+  return FRAME_PROFILER_ENABLED;
+}
 // Mirror each flush to the console (~1 Hz) so profiler readings can be copied
 // out of `chrome://inspect` DevTools rather than transcribed from video frames.
 // Filter the DevTools console by "[Profile]" to isolate them. Turn off to keep
@@ -64,6 +113,7 @@ const DIAG_ROW = ["Frame", "Update", "Render", "Other"] as const;
 let maxDrawCalls = 0;
 let maxTriangles = 0;
 let liveGeometries = 0;
+let liveTextures = 0;
 let livePrograms = 0;
 let sceneObjectCount = 0;
 let sceneMeshCount = 0;
@@ -263,6 +313,74 @@ function wrapUpdate(system: any, label: string, short: string): void {
     const start = performance.now();
     original(delta, time);
     record(slot, performance.now() - start);
+  };
+}
+
+/**
+ * The execution-tracing variant of {@link wrapUpdate}.
+ *
+ * **One wrapper, not two.** The plan is explicit that the existing profiler
+ * timer must be reused rather than a second timer added around every
+ * `system.update()`, so this is not an extra layer over `wrapUpdate` — it is
+ * the alternative to it, chosen at install time. `installFrameProfiler` calls
+ * exactly one of the two per system, which is also why a system can never end
+ * up wrapped twice.
+ *
+ * What it adds over the plain wrapper:
+ *
+ * - `setTraceSystemContext` before the call, so every event this system emits
+ *   is attributed to it without any caller passing an id.
+ * - `recordSystemBegin` / `recordSystemEnd`, which give the execution ring the
+ *   invoked / completed / threw triple and the ordinal the system actually ran
+ *   at this frame.
+ * - `try` / `catch` / `finally`, so a throw is recorded, **the timing is still
+ *   recorded** (the plain wrapper loses it), and the original error is
+ *   rethrown untouched. A diagnostic must never hide or change a failure.
+ *
+ * The wrapper cannot know whether a system *semantically* skipped its work —
+ * an early return and a full pass look identical from out here. A system says
+ * so itself by calling `traceSkipped(reason)`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function wrapUpdateTraced(system: any, label: string, short: string): void {
+  if (!system || typeof system.update !== "function") return;
+  const slot = slotFor(label, short);
+  const original = system.update.bind(system);
+  const systemId = systemIdFor(label);
+  const registrationIndex = registrationIndexFor(label);
+  system.update = (delta: number, time: number) => {
+    setTraceSystemContext(systemId, registrationIndex);
+    recordSystemBegin(registrationIndex);
+    const start = performance.now();
+    let completed = false;
+    try {
+      original(delta, time);
+      completed = true;
+    } catch (error) {
+      const at = performance.now();
+      recordEvent(
+        TraceKind.SystemThrew,
+        systemId,
+        0,
+        registrationIndex,
+        0,
+        Reason.SystemError,
+        0,
+        0,
+        at,
+      );
+      // Rethrown below by the bare `throw`; the finally still runs, so the
+      // timing and the completion status are recorded either way.
+      throw error;
+    } finally {
+      const ended = performance.now();
+      record(slot, ended - start);
+      recordSystemEnd(registrationIndex, completed);
+      setTraceSystemContext(NO_SYSTEM_ID, 0);
+      // The wrapper's own cost, measured after the system's time is banked so
+      // it never inflates the system's own number.
+      meters.record.add(performance.now() - ended);
+    }
   };
 }
 
@@ -469,6 +587,19 @@ export function flushFrameProfile(): void {
   for (let i = 0; i < remaining.length; i += HUD_PER_LINE) {
     lines.push(remaining.slice(i, i + HUD_PER_LINE).join(" | "));
   }
+  // New rows are APPENDED. Every pre-existing `[Profile]` field keeps its name,
+  // its position within its own row and its meaning, so the ADB/CDP capture and
+  // the parsing scripts keep working with no change.
+  sampleAllocations({
+    geometries: liveGeometries,
+    textures: liveTextures,
+    programs: livePrograms,
+    entities: liveEntities,
+  });
+  const traceCostLine = formatTraceCostLine(flushTraceCost());
+  if (traceCostLine.length > 0) lines.push(traceCostLine);
+  const allocLine = allocationLine();
+  if (allocLine.length > 0) lines.push(allocLine);
   hudLines = lines;
   hudLine = lines.join("\n");
   // Context first: without it a reading is a wall of milliseconds with no way to
@@ -490,8 +621,19 @@ export function flushFrameProfile(): void {
   // entry per flush (~1 Hz) so a whole reading copies in a single selection,
   // and one prefix so it filters cleanly in DevTools.
   if (FRAME_PROFILER_LOG) {
-    console.log(`[Profile] t+${(performance.now() / 1000).toFixed(1)}s\n${hudLine}`);
+    // `[Profile] t+<seconds>s` is unchanged and still leads the line; the shared
+    // correlation header is appended after it, which is additive metadata that
+    // an existing parser keying on the prefix simply ignores.
+    console.log(
+      `[Profile] t+${(performance.now() / 1000).toFixed(1)}s | ` +
+        `${diagnosticHeader("Profile")}\n${hudLine}`,
+    );
   }
+
+  // Deferred dump formatting, deliberately here: building a few thousand
+  // strings on the frame a hitch is happening would corrupt the very
+  // measurement being preserved. The cost lands in TraceDumpMs next flush.
+  if (isTraceRecording()) flushPendingDump(systemNameFor);
 
   maxDrawCalls = 0;
   maxTriangles = 0;
@@ -535,10 +677,16 @@ function wrapWorldUpdate(world: any): void {
   const original = world.update.bind(world);
   world.update = (delta: number, time: number) => {
     const start = performance.now();
+    beginTraceFrame();
     if (lastUpdateStart !== 0) {
       const period = start - lastUpdateStart;
+      const otherMs = Math.max(0, period - lastUpdateMs - lastRenderMs);
       record(frameSlot, period);
-      record(otherSlot, Math.max(0, period - lastUpdateMs - lastRenderMs));
+      record(otherSlot, otherMs);
+      // `Other` is still `Frame - Update - Render`, computed exactly where it
+      // always was. This only hands the finished decomposition to the runtime
+      // layer, which decides whether it is worth preserving evidence for.
+      noteFramePeriod(start, period, lastUpdateMs, lastRenderMs, otherMs);
       // Counted against the real budget, not an assumed one. Skipped entirely
       // when no XR session has reported a rate, because "over 13.9 ms" is
       // meaningless on a desktop preview running at an unknown refresh.
@@ -568,6 +716,7 @@ function wrapWorldUpdate(world: any): void {
       }
       worstUpdateParts.sort((a, b) => b.ms - a.ms);
     }
+    endTraceFrame();
   };
 }
 
@@ -649,6 +798,15 @@ let forceCensus: ForceCensus | null = null;
 /** Called once per flush by PerformanceSystem, which owns the queries. */
 export function setForceCensus(census: ForceCensus): void {
   forceCensus = census;
+  // Pushed, not pulled: `traceRuntime` calls back into this file every frame,
+  // so it must not import it. Four numbers from the census PerformanceSystem
+  // already computed — no second census is created.
+  setCensusSnapshot(
+    census.aliensActive,
+    census.aliensWaiting,
+    census.units,
+    census.buildings,
+  );
 }
 
 /**
@@ -713,6 +871,7 @@ function wrapRender(world: any): void {
         maxTriangles = info.render.triangles;
       }
       liveGeometries = info.memory?.geometries ?? liveGeometries;
+      liveTextures = info.memory?.textures ?? liveTextures;
       livePrograms = info.programs?.length ?? livePrograms;
     }
   };
@@ -738,9 +897,26 @@ export function installFrameProfiler(world: World): void {
   slotFor("WaveSystem.build.strongAlienMech", "PMech");
   slotFor("WaveSystem.spawn", "Spawn");
   slotFor("WaveSystem.pathfind", "Path");
-  for (const system of world.getSystems()) {
-    const name = system.constructor.name;
-    wrapUpdate(system, name, shortName(name));
+
+  // `world.getSystems()` returns the live array `world.update` iterates, in
+  // execution order, so the position IS the registration index. Reading it
+  // here rather than counting `registerSystem` calls in `index.ts` means a
+  // system added later is picked up with no second list to keep in step.
+  const systems = world.getSystems();
+  const names = systems.map((system) => system.constructor.name);
+  registerSystemIdentities(names);
+  const tracing = installTraceRecorder();
+
+  for (let index = 0; index < systems.length; index += 1) {
+    const name = names[index];
+    // Exactly one of the two wrappers per system. Nothing is wrapped twice,
+    // and a build with execution tracing off gets the original wrapper
+    // byte-for-byte.
+    if (tracing && SYSTEM_EXECUTION_TRACE_ENABLED) {
+      wrapUpdateTraced(systems[index], name, shortName(name));
+    } else {
+      wrapUpdate(systems[index], name, shortName(name));
+    }
   }
   const wave = world.getSystem(WaveSystem);
   wrapMethod(wave, "prepareWaveIncrementally", "WaveSystem.prepare", "Prep");
@@ -749,4 +925,13 @@ export function installFrameProfiler(world: World): void {
   wrapMethod(wave, "findNearestTargetPath", "WaveSystem.pathfind", "Path");
   wrapWorldUpdate(world);
   wrapRender(world);
+
+  if (!tracing) return;
+  // Attachments come after the wrappers so the runtime probe reports against
+  // the same renderer and context the profiler is measuring.
+  attachInteractionTracing(world);
+  attachRuntimeTracing(world);
+  attachShaderTracing(world);
+  reportSystemMap();
+  exposeTraceConsoleHandles();
 }

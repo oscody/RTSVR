@@ -37,6 +37,7 @@ import { attachAudioUnlock } from "./systems/audioUnlock.js";
 import { attachGpuWarmup, GpuWarmupSystem } from "./systems/gpuWarmup.js";
 import { ProgramChurnSystem } from "./systems/programChurn.js";
 import { placeViewpoint } from "./systems/viewpoint.js";
+import { TraceDiagnosticsSystem } from "./systems/traceDiagnosticsSystem.js";
 import { WaveSystem } from "./systems/wave.js";
 
 const assets: AssetManifest = {
@@ -160,6 +161,12 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .registerSystem(GpuWarmupSystem)
     // Phase 2a step 1 diagnostic: reports why three.js re-derives shader
     // programs. Flip PROGRAM_CHURN_ENABLED off once the branch is identified.
-    .registerSystem(ProgramChurnSystem);
+    .registerSystem(ProgramChurnSystem)
+    // Dead last, and that position is the design: the interaction and contract
+    // deadline sweeps must see the frame after every other system has had its
+    // turn in it. A handoff that is legitimately one frame late — the tablet
+    // reads the crystal balance at index 16, MiningSystem writes it at 32 —
+    // would fail every time if the sweep ran mid-frame.
+    .registerSystem(TraceDiagnosticsSystem);
   installFrameProfiler(world);
 });

@@ -2,10 +2,12 @@ import { createSystem } from "@iwsdk/core";
 import { PERFORMANCE_SAMPLE_SECONDS } from "./constants.ts";
 import {
   flushFrameProfile,
+  isFrameProfilerEnabled,
   setForceCensus,
   setLiveEntityCount,
   type ForceCensus,
 } from "./frameProfiler.js";
+import { ENTITY_CENSUS_ENABLED } from "./traceFlags.js";
 import { resolvePerformanceSample } from "./performanceRules.js";
 import { Transform } from "@iwsdk/core";
 import {
@@ -100,6 +102,65 @@ export class PerformanceSystem extends createSystem({
       .value;
     if (!diagnostics) return;
 
+    // The census is the only expensive thing in this system: four query walks
+    // plus a scene-wide Transform count. It exists to feed the `[Profile]`
+    // line's Force/Roster rows and the trace's runtime evidence, so when both
+    // of those are off it must not run at all — no walks, no map writes, no
+    // publishing. The FPS sample below is cheap arithmetic and stays either way.
+    const censusEnabled = ENTITY_CENSUS_ENABLED || isFrameProfilerEnabled();
+    let movingEntities = 0;
+    if (censusEnabled) {
+      movingEntities = this.takeCensus();
+      setForceCensus(census);
+      setLiveEntityCount(this.queries.transforms.entities.size);
+    }
+
+    const sample = resolvePerformanceSample(
+      this.elapsedSeconds,
+      this.frameCount,
+      this.worstFrameSeconds,
+    );
+    diagnostics.setValue(
+      RuntimePerformance,
+      "enemiesAlive",
+      censusEnabled ? this.queries.aliens.entities.size : 0,
+    );
+    diagnostics.setValue(RuntimePerformance, "fps", sample.fps);
+    diagnostics.setValue(
+      RuntimePerformance,
+      "averageFrameMs",
+      sample.averageFrameMs,
+    );
+    diagnostics.setValue(
+      RuntimePerformance,
+      "worstFrameMs",
+      sample.worstFrameMs,
+    );
+    diagnostics.setValue(
+      RuntimePerformance,
+      "movingEntities",
+      movingEntities,
+    );
+    diagnostics.setValue(
+      RuntimePerformance,
+      "revision",
+      (diagnostics.getValue(RuntimePerformance, "revision") ?? 0) + 1,
+    );
+
+    flushFrameProfile();
+
+    this.elapsedSeconds = 0;
+    this.frameCount = 0;
+    this.worstFrameSeconds = 0;
+  }
+
+  /**
+   * The force census, unchanged, plus the moving-entity count it shares walks
+   * with. Extracted whole so it can be gated as a unit — and kept as ONE pass
+   * per query, because splitting the moving count into its own loops would have
+   * added two extra walks per sample for no reason.
+   */
+  private takeCensus(): number {
     let movingEntities = 0;
     census.units = 0;
     resetCounts(census.unitsByKind);
@@ -138,46 +199,6 @@ export class PerformanceSystem extends createSystem({
       census.buildings += 1;
       bump(census.buildingsByKind, building.getValue(Building, "kind") ?? "unknown");
     }
-    setForceCensus(census);
-
-    setLiveEntityCount(this.queries.transforms.entities.size);
-
-    const sample = resolvePerformanceSample(
-      this.elapsedSeconds,
-      this.frameCount,
-      this.worstFrameSeconds,
-    );
-    diagnostics.setValue(
-      RuntimePerformance,
-      "enemiesAlive",
-      this.queries.aliens.entities.size,
-    );
-    diagnostics.setValue(RuntimePerformance, "fps", sample.fps);
-    diagnostics.setValue(
-      RuntimePerformance,
-      "averageFrameMs",
-      sample.averageFrameMs,
-    );
-    diagnostics.setValue(
-      RuntimePerformance,
-      "worstFrameMs",
-      sample.worstFrameMs,
-    );
-    diagnostics.setValue(
-      RuntimePerformance,
-      "movingEntities",
-      movingEntities,
-    );
-    diagnostics.setValue(
-      RuntimePerformance,
-      "revision",
-      (diagnostics.getValue(RuntimePerformance, "revision") ?? 0) + 1,
-    );
-
-    flushFrameProfile();
-
-    this.elapsedSeconds = 0;
-    this.frameCount = 0;
-    this.worstFrameSeconds = 0;
+    return movingEntities;
   }
 }

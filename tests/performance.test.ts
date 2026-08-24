@@ -272,8 +272,14 @@ test("profiler readings open with session context", () => {
   assert.match(profiler, /hudLines = \[\.\.\.header, \.\.\.lines\]/);
 
   // Live enemy count is published by PerformanceSystem on the same sample tick.
+  // Gated on the census since 2026-08-24 — with every diagnostic off the query
+  // walk must not happen, so the published value is 0 rather than a count
+  // nobody paid for. The source of the count is unchanged.
   assert.match(state, /enemiesAlive: \{ type: Types\.Int16/);
-  assert.match(performance, /"enemiesAlive",\s+this\.queries\.aliens\.entities\.size/);
+  assert.match(
+    performance,
+    /"enemiesAlive",\s+censusEnabled \? this\.queries\.aliens\.entities\.size : 0/,
+  );
 });
 
 test("profiler reports active aliens separately from waiting reserves", () => {
