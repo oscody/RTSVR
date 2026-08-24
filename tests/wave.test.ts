@@ -181,6 +181,10 @@ test("staged wave release starts with one batch and paces reserves", () => {
   );
   assert.deepEqual(state, { releaseTimer: 4, releasedAlienCount: 3 });
 
+  // Was `3` until 2026-08-23, which asserted the very bug the 2026-07-26 code
+  // review filed as High #1: the timer released a whole extra batch on top of
+  // the aliens already fighting. At the cap the answer is zero, however long
+  // the timer has run.
   assert.equal(
     advanceWaveRelease(
       state,
@@ -188,9 +192,91 @@ test("staged wave release starts with one batch and paces reserves", () => {
       config,
       4,
     ),
-    3,
+    0,
   );
-  assert.deepEqual(state, { releaseTimer: 8, releasedAlienCount: 6 });
+  assert.equal(state.releasedAlienCount, 3);
+});
+
+test("max active aliens is a hard cap, not a batch size", () => {
+  // The invariant the tablet's "Max Active Aliens" label promises, driven the
+  // way the real loop drives it: release, keep the survivors, release again.
+  //
+  // The player must NOT kill anything here. That is the whole point: the old
+  // bug lived in the timer-expiry branch, which is only reachable while the
+  // wave sits AT the cap — and any death routed through the early-refill
+  // branch instead, which reset the timer and hid the defect. An earlier
+  // version of this test killed one alien every 20 ticks and passed against the
+  // buggy implementation for exactly that reason.
+  const cap = 8;
+  const config = { maxActiveAliens: cap, releaseIntervalSeconds: 10 };
+  const state: WaveReleaseState = { releaseTimer: 0, releasedAlienCount: 0 };
+
+  let active = 0;
+  let reserves = 33; // Wave 6's real roster.
+
+  // 60 s at 72 Hz — six full release intervals with nothing dying.
+  for (let tick = 0; tick < 72 * 60; tick += 1) {
+    const released = advanceWaveRelease(
+      state,
+      { activeLiving: active, waitingReady: reserves },
+      config,
+      1 / 72,
+    );
+    assert.ok(released >= 0, "release count is never negative");
+    active += released;
+    reserves -= released;
+    assert.ok(
+      active <= cap,
+      `active ${active} exceeded the cap ${cap} on tick ${tick}`,
+    );
+  }
+
+  assert.equal(active, cap, "the opening batch should fill the cap exactly");
+  assert.equal(reserves, 33 - cap, "nothing more should have been released");
+});
+
+test("a death lets exactly one reserve in, and never more than the cap", () => {
+  const cap = 3;
+  const config = { maxActiveAliens: cap, releaseIntervalSeconds: 8 };
+  const state: WaveReleaseState = { releaseTimer: 0, releasedAlienCount: 0 };
+
+  let active = advanceWaveRelease(
+    state,
+    { activeLiving: 0, waitingReady: 9 },
+    config,
+    0,
+  );
+  assert.equal(active, cap);
+
+  // Two die at once; the refill must close the gap one at a time and stop.
+  active -= 2;
+  for (let i = 0; i < 10; i += 1) {
+    active += advanceWaveRelease(
+      state,
+      { activeLiving: active, waitingReady: 6 },
+      config,
+      1 / 72,
+    );
+    assert.ok(active <= cap, `refill overshot the cap: ${active}`);
+  }
+  assert.equal(active, cap, "refill should restore the wave to exactly the cap");
+});
+
+test("lowering the cap mid-wave releases nothing until deaths catch up", () => {
+  // The Settings tab can lower Max Active Aliens while more aliens are already
+  // fighting, which makes remaining capacity negative. That must release
+  // nothing rather than a negative batch.
+  const state: WaveReleaseState = { releaseTimer: 0, releasedAlienCount: 4 };
+  assert.equal(
+    advanceWaveRelease(
+      state,
+      { activeLiving: 9, waitingReady: 5 },
+      { maxActiveAliens: 3, releaseIntervalSeconds: 8 },
+      1,
+    ),
+    0,
+  );
+  assert.equal(state.releasedAlienCount, 4);
 });
 
 test("staged wave release refills one reserve early after active deaths", () => {

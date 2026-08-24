@@ -18,14 +18,13 @@ test("craft catalog exposes every model and tablet image", () => {
       duration,
       locked,
     })),
+    // Cargo and rover are commented out in `craftCatalog.ts`, so the catalog
+    // ships two craft. This expectation still listed all four from ~2026-07-30
+    // to 2026-08-23, which made `npm test` permanently red — and a suite with a
+    // known failure stops being a signal, because every later run had to be
+    // read as "1 fail, but is it *the* fail?". Restore the entries here if
+    // either craft is uncommented.
     [
-      {
-        kind: "cargo",
-        glb: "/gltf/craft/craft_cargoA.glb",
-        image: "/images/craft_cargoA.png",
-        duration: 5,
-        locked: false,
-      },
       {
         kind: "miner",
         glb: "/gltf/craft/craft_miner_A.glb",
@@ -38,13 +37,6 @@ test("craft catalog exposes every model and tablet image", () => {
         glb: "/gltf/craft/craft_racerA.glb",
         image: "/images/craft_racer.png",
         duration: 8,
-        locked: false,
-      },
-      {
-        kind: "rover",
-        glb: "/gltf/craft/rover.glb",
-        image: "/images/rover.png",
-        duration: 4,
         locked: false,
       },
     ],

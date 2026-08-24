@@ -91,6 +91,79 @@ let profiledScene: WalkNode | null = null;
 let lastUpdateStart = 0;
 let lastUpdateMs = 0;
 let lastRenderMs = 0;
+
+// The renderer, kept so the XR session's frame rate can be read at flush time.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let profiledRenderer: any = null;
+// Refresh rate the XR session is actually running at, and the per-frame budget
+// it implies. Both are 0 until an immersive session reports a rate.
+//
+// This is not cosmetic. Every "is this frame over budget" judgement in the
+// devlog has had to ASSUME 72 Hz, and a Quest that quietly settles on 90 (or
+// drops to half rate after a missed deadline) makes every one of those readings
+// wrong by 25% in the direction that hides a problem. Recording the real number
+// with the reading is Phase 0 item 1 of
+// plan/2026-08-21-Quest-Level-3-Performance-Remediation-Plan.md.
+let xrRefreshHz = 0;
+let frameBudgetMs = 0;
+// Logged once per distinct rate: the device can change it mid-session, and a
+// half-rate drop is the signature of the compositor punishing a missed deadline
+// (three reproductions on record). A line in the console at the moment it
+// changes is the only way to see that in a capture.
+let loggedRefreshHz = 0;
+// Frames that MISSED A VSYNC, within this flush window.
+//
+// **Recalibrated 2026-08-23 — the first version of this counter was
+// misleading.** It counted any period strictly greater than the budget, which
+// at 90 Hz reported 57-67% of frames "over budget" while the trace showed only
+// 2.4% actually missing a deadline. The app presents at ~88 fps against a
+// 90 Hz target, so the *typical* interval is a hair over the nominal 11.111 ms
+// and a strict `>` counts ordinary jitter as a fault. Two consequences: the
+// number was alarming for no reason, and it could not be compared with the
+// plan's figures, which measure callback *duration* rather than frame period.
+//
+// A frame is only counted now when the period is at least 1.5x the budget,
+// which means at least one whole vsync went unpresented and the compositor had
+// to show the previous image again — the thing a player actually sees. On the
+// 2026-08-23 14:05 capture this yields ~2.4%, matching the trace's independent
+// 2.36% for intervals over 16.67 ms.
+const MISSED_VSYNC_FACTOR = 1.5;
+let framesMissingVsync = 0;
+let framesThisWindow = 0;
+
+/**
+ * Read the immersive session's frame rate, and log it whenever it changes.
+ *
+ * `XRSession.frameRate` is the rate the runtime has actually selected, which is
+ * not necessarily the highest one `supportedFrameRates` offers. Outside an
+ * immersive session there is no honest answer — the desktop preview runs at
+ * whatever the monitor does — so the values stay 0 and the HUD omits them
+ * rather than inventing 72 (same rule as the heap sampler above).
+ */
+function sampleXrRefreshRate(): void {
+  const session = profiledRenderer?.xr?.getSession?.();
+  const rate = typeof session?.frameRate === "number" ? session.frameRate : 0;
+  if (rate <= 0) {
+    xrRefreshHz = 0;
+    frameBudgetMs = 0;
+    loggedRefreshHz = 0;
+    return;
+  }
+  xrRefreshHz = rate;
+  frameBudgetMs = 1000 / rate;
+  if (FRAME_PROFILER_LOG && rate !== loggedRefreshHz) {
+    const supported: number[] = Array.isArray(session?.supportedFrameRates)
+      ? Array.from(session.supportedFrameRates as ArrayLike<number>)
+      : [];
+    const offered = supported.length ? ` | Supported ${supported.join("/")}` : "";
+    const previous = loggedRefreshHz > 0 ? ` (was ${loggedRefreshHz})` : "";
+    console.log(
+      `[Profile] XR refresh ${rate} Hz${previous} | ` +
+        `Budget ${(1000 / rate).toFixed(2)} ms${offered}`,
+    );
+    loggedRefreshHz = rate;
+  }
+}
 // The profiler's own once-per-second flush cost (scene.traverse + string build),
 // surfaced as `Prof` so the observer's overhead is visible rather than hidden
 // inside the Performance row that calls flush. Per-frame wrapping overhead (the
@@ -141,8 +214,20 @@ function buildContextLine(): string {
   const killed = stats?.getValue(GameStats, "enemiesKilled") ?? 0;
   const level = wave?.getValue(WaveSource, "waveNumber") ?? 0;
   const stage = wave?.getValue(WaveSource, "stage") ?? "";
+  // Refresh rate and the budget it implies, plus how many frames in this window
+  // missed it. Omitted outside an immersive session, where there is no real
+  // number to report — see sampleXrRefreshRate.
+  let budget = "";
+  if (xrRefreshHz > 0) {
+    budget = ` | ${xrRefreshHz}Hz Budget ${frameBudgetMs.toFixed(1)}`;
+    if (framesThisWindow > 0) {
+      const pct = (framesMissingVsync / framesThisWindow) * 100;
+      budget +=
+        ` | Miss ${framesMissingVsync}/${framesThisWindow} (${pct.toFixed(1)}%)`;
+    }
+  }
   return (
-    `Lvl ${level}${stage ? ` ${stage}` : ""} | FPS ${fps} | ` +
+    `Lvl ${level}${stage ? ` ${stage}` : ""} | FPS ${fps}${budget} | ` +
     `Avg ${avg.toFixed(1)} | Worst ${worst.toFixed(1)} | ` +
     `Enemies ${alive} alive / ${killed} killed | Moving ${moving}`
   );
@@ -243,6 +328,9 @@ function waveBuildDescriptor(args: unknown[]): MethodProfileDescriptor {
 export function flushFrameProfile(): void {
   if (!installed || slots.length === 0) return;
   const flushStart = performance.now();
+  // Before buildContextLine reads them: picks up an entered/exited session and
+  // logs a line if the device changed the rate under us.
+  sampleXrRefreshRate();
 
   // One walk per flush (~1 Hz). It does two jobs: (1) total scene-graph weight
   // (Objs/Mesh, incl. hidden reserves — matrix-traversal cost), and (2) VISIBLE
@@ -387,10 +475,14 @@ export function flushFrameProfile(): void {
   // know which level, how loaded the scene was, or what the frame rate actually
   // was — so two captures cannot be compared. Sourced from the singletons
   // PerformanceSystem already publishes on this same flush tick.
-  const contextLine = buildContextLine();
-  if (contextLine) {
-    hudLines = [contextLine, ...lines];
-    hudLine = `${contextLine}\n${hudLine}`;
+  // Context, then the force census, then the timings. Both are scene state
+  // rather than milliseconds, so they belong together above the cost rows.
+  const header = buildContextLine()
+    ? [buildContextLine(), ...buildForceLines()]
+    : buildForceLines();
+  if (header.length > 0) {
+    hudLines = [...header, ...lines];
+    hudLine = hudLines.join("\n");
   }
 
   // Mirror the HUD to the console so it can be read over `chrome://inspect`
@@ -403,6 +495,8 @@ export function flushFrameProfile(): void {
 
   maxDrawCalls = 0;
   maxTriangles = 0;
+  framesMissingVsync = 0;
+  framesThisWindow = 0;
   // Measure the profiler's own flush cost (traverse + string build). Shown as
   // `Prof` on the next flush's counts line, so it never distorts the same
   // frame's numbers. The per-frame Performance row still includes this because
@@ -445,6 +539,15 @@ function wrapWorldUpdate(world: any): void {
       const period = start - lastUpdateStart;
       record(frameSlot, period);
       record(otherSlot, Math.max(0, period - lastUpdateMs - lastRenderMs));
+      // Counted against the real budget, not an assumed one. Skipped entirely
+      // when no XR session has reported a rate, because "over 13.9 ms" is
+      // meaningless on a desktop preview running at an unknown refresh.
+      if (frameBudgetMs > 0) {
+        framesThisWindow += 1;
+        if (period > frameBudgetMs * MISSED_VSYNC_FACTOR) {
+          framesMissingVsync += 1;
+        }
+      }
     }
     lastUpdateStart = start;
     original(delta, time);
@@ -512,6 +615,67 @@ function sampleHeap(): void {
   heapFloorMb = heapFloorMb === 0 ? heapMb : Math.min(heapFloorMb, heapMb);
 }
 
+/**
+ * What is actually on the board: aliens fighting vs waiting, and the friendly
+ * force broken down by kind.
+ *
+ * **Why `aliensActive` is the headline and `enemiesAlive` is not.** The context
+ * line's `Enemies N alive` is `aliens.entities.size` — every alien entity,
+ * *including hidden reserves*. During a countdown that reads 19 when nothing is
+ * on the board, and it is why a 2026-08-23 attempt to prove the wave cap was
+ * being violated in the field had to be retracted: the number could not tell an
+ * active alien from a waiting one. `aliensActive` is the count the
+ * `maxActiveAliens` cap governs (alive AND `stage !== "waiting"`, the same rule
+ * as `WaveSystem.activeLivingAlienCount`), so it is the one that can confirm
+ * the cap on device.
+ *
+ * Every field is a plain counter written once per flush (~1 Hz) into a
+ * preallocated structure — no per-frame work and no allocation, so this cannot
+ * become the thing it is measuring.
+ */
+export interface ForceCensus {
+  aliensActive: number;
+  aliensWaiting: number;
+  /** Active aliens only, keyed by the short label shown in the log. */
+  aliensByKind: Map<string, number>;
+  units: number;
+  unitsByKind: Map<string, number>;
+  buildings: number;
+  buildingsByKind: Map<string, number>;
+}
+
+let forceCensus: ForceCensus | null = null;
+
+/** Called once per flush by PerformanceSystem, which owns the queries. */
+export function setForceCensus(census: ForceCensus): void {
+  forceCensus = census;
+}
+
+/**
+ * `kind count` pairs in the order the census declares them.
+ *
+ * Zero-count kinds are printed rather than skipped, deliberately: fixed columns
+ * every sample mean a kind's series can be pulled out of a 700-sample log with
+ * a column-oriented grep, and a kind falling to zero shows as `0` instead of
+ * vanishing — which reads as missing data.
+ */
+function kindParts(counts: Map<string, number>): string {
+  const parts: string[] = [];
+  for (const [kind, count] of counts) parts.push(`${kind} ${count}`);
+  return parts.join(" ");
+}
+
+function buildForceLines(): string[] {
+  const c = forceCensus;
+  if (!c) return [];
+  return [
+    `Force alien ${c.aliensActive} act ${c.aliensWaiting} wait | ` +
+      `unit ${c.units} | bldg ${c.buildings}`,
+    `Roster ${kindParts(c.aliensByKind)} | ${kindParts(c.unitsByKind)} | ` +
+      kindParts(c.buildingsByKind),
+  ];
+}
+
 /** Called once per flush by PerformanceSystem, which owns the query. */
 export function setLiveEntityCount(count: number): void {
   liveEntities = count;
@@ -533,6 +697,7 @@ function wrapRender(world: any): void {
   const renderer = world?.renderer;
   if (!renderer || typeof renderer.render !== "function") return;
   profiledScene = world.scene ?? null;
+  profiledRenderer = renderer;
   const renderSlot = slotFor("Render", "Render");
   const original = renderer.render.bind(renderer);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

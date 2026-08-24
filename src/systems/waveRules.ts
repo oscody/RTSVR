@@ -94,6 +94,32 @@ export function advanceAlienMovement(
   };
 }
 
+/**
+ * Decide how many waiting reserves may enter play this tick.
+ *
+ * **`maxActiveAliens` is a cap, not a batch size.** Until 2026-08-23 the
+ * timer-expiry path released a full batch without subtracting the aliens
+ * already fighting, so Wave 6 could climb 8 -> 16 -> 24 -> 32 active while the
+ * tablet still read "Max Active Aliens 8". Flagged as High #1 in
+ * `devlog/2026-07-26-RTSVR-Code-Review.md` and as a "Known bug" in
+ * `2026-07-25-Alien-Speed-Movement-And-Wave-Release-Timing.md`. Every return
+ * below is now clamped by `capacity`, so the count can never exceed the cap.
+ *
+ * The two release paths that remain:
+ *
+ * - **Opening batch** — fills the cap immediately when the wave activates,
+ *   without waiting for the timer.
+ * - **Refill** — an active alien died, so one reserve enters at once rather
+ *   than waiting out the interval. This is the "when an active alien dies, one
+ *   waiting alien can enter early" rule from `Delay_attacking_straetgy.md`.
+ *
+ * Consequence worth knowing: because the refill is immediate, the active count
+ * sits *at* the cap whenever reserves remain, so `releaseIntervalSeconds` no
+ * longer paces a healthy wave — it only survives as the timer this function
+ * keeps for the case where reserves are momentarily unavailable. Wave pacing is
+ * now driven by the player's kill rate against the cap. If the interval should
+ * gate refills too, that is a deliberate design change, not a bug fix.
+ */
 export function advanceWaveRelease(
   state: WaveReleaseState,
   counts: WaveReleaseCounts,
@@ -105,27 +131,23 @@ export function advanceWaveRelease(
     return 0;
   }
 
-  const batchSize = Math.max(1, Math.floor(config.maxActiveAliens));
-  if (state.releasedAlienCount <= 0) {
-    const released = Math.min(batchSize, counts.waitingReady);
-    state.releasedAlienCount += released;
-    state.releaseTimer = Math.max(0, config.releaseIntervalSeconds);
-    return released;
+  const cap = Math.max(1, Math.floor(config.maxActiveAliens));
+  // Room left under the cap. Negative is possible if the cap was lowered mid-
+  // wave from the Settings tab while more aliens were already fighting, so it
+  // is clamped at 0 — that releases nothing until deaths bring the count back
+  // under the new cap, rather than throwing or releasing a negative batch.
+  const capacity = Math.max(0, cap - Math.max(0, counts.activeLiving));
+  const offer = Math.min(capacity, counts.waitingReady);
+
+  if (offer <= 0) {
+    // At (or over) the cap. Hold the wave here and keep the interval ticking so
+    // a later under-cap tick sees a sensible timer rather than a stale one.
+    state.releaseTimer = Math.max(0, state.releaseTimer - Math.max(0, delta));
+    return 0;
   }
 
-  if (counts.activeLiving < batchSize) {
-    state.releasedAlienCount += 1;
-    state.releaseTimer = Math.max(0, config.releaseIntervalSeconds);
-    return 1;
-  }
-
-  state.releaseTimer = Math.max(
-    0,
-    state.releaseTimer - Math.max(0, delta),
-  );
-  if (state.releaseTimer > 0) return 0;
-
-  const released = Math.min(batchSize, counts.waitingReady);
+  // Opening batch fills the cap; afterwards a death lets exactly one in early.
+  const released = state.releasedAlienCount <= 0 ? offer : Math.min(1, offer);
   state.releasedAlienCount += released;
   state.releaseTimer = Math.max(0, config.releaseIntervalSeconds);
   return released;

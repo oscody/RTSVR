@@ -263,12 +263,69 @@ test("profiler readings open with session context", () => {
   assert.match(profiler, /FPS \$\{fps\}/);
   assert.match(profiler, /Enemies \$\{alive\} alive \/ \$\{killed\} killed/);
   assert.match(profiler, /Moving \$\{moving\}/);
-  // It must lead the reading, not trail it.
-  assert.match(profiler, /hudLines = \[contextLine, \.\.\.lines\]/);
+  // It must lead the reading, not trail it. Asserted as the ORDER of the
+  // header composition rather than one literal expression: the previous form
+  // matched `hudLines = [contextLine, ...lines]` exactly and broke when the
+  // force census was inserted between the two, despite the ordering it exists
+  // to protect being unchanged.
+  assert.match(profiler, /\[buildContextLine\(\), \.\.\.buildForceLines\(\)\]/);
+  assert.match(profiler, /hudLines = \[\.\.\.header, \.\.\.lines\]/);
 
   // Live enemy count is published by PerformanceSystem on the same sample tick.
   assert.match(state, /enemiesAlive: \{ type: Types\.Int16/);
   assert.match(performance, /"enemiesAlive",\s+this\.queries\.aliens\.entities\.size/);
+});
+
+test("profiler reports active aliens separately from waiting reserves", () => {
+  const profiler = readFileSync(
+    new URL("src/systems/frameProfiler.ts", ROOT),
+    "utf8",
+  );
+  const performance = readFileSync(
+    new URL("src/systems/performance.ts", ROOT),
+    "utf8",
+  );
+
+  // `enemiesAlive` on the context line is `aliens.entities.size`, which counts
+  // hidden reserves — during a countdown it reads 19 with nothing on the board.
+  // That ambiguity is why a 2026-08-23 attempt to show the wave cap being
+  // violated in the field had to be retracted. The census must publish the
+  // count the `maxActiveAliens` cap actually governs.
+  assert.match(profiler, /aliensActive: number/);
+  assert.match(profiler, /aliensWaiting: number/);
+  assert.match(profiler, /Force alien \$\{c\.aliensActive\} act \$\{c\.aliensWaiting\} wait/);
+
+  // Same rule as WaveSystem.activeLivingAlienCount: alive, and not "waiting".
+  assert.match(
+    performance,
+    /if \(alien\.getValue\(WaveUnit, "stage"\) === "waiting"\) \{\s+census\.aliensWaiting \+= 1;/,
+  );
+  assert.match(performance, /census\.aliensActive \+= 1;/);
+
+  // Dead-but-unreaped entities must not inflate any roster for the frame or two
+  // before cleanup runs.
+  assert.match(performance, /getValue\(Health, "current"\) \?\? 0\) <= 0\) continue;/);
+});
+
+test("force census keeps fixed columns so a log stays greppable", () => {
+  const performance = readFileSync(
+    new URL("src/systems/performance.ts", ROOT),
+    "utf8",
+  );
+
+  // Zeroing the known kinds rather than clearing the map is what keeps every
+  // sample's columns identical across a 700-sample session; a kind that fell to
+  // zero must print `0`, not vanish and read as missing data.
+  assert.match(performance, /function resetCounts/);
+  assert.match(performance, /for \(const kind of counts\.keys\(\)\) counts\.set\(kind, 0\)/);
+
+  // Turrets are Buildings in this codebase, not Units — but they lead the
+  // building columns because they are the count most often being checked.
+  assert.match(performance, /const BUILDING_KIND_ORDER = \[\s+"turret",/);
+
+  // An unlisted kind must still be counted and named, so adding a craft cannot
+  // silently drop it from the roster.
+  assert.match(performance, /counts\.set\(kind, \(counts\.get\(kind\) \?\? 0\) \+ 1\)/);
 });
 
 test("tablet skips unchanged element writes", () => {

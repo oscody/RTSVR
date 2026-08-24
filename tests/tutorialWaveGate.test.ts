@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -127,5 +128,54 @@ test("the tutorial's budget is smaller than a real wave, which is why this matte
   assert.ok(
     tutorialTotal < waveOneTotal,
     `tutorial ${tutorialTotal} vs wave 1 ${waveOneTotal}`,
+  );
+});
+
+/**
+ * The ordering defect from 2026-08-19, kept fixed.
+ *
+ * `WaveSystem` updates **before** `TutorialSystem` and prepares the wave exactly
+ * once, so a gate published only from `update()` lands one frame after the only
+ * frame that reads it. The first alien then spawned on the south rim instead of
+ * the mine's corner — with no error and a spawn position that looked entirely
+ * reasonable, which is why it survived a live run unnoticed.
+ *
+ * That makes it worth a test even though it is a structural property rather than
+ * a behaviour: a regression is silent, so every other test here would still
+ * pass. Asserted over source text because `tutorial.ts` imports IWSDK and cannot
+ * be loaded under `node --test` — the same approach as
+ * `tests/entity-teardown.test.ts`.
+ */
+test("the wave gate is published from init(), not only from update()", () => {
+  const source = readFileSync(
+    new URL("../src/systems/tutorial.ts", import.meta.url),
+    "utf8",
+  );
+
+  // A module function, not a method: it must be callable from `init()` and
+  // `resetTutorial()`, both of which run outside an update.
+  assert.match(source, /export function publishTutorialWaveGate\(/);
+  assert.doesNotMatch(
+    source,
+    /private\s+publishTutorialWaveGate/,
+    "must not become a method — init() has to be able to call it",
+  );
+
+  // The init() body must publish before any system's first update.
+  const init = source.slice(source.indexOf("  init(): void {"));
+  const initBody = init.slice(0, init.indexOf("\n  update("));
+  assert.ok(initBody.length > 0, "could not locate TutorialSystem.init()");
+  assert.match(
+    initBody,
+    /publishTutorialWaveGate\(/,
+    "init() must publish the gate: WaveSystem runs earlier in the frame and prepares the wave once",
+  );
+
+  // And on restart, or the second match inherits a stale anchor.
+  const reset = source.slice(source.indexOf("export function resetTutorial"));
+  assert.match(
+    reset.slice(0, reset.indexOf("\n}")),
+    /publishTutorialWaveGate\(/,
+    "resetTutorial() must republish the gate",
   );
 });
