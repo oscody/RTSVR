@@ -45,6 +45,10 @@ import {
   boardState,
   setTerrainAt,
 } from "./state.js";
+import { Consumer } from "./traceContracts.js";
+import { observePlacedSite } from "./phase2Trace.js";
+import { traceEntityDestroyed } from "./trace.js";
+import { EntityKind, Reason } from "./traceIds.js";
 
 const craftSiteProxyMaterial = new MeshBasicMaterial({
   colorWrite: false,
@@ -194,6 +198,7 @@ export class CraftProductionSystem extends createSystem({
 
   update(delta: number): void {
     for (const site of this.queries.sites.entities) {
+      observePlacedSite(site.index, Consumer.Production);
       // Crafts now wait for an astronaut, and go faster with more of them.
       // Astronaut production sets requiresBuilder = false and keeps the old
       // self-building behaviour — see the CraftProductionSite comment for why
@@ -268,6 +273,7 @@ export class CraftProductionSystem extends createSystem({
     // dangling `ConstructionState.site` until the next frame notices.
     releaseSiteBuilders(site);
     boardState.buildersBySite.delete(site.index);
+    traceEntityDestroyed(site.index, EntityKind.CraftProductionSite, Reason.Completed);
     releaseEntity(site);
     createCraftEntity(
       this.world,

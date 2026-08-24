@@ -65,6 +65,15 @@ import {
 import { isTutorialFrozen } from "./tutorialFreeze.js";
 import { getNextWaveSpec } from "./waveCatalog.js";
 import { releaseEntity } from "./entityTeardown.js";
+import { Consumer, expectHandoff } from "./traceContracts.js";
+import {
+  newCorrelationId,
+  traceDecision,
+  traceEntityDestroyed,
+  traceEntityTransition,
+  traceStateChange,
+} from "./trace.js";
+import { Contract, Lifecycle, Reason, State, entityKindId } from "./traceIds.js";
 
 export class CombatSystem extends createSystem({
   attackers: {
@@ -241,13 +250,33 @@ export class CombatSystem extends createSystem({
 
     const targetType = this.targetType(target);
     resolveDamageInto(this.damage, current, spec.damage, hits, targetType);
+    const corr = newCorrelationId();
     target.setValue(Health, "current", this.damage.remaining);
+    // A damage correlation makes the owning CombatSystem record self-contained:
+    // attacker, target, health transition and the later alert fan-out share one
+    // id in the dump.
+    traceDecision(Reason.Accepted, target.index, attacker.index, corr);
+    traceStateChange(
+      State.Health,
+      current,
+      this.damage.remaining,
+      Reason.Accepted,
+      0,
+      corr,
+    );
     updateHealthBar(target);
     // Under-attack alerting: real enemy damage on a friendly, published before
     // any destruction so the target is still readable. Fatal hits are passed
     // through and suppressed by the rules — destruction messaging is truer.
     if (targetType !== "enemy" && attacker.hasComponent(Enemy)) {
-      notifyFriendlyDamage(target, this.damage.died);
+      if (!this.damage.died) {
+        expectHandoff(
+          Contract.DamageReachesAlertConsumers,
+          corr,
+          Consumer.AlertState | Consumer.Vfx | Consumer.Banner | Consumer.Audio,
+        );
+      }
+      notifyFriendlyDamage(target, this.damage.died, this.damage.died ? 0 : corr);
     }
     if (this.damage.died) this.destroyTarget(target, this.damage.enemyKilled);
   }
@@ -320,6 +349,10 @@ export class CombatSystem extends createSystem({
       target.removeComponent(RayInteractable);
     }
     if (target.hasComponent(Enemy)) {
+      const kind = target.getValue(Enemy, "kind") ?? "alien";
+      const kindId = entityKindId(kind);
+      traceEntityTransition(target.index, kindId, Lifecycle.Killed, Reason.Killed);
+      traceEntityDestroyed(target.index, kindId, Reason.Killed);
       detachAlienAnimation(target);
       // Index recycling: a ring left keyed to this dead alien would reappear
       // under whatever entity claims the index next.

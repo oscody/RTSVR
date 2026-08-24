@@ -63,6 +63,7 @@ const lifecycleByEntity = new Uint8Array(LIFECYCLE_TABLE_SIZE);
 let nextCorrelation = 1;
 
 export function newCorrelationId(): number {
+  if (!SYSTEM_INTERACTION_TRACE_ENABLED || !isTraceRecording()) return 0;
   nextCorrelation = (nextCorrelation + 1) >>> 0;
   if (nextCorrelation === 0) nextCorrelation = 1;
   return nextCorrelation;
@@ -96,13 +97,14 @@ export function traceWrite(
   oldValue: number,
   newValue: number,
   revision = 0,
+  corr = 0,
 ): void {
   if (!SYSTEM_INTERACTION_TRACE_ENABLED || !isTraceRecording()) return;
   const at = performance.now();
   recordEvent(
     TraceKind.Write,
     state,
-    0,
+    corr,
     oldValue,
     newValue,
     Reason.None,
@@ -140,13 +142,14 @@ export function traceStateChange(
   newValue: number,
   reason: number = Reason.None,
   revision = 0,
+  corr = 0,
 ): void {
   if (!SYSTEM_INTERACTION_TRACE_ENABLED || !isTraceRecording()) return;
   const at = performance.now();
   recordEvent(
     TraceKind.StateChange,
     state,
-    0,
+    corr,
     oldValue,
     newValue,
     reason,
@@ -311,12 +314,17 @@ export function resetTracedLifecycles(): void {
  * way that distinction gets into the trace, so a system that returns early on a
  * normal condition should say so.
  */
-export function traceSkipped(reason: number): void {
+export function traceSkipped(reason: number, recordReason = true): void {
   if (!SYSTEM_EXECUTION_TRACE_ENABLED || !isTraceRecording()) return;
   const at = performance.now();
   const slot = currentTraceSlot();
   if (slot >= 0) recordSystemSkipped(slot);
-  recordEvent(TraceKind.Skipped, 0, 0, 0, 0, reason, 0, 0, at);
+  // The execution ring needs the skipped bit on every frame. The event ring
+  // does not: an unchanged expected early return (notably WaveSystem during a
+  // countdown) is evidence once, not ninety times a second.
+  if (recordReason) {
+    recordEvent(TraceKind.Skipped, 0, 0, 0, 0, reason, 0, 0, at);
+  }
   meters.record.add(performance.now() - at);
 }
 

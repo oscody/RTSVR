@@ -53,6 +53,10 @@ import {
   gridKey,
   setTerrainAt,
 } from "./state.js";
+import { Consumer } from "./traceContracts.js";
+import { observePlacedSite } from "./phase2Trace.js";
+import { traceDecision, traceEntityDestroyed } from "./trace.js";
+import { EntityKind, Reason } from "./traceIds.js";
 
 const siteProxyMaterial = new MeshBasicMaterial({
   colorWrite: false,
@@ -267,6 +271,7 @@ export function attachBuilderToSite(
   site: Entity,
   path: readonly GridPosition[],
 ): void {
+  traceDecision(Reason.Assigned, astronaut.index, site.index);
   astronaut.setValue(ConstructionState, "stage", "toSite");
   astronaut.setValue(ConstructionState, "site", site);
   const object = astronaut.object3D;
@@ -458,6 +463,10 @@ export class ConstructionSystem extends createSystem({
 
   private advanceSites(delta: number): void {
     for (const site of this.queries.sites.entities) {
+      // The site is created by InteractionSystem earlier in the same world
+      // update. This observes the actual first owning-system read, rather than
+      // assuming a direct call made the order complete.
+      observePlacedSite(site.index, Consumer.Construction);
       const builderCount = this.arrivedBySite.get(site.index) ?? 0;
       this.cycle.stage = (site.getValue(ConstructionSite, "stage") ??
         "pending") as SiteStage;
@@ -544,6 +553,7 @@ export class ConstructionSystem extends createSystem({
     releaseSiteBuilders(site);
     clearSelectedSite(site);
     boardState.buildersBySite.delete(site.index);
+    traceEntityDestroyed(site.index, EntityKind.ConstructionSite, Reason.Completed);
     releaseEntity(site);
     if (!spec || !root) return;
     createBuildingEntity(this.world, root, spec, x, y);

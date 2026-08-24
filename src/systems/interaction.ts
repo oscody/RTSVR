@@ -68,6 +68,15 @@ import {
   gridKey,
   setTerrainAt,
 } from "./state.js";
+import { Consumer } from "./traceContracts.js";
+import { trackPlacedSite } from "./phase2Trace.js";
+import {
+  newCorrelationId,
+  traceDecision,
+  traceEntityCreated,
+  traceWrite,
+} from "./trace.js";
+import { Contract, EntityKind, Lifecycle, Reason, State } from "./traceIds.js";
 
 function markerToLocal(markerEntity: Entity | null, x: number, z: number): void {
   const marker = markerEntity?.object3D;
@@ -620,11 +629,17 @@ export class InteractionSystem extends createSystem({
       return;
     }
 
+    const corr = newCorrelationId();
+    const previousCrystals = gameState.getValue(GameState, "crystals") ?? 0;
+    const revision = (gameState.getValue(GameState, "revision") ?? 0) + 1;
     gameState.setValue(GameState, "crystals", validation.remainingCrystals);
-    gameState.setValue(
-      GameState,
-      "revision",
-      (gameState.getValue(GameState, "revision") ?? 0) + 1,
+    gameState.setValue(GameState, "revision", revision);
+    traceWrite(
+      State.Crystals,
+      previousCrystals,
+      validation.remainingCrystals,
+      revision,
+      corr,
     );
     setTerrainAt(tx, ty, "blocked");
     // Astronaut production is the one thing that still builds itself. Every
@@ -638,6 +653,14 @@ export class InteractionSystem extends createSystem({
       ty,
       "none",
       requiresBuilder,
+    );
+    traceEntityCreated(site.index, EntityKind.CraftProductionSite, Lifecycle.Created, Reason.Placed);
+    traceDecision(Reason.Placed, site.index, State.SelectedCraftKind, corr);
+    trackPlacedSite(
+      site.index,
+      Contract.TabletOrderReachesBuilder,
+      corr,
+      Consumer.Production,
     );
     tablet.setValue(TabletState, "craftPlacementActive", false);
     hideMarker(boardState.buildMarker);
@@ -716,16 +739,30 @@ export class InteractionSystem extends createSystem({
       return;
     }
 
+    const corr = newCorrelationId();
+    const previousCrystals = gameState.getValue(GameState, "crystals") ?? 0;
+    const revision = (gameState.getValue(GameState, "revision") ?? 0) + 1;
     gameState.setValue(GameState, "crystals", validation.remainingCrystals);
-    gameState.setValue(
-      GameState,
-      "revision",
-      (gameState.getValue(GameState, "revision") ?? 0) + 1,
+    gameState.setValue(GameState, "revision", revision);
+    traceWrite(
+      State.Crystals,
+      previousCrystals,
+      validation.remainingCrystals,
+      revision,
+      corr,
     );
     // The footprint blocks at PLACEMENT, not at build start. Without this two
     // orders could be placed overlapping and the second would corrupt the first.
     stampBuildingFootprint(tx, ty, spec.widthTiles);
     const site = createConstructionSite(this.world, root, spec, tx, ty);
+    traceEntityCreated(site.index, EntityKind.ConstructionSite, Lifecycle.Created, Reason.Placed);
+    traceDecision(Reason.Placed, site.index, State.SelectedBuildingKind, corr);
+    trackPlacedSite(
+      site.index,
+      Contract.TabletOrderReachesBuilder,
+      corr,
+      Consumer.Construction,
+    );
     tablet.setValue(TabletState, "buildPlacementActive", false);
     hideMarker(boardState.buildMarker);
 

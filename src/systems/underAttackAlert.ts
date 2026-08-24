@@ -39,6 +39,8 @@ import {
   stopAlertAudio,
 } from "./underAttackAudio.js";
 import { markThreatened, punchThreatBadge } from "./underAttackVfx.js";
+import { Consumer, observeHandoff } from "./traceContracts.js";
+import { Contract, Reason } from "./traceIds.js";
 
 /**
  * Owns alert lifetime and the anti-spam bookkeeping, and fans one accepted
@@ -93,7 +95,7 @@ let lastSpottedAt = Number.NEGATIVE_INFINITY;
  * The target entity is never retained: it may be destroyed long before any cue
  * finishes, and entity indexes are recycled.
  */
-export function notifyFriendlyDamage(target: Entity, fatal: boolean): void {
+export function notifyFriendlyDamage(target: Entity, fatal: boolean, corr = 0): void {
   const isBuilding = target.hasComponent(Building);
   const kind = isBuilding
     ? (target.getValue(Building, "kind") ?? "unknown")
@@ -123,9 +125,33 @@ export function notifyFriendlyDamage(target: Entity, fatal: boolean): void {
   runtime.activeUntil = activeUntil;
   runtime.lastTargetAlertAt =
     cooldownByTarget.get(target.index) ?? Number.NEGATIVE_INFINITY;
-  if (!shouldRaiseAlert(request, runtime, clock)) return;
+  if (!shouldRaiseAlert(request, runtime, clock)) {
+    // A cooldown/priority/match-state rejection is a real consumer result, not
+    // a dropped alert. Close the correlation as filtered so the contract only
+    // fails when a supposedly accepted fan-out truly disappears.
+    if (corr === 0) return;
+    const reason = alertFilterReason(request, runtime, clock);
+    observeHandoff(Contract.DamageReachesAlertConsumers, corr, Consumer.AlertState, true, reason);
+    observeHandoff(Contract.DamageReachesAlertConsumers, corr, Consumer.Vfx, true, reason);
+    observeHandoff(Contract.DamageReachesAlertConsumers, corr, Consumer.Banner, true, reason);
+    observeHandoff(Contract.DamageReachesAlertConsumers, corr, Consumer.Audio, true, reason);
+    return;
+  }
 
-  raiseAlert(category, kind, target.index);
+  raiseAlert(category, kind, target.index, corr);
+}
+
+function alertFilterReason(
+  request: AlertRequest,
+  state: AlertRuntime,
+  now: number,
+): number {
+  if (request.fatal) return Reason.AlertFilteredFatal;
+  if (request.matchStatus !== "playing") return Reason.AlertFilteredMatchOver;
+  if (now - state.lastTargetAlertAt < ALERT_TARGET_COOLDOWN_SECONDS) {
+    return Reason.AlertFilteredCooldown;
+  }
+  return Reason.AlertFilteredPriority;
 }
 
 /** The one place `UnderAttackAlertState` is written on a raise. */
@@ -153,6 +179,7 @@ function raiseAlert(
   category: AlertCategory,
   displayKind: string,
   targetIndex: number,
+  corr = 0,
 ): void {
   const message = alertMessage(category, displayKind);
   const detail = alertDetail(category);
@@ -163,8 +190,14 @@ function raiseAlert(
   runtime.activePriority = priority;
   activeUntil = clock + ALERT_VISIBLE_SECONDS;
   publishAlertState(message, detail, priority, targetIndex);
+  observeHandoff(Contract.DamageReachesAlertConsumers, corr, Consumer.AlertState);
+  // The damage path already punched the target's threat badge. This records
+  // that visual consumer only for an accepted alert; filtered requests do not
+  // pretend to have completed the alert contract.
+  observeHandoff(Contract.DamageReachesAlertConsumers, corr, Consumer.Vfx);
 
   playAlertSting(category);
+  observeHandoff(Contract.DamageReachesAlertConsumers, corr, Consumer.Audio);
   if (category === "command-center") {
     showUnderAttackBanner(message, detail);
   } else {
@@ -172,6 +205,7 @@ function raiseAlert(
     // rather than leave "UNIT DETECTED" up while something is being hit.
     hideUnderAttackBanner();
   }
+  observeHandoff(Contract.DamageReachesAlertConsumers, corr, Consumer.Banner);
 }
 
 /**

@@ -28,6 +28,9 @@ import {
   getTerrainAt,
   setTerrainAt,
 } from "./state.js";
+import { newCorrelationId, traceDecision, traceStateChange, traceWrite } from "./trace.js";
+import { trackMiningDeposit } from "./phase2Trace.js";
+import { Reason, State } from "./traceIds.js";
 
 export class MiningSystem extends createSystem({
   miners: { required: [Unit, MinerState] },
@@ -78,6 +81,7 @@ export class MiningSystem extends createSystem({
 
       const previousRemaining = this.cycle.nodeRemaining;
       const previousCrystals = this.cycle.crystals;
+      const previousCargo = this.cycle.cargo;
       const transition = advanceMiningCycle(
         this.cycle,
         delta,
@@ -89,18 +93,40 @@ export class MiningSystem extends createSystem({
       miner.setValue(MinerState, "timer", this.cycle.timer);
       miner.setValue(MinerState, "cargo", this.cycle.cargo);
 
+      if (this.cycle.cargo !== previousCargo) {
+        traceStateChange(
+          State.MinerCargo,
+          previousCargo,
+          this.cycle.cargo,
+          transition === "loadedCargo" ? Reason.Accepted : Reason.Deposited,
+        );
+      }
+
       if (this.cycle.nodeRemaining !== previousRemaining) {
         node.setValue(ResourceNode, "remaining", this.cycle.nodeRemaining);
+        traceStateChange(
+          State.NodeRemaining,
+          previousRemaining,
+          this.cycle.nodeRemaining,
+          this.cycle.nodeRemaining === 0 ? Reason.ResourceExhausted : Reason.Accepted,
+        );
         if (this.cycle.nodeRemaining === 0) this.exhaustNode(node);
       }
       if (this.cycle.crystals !== previousCrystals) {
         const deposited = Math.max(0, this.cycle.crystals - previousCrystals);
+        const revision = (gameState.getValue(GameState, "revision") ?? 0) + 1;
+        const corr = newCorrelationId();
         gameState.setValue(GameState, "crystals", this.cycle.crystals);
-        gameState.setValue(
-          GameState,
-          "revision",
-          (gameState.getValue(GameState, "revision") ?? 0) + 1,
+        gameState.setValue(GameState, "revision", revision);
+        traceWrite(
+          State.Crystals,
+          previousCrystals,
+          this.cycle.crystals,
+          revision,
+          corr,
         );
+        traceDecision(Reason.Deposited, deposited, miner.index, corr);
+        trackMiningDeposit(revision, corr);
         const stats = boardState.gameStats;
         if (stats && deposited > 0) {
           stats.setValue(

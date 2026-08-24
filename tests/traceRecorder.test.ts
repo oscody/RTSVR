@@ -44,3 +44,22 @@ test("a pending automatic snapshot cannot be restarted by another trigger", () =
   assert.match(recorder, /busy: number/);
   assert.match(recorder, /\| Busy \$\{report\.busy\}/);
 });
+
+test("an automatic dump snapshots the real trigger and keeps later evidence", () => {
+  const recorder = source("src/systems/traceRecorder.ts");
+
+  assert.match(recorder, /recordEvent\(TraceKind\.Trigger, reason,/);
+  assert.match(recorder, /const firstWrite = buffer\.writes - take/);
+  assert.match(recorder, /snapshotPostRemaining = snapshotFilling \? SNAPSHOT_POST_EVENTS : 0/);
+  assert.match(recorder, /function appendToSnapshot/);
+});
+
+test("WaveSystem keeps skipped execution status without recorder-event spam", () => {
+  const trace = source("src/systems/trace.ts");
+  const wave = source("src/systems/wave.ts");
+
+  assert.match(trace, /traceSkipped\(reason: number, recordReason = true\)/);
+  assert.match(trace, /if \(slot >= 0\) recordSystemSkipped\(slot\)/);
+  assert.match(wave, /private traceExpectedSkip\(reason: number\)/);
+  assert.match(wave, /traceSkipped\(reason, changed\)/);
+});

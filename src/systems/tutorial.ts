@@ -152,6 +152,8 @@ import {
   type TutorialRecovery,
   type TutorialSnapshot,
 } from "./tutorialRules.ts";
+import { traceStateChange } from "./trace.js";
+import { State } from "./traceIds.js";
 
 /**
  * Tutorial runtime — the world-facing half. All decisions live in
@@ -229,6 +231,11 @@ let cardDimmed = false;
 /** Cached nearest-crystal tile; -1 means none. Refreshed at sample rate. */
 let crystalTileX = -1;
 let crystalTileY = -1;
+/** Last published gate values. Gate publication is sampled, not spammed. */
+let tracedGateDrill = Number.NaN;
+let tracedGateGoverning = false;
+let tracedGateHolding = false;
+let tracedGateBudget = Number.NaN;
 
 // Reused every sample — never allocated in update().
 const snapshot: TutorialSnapshot = {
@@ -322,14 +329,47 @@ export function publishTutorialWaveGate(
   releaseCurrent: boolean,
 ): void {
   const budget = releaseBudget(drill, releaseCurrent);
+  const governing = tutorialGovernsWaves(isTutorialEnabled(), drill);
+  const holdsCountdown = tutorialHoldsWaveCountdown(drill, budget);
   setTutorialWaveGate({
     // A FINISHED tutorial must let go of the wave system entirely. Leaving it
     // governing caps every later wave at the tutorial's own budget of 3.
-    governing: tutorialGovernsWaves(isTutorialEnabled(), drill),
-    holdsCountdown: tutorialHoldsWaveCountdown(drill, budget),
+    governing,
+    holdsCountdown,
     releaseBudget: budget,
     spawnAnchor: resolveSpawnAnchor(),
   });
+  // WaveSystem runs before TutorialSystem, so this event is the auditable
+  // publication point for the initialization/next-frame gate contract. Only
+  // changes are recorded: the tutorial samples four times a second.
+  if (drill !== tracedGateDrill) {
+    traceStateChange(State.TutorialDrill, tracedGateDrill || 0, drill);
+    tracedGateDrill = drill;
+  }
+  if (governing !== tracedGateGoverning) {
+    traceStateChange(
+      State.TutorialGoverning,
+      tracedGateGoverning ? 1 : 0,
+      governing ? 1 : 0,
+    );
+    tracedGateGoverning = governing;
+  }
+  if (holdsCountdown !== tracedGateHolding) {
+    traceStateChange(
+      State.TutorialHoldsCountdown,
+      tracedGateHolding ? 1 : 0,
+      holdsCountdown ? 1 : 0,
+    );
+    tracedGateHolding = holdsCountdown;
+  }
+  if (Number.isFinite(budget) && budget !== tracedGateBudget) {
+    traceStateChange(
+      State.TutorialReleaseBudget,
+      Number.isFinite(tracedGateBudget) ? tracedGateBudget : 0,
+      budget,
+    );
+    tracedGateBudget = budget;
+  }
 }
 
 /**

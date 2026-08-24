@@ -118,6 +118,9 @@ import {
   boardState,
   type DebugSettingKey,
 } from "./state.js";
+import { observeMiningEconomyRead } from "./phase2Trace.js";
+import { traceRead } from "./trace.js";
+import { State } from "./traceIds.js";
 
 
 /**
@@ -214,6 +217,8 @@ export class TabletSystem extends createSystem({
   private lastCountdown = Number.NaN;
   private lastCrafts = Number.NaN;
   private lastCrystals = Number.NaN;
+  /** Last GameState revision observed by this (earlier-than-Mining) reader. */
+  private lastEconomyRevision = Number.NaN;
   private lastDebugRevision = Number.NaN;
   private lastEnemyCount = Number.NaN;
   private lastKills = Number.NaN;
@@ -311,6 +316,12 @@ export class TabletSystem extends createSystem({
     const game = boardState.gameState;
     const stats = boardState.gameStats;
     const crystals = game?.getValue(GameState, "crystals") ?? 0;
+    const economyRevision = game?.getValue(GameState, "revision") ?? 0;
+    if (economyRevision !== this.lastEconomyRevision) {
+      this.lastEconomyRevision = economyRevision;
+      traceRead(State.Crystals, crystals, economyRevision);
+      observeMiningEconomyRead(economyRevision);
+    }
     const mined = stats?.getValue(GameStats, "crystalsMined") ?? 0;
     let astronauts = 0;
     let crafts = 0;

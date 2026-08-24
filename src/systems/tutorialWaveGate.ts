@@ -36,6 +36,8 @@ let holdsCountdown = false;
 let releaseBudget = 0;
 /** Where the first alien should land, resolved from the live board. */
 let spawnAnchor: TutorialSpawnAnchor | null = null;
+/** Monotonic marker used to verify initialization-time gate publication. */
+let revision = 0;
 
 /** Published by TutorialSystem every sample. */
 export function setTutorialWaveGate(state: {
@@ -48,6 +50,7 @@ export function setTutorialWaveGate(state: {
   holdsCountdown = state.holdsCountdown;
   releaseBudget = state.releaseBudget;
   spawnAnchor = state.spawnAnchor;
+  revision += 1;
 }
 
 /** Full release — the tutorial is off, finished, or the match has ended. */
@@ -56,6 +59,12 @@ export function clearTutorialWaveGate(): void {
   holdsCountdown = false;
   releaseBudget = 0;
   spawnAnchor = null;
+  revision += 1;
+}
+
+/** Revision of the last publish or intentional clear. */
+export function tutorialWaveGateRevision(): number {
+  return revision;
 }
 
 export function isTutorialGoverningWaves(): boolean {

@@ -40,6 +40,10 @@ import { createInitialScenario } from "./structures.js";
 import { INITIAL_WAVE_DELAY_SECONDS } from "./waveRules.js";
 import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
 import { releaseEntity } from "./entityTeardown.js";
+import { clearHandoffs } from "./traceContracts.js";
+import { clearPhase2Trace } from "./phase2Trace.js";
+import { resetTracedLifecycles, traceDecision, traceStateChange } from "./trace.js";
+import { Reason, State } from "./traceIds.js";
 
 const SCENARIO_RESET_DEFAULTS = createScenarioResetDefaults(
   STARTING_CRYSTALS,
@@ -68,6 +72,20 @@ export class ScenarioResetSystem extends createSystem({
   }
 
   private resetScenario(source: Entity): void {
+    const staleObjectCount = this.queries.objects.entities.size;
+    const staleSiteCount = this.queries.sites.entities.size;
+    // Restart deliberately ends old correlations rather than letting a deposit
+    // or build order from the discarded match fail in the fresh one.
+    clearHandoffs();
+    clearPhase2Trace();
+    resetTracedLifecycles();
+    traceDecision(Reason.Restarted, staleObjectCount, State.SceneEntities);
+    traceStateChange(
+      State.SceneEntities,
+      staleObjectCount + staleSiteCount,
+      0,
+      Reason.Restarted,
+    );
     clearUnitSelections();
     clearCombatEffects();
     clearMeteors();
@@ -138,11 +156,16 @@ export class ScenarioResetSystem extends createSystem({
   private resetSingletons(source: Entity): void {
     const game = boardState.gameState;
     if (game) {
+      const previousCrystals = game.getValue(GameState, "crystals") ?? 0;
+      const revision = (game.getValue(GameState, "revision") ?? 0) + 1;
       game.setValue(GameState, "crystals", SCENARIO_RESET_DEFAULTS.crystals);
-      game.setValue(
-        GameState,
-        "revision",
-        (game.getValue(GameState, "revision") ?? 0) + 1,
+      game.setValue(GameState, "revision", revision);
+      traceStateChange(
+        State.Crystals,
+        previousCrystals,
+        SCENARIO_RESET_DEFAULTS.crystals,
+        Reason.Restarted,
+        revision,
       );
     }
     const stats = boardState.gameStats;

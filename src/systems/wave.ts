@@ -13,6 +13,7 @@ import {
   isTutorialGoverningWaves,
   tutorialHoldsCountdown,
   tutorialReleaseAllowance,
+  tutorialWaveGateRevision,
 } from "./tutorialWaveGate.js";
 import {
   traceDecision,
@@ -76,6 +77,7 @@ import {
   getWaveSpec,
   resolveWavePacing,
   resolveWaveSpawns,
+  TUTORIAL_WAVE_NUMBER,
   type ResolvedWaveSpawn,
 } from "./waveCatalog.js";
 
@@ -164,6 +166,8 @@ export class WaveSystem extends createSystem({
   private tracedGoverning = false;
   /** Last traced release reason, same anti-spam rule. */
   private tracedReleaseReason = -1;
+  /** Last expected early-return reason; keep ring status, not duplicate events. */
+  private tracedSkipReason = -1;
   /** Highest simultaneous active count this wave, for the release record. */
   private highestActiveObserved = 0;
 
@@ -193,7 +197,7 @@ export class WaveSystem extends createSystem({
       | Entity
       | undefined;
     if (!source) {
-      traceSkipped(Reason.NoSource);
+      this.traceExpectedSkip(Reason.NoSource);
       return;
     }
 
@@ -256,11 +260,13 @@ export class WaveSystem extends createSystem({
       // A normal, expected early return — the wave is counting down or the
       // match is over. Recorded as a skip with its reason so the trace shows
       // the system reasoning, never as a failure.
-      traceSkipped(
+      this.traceExpectedSkip(
         matchStatus !== "playing" ? Reason.MatchNotPlaying : Reason.WaveNotActive,
       );
       return;
     }
+
+    this.tracedSkipReason = -1;
 
     this.rebuildNavigationOccupancy();
     let pathfindsRemaining = ALIEN_PATHFINDS_PER_FRAME;
@@ -399,6 +405,15 @@ export class WaveSystem extends createSystem({
       this.prepSourceRevision = sourceRevision;
       const spec = getWaveSpec(waveNumber);
       if (!spec) return;
+      // WaveSystem runs before TutorialSystem, so tutorial-wave preparation is
+      // valid only when init/reset has already published a gate.
+      const gateRevision = tutorialWaveGateRevision();
+      checkContract(
+        Contract.TutorialGateBeforeWavePrep,
+        waveNumber !== TUTORIAL_WAVE_NUMBER || gateRevision > 0,
+        gateRevision,
+        1,
+      );
       const resolveStart = performance.now();
       try {
         this.pendingSpawns = resolveWaveSpawns(spec, {
@@ -606,6 +621,16 @@ export class WaveSystem extends createSystem({
     // it — so a reader sees "3 active, cap 3, released 0, PASS" rather than
     // having to infer that nothing went wrong from the absence of a record.
     checkContract(Contract.ActiveNeverAboveCap, activeLiving <= cap, activeLiving, cap, Reason.CapViolated);
+  }
+
+  /**
+   * Mark every skipped execution in the compact execution ring, but only put a
+   * reason in the flight recorder when the WaveSystem's state actually changes.
+   */
+  private traceExpectedSkip(reason: number): void {
+    const changed = reason !== this.tracedSkipReason;
+    this.tracedSkipReason = reason;
+    traceSkipped(reason, changed);
   }
 
   private tickWaitingReleaseDelays(delta: number): void {
