@@ -149,13 +149,16 @@ export const FLIGHT_RECORDER_CAPACITY = 16_384;
  * fires, so the triggering window cannot be overwritten while the main ring
  * keeps running and while formatting is deferred.
  */
-export const SNAPSHOT_CAPACITY = 4_096;
+export const SNAPSHOT_CAPACITY = 129;
 
 /** Events preserved from BEFORE the trigger. */
-export const SNAPSHOT_PRE_EVENTS = 3_072;
+export const SNAPSHOT_PRE_EVENTS = 64;
 
 /** Events recorded AFTER the trigger before the snapshot is sealed. */
-export const SNAPSHOT_POST_EVENTS = 1_024;
+export const SNAPSHOT_POST_EVENTS = 64;
+
+/** Seal a quiet automatic snapshot instead of waiting indefinitely for events. */
+export const SNAPSHOT_POST_TIMEOUT_MS = 2_000;
 
 /**
  * Frames of per-system execution history.
@@ -188,10 +191,10 @@ export const INTERACTION_SLOTS = 32;
  * stutter" bar as `MISSED_VSYNC_FACTOR` in `frameProfiler.ts`, not the ordinary
  * jitter that recalibration was written to stop counting.
  */
-export const HITCH_FRAME_MS = 30;
+export const HITCH_FRAME_MS = 50;
 
 /** An `Other` bucket at or above this preserves a `WorstOther` evidence dump. */
-export const OTHER_GAP_MS = 12;
+export const OTHER_GAP_MS = 20;
 
 /** An observed `compileShader`/`linkProgram` call at or above this is recorded. */
 export const SHADER_OP_MS = 2;
@@ -207,10 +210,13 @@ export const LONG_TASK_MS = 16;
 export const INTERACTION_DEADLINE_MS = 750;
 
 /** Minimum seconds between two dumps carrying the same trigger reason. */
-export const DUMP_COOLDOWN_SECONDS = 8;
+export const DUMP_COOLDOWN_SECONDS = 30;
 
-/** Console lines one dump may print. Keeps a hitch from becoming a log storm. */
-export const DUMP_MAX_LINES = 120;
+/**
+ * Every automatic dump fits: 64 pre-trigger events, the trigger, and 64 post.
+ * Manual dumps use this as their bounded recent-history view.
+ */
+export const DUMP_MAX_LINES = 129;
 
 /** Seconds between optional memory samples. Never per frame. */
 export const MEMORY_SAMPLE_SECONDS = 15;

@@ -71,12 +71,25 @@ import {
 import { Consumer } from "./traceContracts.js";
 import { trackPlacedSite } from "./phase2Trace.js";
 import {
+  beginWorldInteraction,
+  finishInteraction,
+  noteInteractionStage,
+} from "./traceInteraction.js";
+import {
   newCorrelationId,
   traceDecision,
   traceEntityCreated,
   traceWrite,
 } from "./trace.js";
-import { Contract, EntityKind, Lifecycle, Reason, State } from "./traceIds.js";
+import {
+  Contract,
+  EntityKind,
+  InteractionStage,
+  Lifecycle,
+  Reason,
+  State,
+  Terminal,
+} from "./traceIds.js";
 
 function markerToLocal(markerEntity: Entity | null, x: number, z: number): void {
   const marker = markerEntity?.object3D;
@@ -136,6 +149,7 @@ export class InteractionSystem extends createSystem({
       // Board and roster clicks share the same toggle semantics so a unit can
       // be added to or removed from a group from either surface.
       this.queries.pressedUnits.subscribe("qualify", (entity) => {
+        this.observeWorldPress(entity, () => {
         if (this.isCraftPlacementActive()) {
           this.rejectCraftPlacementTarget(entity);
           return;
@@ -161,10 +175,12 @@ export class InteractionSystem extends createSystem({
         } else {
           this.publishBuilder(astronaut);
         }
+        });
       }),
       // Click an enemy with a unit selected: approach the open tile on the
       // mover-facing side. The red marker stays on the unavailable target.
       this.queries.pressedEnemies.subscribe("qualify", (entity) => {
+        this.observeWorldPress(entity, () => {
         if (this.isCraftPlacementActive()) {
           this.rejectCraftPlacementTarget(entity);
           return;
@@ -207,10 +223,12 @@ export class InteractionSystem extends createSystem({
         );
         setOrderMarker(ex, ey, BLOCKED_MARKER_COLOR);
         if (assigned > 0) this.clearCommandSelection();
+        });
       }),
       // Buildings are production sources. Selecting one opens Crafts and
       // records which building is authorizing the next craft purchase.
       this.queries.pressedBuildings.subscribe("qualify", (entity) => {
+        this.observeWorldPress(entity, () => {
         if (this.isCraftPlacementActive()) {
           this.rejectCraftPlacementTarget(entity);
           return;
@@ -266,11 +284,13 @@ export class InteractionSystem extends createSystem({
             ? "Choose a craft to produce"
             : `${this.buildingLabel(kind)} selected - it cannot produce crafts`,
         );
+        });
       }),
       // Click a construction site. With astronauts selected they take the job
       // (manual assignment); with nothing selected the site itself becomes the
       // selection, which is what the tablet's Cancel action acts on.
       this.queries.pressedSites.subscribe("qualify", (site) => {
+        this.observeWorldPress(site, () => {
         if (this.isCraftPlacementActive()) {
           this.rejectCraftPlacementTarget(site);
           return;
@@ -287,9 +307,11 @@ export class InteractionSystem extends createSystem({
           return;
         }
         this.selectConstructionSite(site);
+        });
       }),
       // An in-flight craft is the same idea: select it to be able to cancel it.
       this.queries.pressedCraftSites.subscribe("qualify", (site) => {
+        this.observeWorldPress(site, () => {
         if (this.isCraftPlacementActive()) {
           this.rejectCraftPlacementTarget(site);
           return;
@@ -309,22 +331,24 @@ export class InteractionSystem extends createSystem({
           return;
         }
         this.selectCraftProductionSite(site);
+        });
       }),
       // Click a tile: open -> move there. Terrain features and occupied tiles
       // are unavailable destinations, so approach from the nearest open tile.
-      this.queries.pressedBoard.subscribe("qualify", () => {
+      this.queries.pressedBoard.subscribe("qualify", (entity) => {
+        this.observeWorldPress(entity, (corr) => {
         const pointerTile = boardState.pointerTile;
         if (!pointerTile) return;
         const { x: tx, y: ty } = pointerTile;
         if (this.isCraftPlacementActive()) {
-          this.placeCraft(tx, ty);
+          this.placeCraft(tx, ty, corr);
           return;
         }
         // Place-first: a build order no longer needs a selected astronaut. The
         // site drops on the board here and the ConstructionSystem sends
         // whoever is free.
         if (this.isBuildPlacementActive()) {
-          this.placeConstructionSite(tx, ty);
+          this.placeConstructionSite(tx, ty, corr);
           return;
         }
         const units = getSelectedUnits();
@@ -368,6 +392,7 @@ export class InteractionSystem extends createSystem({
         }
         boardState.selectedTile = { x: tx, y: ty };
         moveMarker(boardState.selectionMarker, boardState.selectedTile);
+        });
       }),
     );
   }
@@ -376,6 +401,37 @@ export class InteractionSystem extends createSystem({
     if (this.queries.hoveredBoard.entities.size > 0) {
       this.syncHoveredBoardTile();
     }
+  }
+
+  /**
+   * Correlate a supported `Pressed` boundary with its application-visible
+   * result. The internal InputSystem ray test already happened before this
+   * callback and is deliberately not inspected or polled here.
+   */
+  private observeWorldPress(target: Entity, action: (corr: number) => void): void {
+    const corr = beginWorldInteraction(target.index);
+    const tablet = boardState.tablet;
+    const beforeRevision = tablet?.getValue(TabletState, "revision") ?? -1;
+    noteInteractionStage(corr, InteractionStage.GameplayValidation, target.index);
+    try {
+      action(corr);
+    } catch (error) {
+      finishInteraction(corr, Terminal.ActionFailure, Reason.SystemError);
+      throw error;
+    }
+    const afterRevision = tablet?.getValue(TabletState, "revision") ?? -1;
+    if (afterRevision !== beforeRevision) {
+      noteInteractionStage(corr, InteractionStage.StateChange, afterRevision);
+      noteInteractionStage(corr, InteractionStage.VisualResponse, afterRevision);
+    }
+    const rejected =
+      afterRevision !== beforeRevision &&
+      tablet?.getValue(TabletState, "statusKind") === "error";
+    finishInteraction(
+      corr,
+      rejected ? Terminal.RejectedWithReason : Terminal.Success,
+      Reason.None,
+    );
   }
 
   private syncHoveredBoardTile(): void {
@@ -607,7 +663,7 @@ export class InteractionSystem extends createSystem({
     );
   }
 
-  private placeCraft(tx: number, ty: number): void {
+  private placeCraft(tx: number, ty: number, corr = 0): void {
     const tablet = boardState.tablet;
     const gameState = boardState.gameState;
     const root = boardState.boardRoot;
@@ -629,7 +685,7 @@ export class InteractionSystem extends createSystem({
       return;
     }
 
-    const corr = newCorrelationId();
+    const actionCorr = corr || newCorrelationId();
     const previousCrystals = gameState.getValue(GameState, "crystals") ?? 0;
     const revision = (gameState.getValue(GameState, "revision") ?? 0) + 1;
     gameState.setValue(GameState, "crystals", validation.remainingCrystals);
@@ -639,7 +695,7 @@ export class InteractionSystem extends createSystem({
       previousCrystals,
       validation.remainingCrystals,
       revision,
-      corr,
+      actionCorr,
     );
     setTerrainAt(tx, ty, "blocked");
     // Astronaut production is the one thing that still builds itself. Every
@@ -655,11 +711,11 @@ export class InteractionSystem extends createSystem({
       requiresBuilder,
     );
     traceEntityCreated(site.index, EntityKind.CraftProductionSite, Lifecycle.Created, Reason.Placed);
-    traceDecision(Reason.Placed, site.index, State.SelectedCraftKind, corr);
+    traceDecision(Reason.Placed, site.index, State.SelectedCraftKind, actionCorr);
     trackPlacedSite(
       site.index,
       Contract.TabletOrderReachesBuilder,
-      corr,
+      actionCorr,
       Consumer.Production,
     );
     tablet.setValue(TabletState, "craftPlacementActive", false);
@@ -713,7 +769,7 @@ export class InteractionSystem extends createSystem({
   // the footprint is reserved and the cost is taken NOW (so you cannot queue
   // what you cannot afford — which is why cancelling refunds in full), and the
   // site waits, unclaimed, until an astronaut is free.
-  private placeConstructionSite(tx: number, ty: number): void {
+  private placeConstructionSite(tx: number, ty: number, corr = 0): void {
     const tablet = boardState.tablet;
     const gameState = boardState.gameState;
     const root = boardState.boardRoot;
@@ -739,7 +795,7 @@ export class InteractionSystem extends createSystem({
       return;
     }
 
-    const corr = newCorrelationId();
+    const actionCorr = corr || newCorrelationId();
     const previousCrystals = gameState.getValue(GameState, "crystals") ?? 0;
     const revision = (gameState.getValue(GameState, "revision") ?? 0) + 1;
     gameState.setValue(GameState, "crystals", validation.remainingCrystals);
@@ -749,18 +805,18 @@ export class InteractionSystem extends createSystem({
       previousCrystals,
       validation.remainingCrystals,
       revision,
-      corr,
+      actionCorr,
     );
     // The footprint blocks at PLACEMENT, not at build start. Without this two
     // orders could be placed overlapping and the second would corrupt the first.
     stampBuildingFootprint(tx, ty, spec.widthTiles);
     const site = createConstructionSite(this.world, root, spec, tx, ty);
     traceEntityCreated(site.index, EntityKind.ConstructionSite, Lifecycle.Created, Reason.Placed);
-    traceDecision(Reason.Placed, site.index, State.SelectedBuildingKind, corr);
+    traceDecision(Reason.Placed, site.index, State.SelectedBuildingKind, actionCorr);
     trackPlacedSite(
       site.index,
       Contract.TabletOrderReachesBuilder,
-      corr,
+      actionCorr,
       Consumer.Construction,
     );
     tablet.setValue(TabletState, "buildPlacementActive", false);

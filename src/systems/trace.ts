@@ -26,6 +26,7 @@ import {
   SYSTEM_INTERACTION_TRACE_ENABLED,
 } from "./traceFlags.js";
 import {
+  InteractionStage,
   Lifecycle,
   Reason,
   TraceKind,
@@ -33,9 +34,9 @@ import {
 } from "./traceIds.js";
 import {
   currentTraceSlot,
-  flushPendingDump,
   isTraceRecording,
   meters,
+  printManualDump,
   recordEvent,
   recordSystemSkipped,
   requestDump,
@@ -406,6 +407,33 @@ export function traceInteraction(
   meters.interaction.add(performance.now() - at);
 }
 
+/**
+ * The elapsed-time companion to a terminal interaction record. `revision = 1`
+ * marks this fixed numeric layout for the dump formatter; it is not gameplay
+ * state and is never emitted on the ordinary interaction path.
+ */
+export function traceInteractionTiming(
+  corr: number,
+  elapsedMicroseconds: number,
+  elapsedFrames: number,
+  stages: number,
+): void {
+  if (!INTERACTION_CORRELATION_TRACE_ENABLED || !isTraceRecording()) return;
+  const at = performance.now();
+  recordEvent(
+    TraceKind.Interaction,
+    elapsedMicroseconds,
+    InteractionStage.Terminal,
+    0,
+    elapsedFrames,
+    stages,
+    corr,
+    1,
+    at,
+  );
+  meters.interaction.add(performance.now() - at);
+}
+
 /** A browser, shader, memory or XR signal. */
 export function traceRuntime(
   signal: number,
@@ -426,12 +454,10 @@ export function traceRuntime(
 
 /** Ask for a dump by hand. Exposed for the console and for tests. */
 export function traceManualDump(note = "manual"): boolean {
-  // Manual inspection is intentionally synchronous: preserve what is available
-  // now, then print it before the DevTools expression returns. Automatic
-  // triggers keep their post-trigger collection window and deferred formatting.
-  const accepted = requestDump(Reason.ManualDump, note, false);
-  if (accepted) flushPendingDump(systemNameFor);
-  return accepted;
+  // Manual inspection reads the live recorder. It must not cancel, seal or
+  // replace an automatic capture that is currently collecting post-trigger
+  // evidence.
+  return printManualDump(note, systemNameFor);
 }
 
 // ---------------------------------------------------------------------------

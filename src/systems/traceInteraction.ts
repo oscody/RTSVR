@@ -47,7 +47,11 @@ import {
   Reason,
   Terminal,
 } from "./traceIds.js";
-import { newCorrelationId, traceInteraction } from "./trace.js";
+import {
+  newCorrelationId,
+  traceInteraction,
+  traceInteractionTiming,
+} from "./trace.js";
 import { isTraceRecording, traceFrame } from "./traceRecorder.js";
 import { checkContract } from "./traceContracts.js";
 
@@ -89,6 +93,11 @@ const stagesSeen = new Uint16Array(INTERACTION_SLOTS);
 const active = new Uint8Array(INTERACTION_SLOTS);
 /** Interactions dropped because every slot was busy. Never silent. */
 let overflowed = 0;
+
+/** A compact set of the stage codes already seen by one interaction. */
+function stageMask(stage: number): number {
+  return 1 << (stage - 1);
+}
 
 function claimSlot(): number {
   for (let slot = 0; slot < INTERACTION_SLOTS; slot += 1) {
@@ -135,11 +144,9 @@ function closeSlot(
   // Elapsed time and the stages that were actually reached ride on a second
   // record rather than being crammed into the first, so the terminal event
   // keeps one meaning per field.
-  traceInteraction(
+  traceInteractionTiming(
     corr,
-    InteractionStage.Terminal,
     Math.round(elapsedMs * 1000),
-    handOf[slot],
     Math.max(0, elapsedFrames),
     stagesSeen[slot],
   );
@@ -205,7 +212,8 @@ export function beginWorldInteraction(targetEntityIndex: number): number {
   startedFrame[slot] = traceFrame();
   handOf[slot] = hand;
   targetOf[slot] = targetEntityIndex;
-  stagesSeen[slot] = InteractionStage.XrInput | InteractionStage.Raycast;
+  stagesSeen[slot] =
+    stageMask(InteractionStage.XrInput) | stageMask(InteractionStage.Raycast);
   active[slot] = 1;
   traceInteraction(
     corr,
@@ -228,7 +236,7 @@ export function beginWorldInteraction(targetEntityIndex: number): number {
 /**
  * A UIKit element handler was entered.
  *
- * `buttonId` is a stable numeric hash of the element id, assigned by
+ * `buttonId` is a session-local numeric id for the element id, assigned by
  * {@link uiButtonId}, so the trace stores a number and the dump can still name
  * the button.
  */
@@ -243,9 +251,8 @@ export function beginUiInteraction(buttonId: number): number {
   handOf[slot] = hand;
   targetOf[slot] = buttonId;
   stagesSeen[slot] =
-    InteractionStage.XrInput |
-    InteractionStage.UiBoundary |
-    InteractionStage.ButtonHandler;
+    stageMask(InteractionStage.UiBoundary) |
+    stageMask(InteractionStage.ButtonHandler);
   active[slot] = 1;
   traceInteraction(
     corr,
@@ -274,7 +281,7 @@ export function noteInteractionStage(
   if (corr === 0 || !INTERACTION_CORRELATION_TRACE_ENABLED) return;
   const slot = slotFor(corr);
   if (slot < 0) return;
-  stagesSeen[slot] |= stage;
+  stagesSeen[slot] |= stageMask(stage);
   traceInteraction(corr, stage, value, handOf[slot], Terminal.Pending, reason);
 }
 

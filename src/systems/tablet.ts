@@ -119,8 +119,14 @@ import {
   type DebugSettingKey,
 } from "./state.js";
 import { observeMiningEconomyRead } from "./phase2Trace.js";
+import {
+  beginUiInteraction,
+  finishInteraction,
+  noteInteractionStage,
+  uiButtonId,
+} from "./traceInteraction.js";
 import { traceRead } from "./trace.js";
-import { State } from "./traceIds.js";
+import { InteractionStage, Reason, State, Terminal } from "./traceIds.js";
 
 
 /**
@@ -730,7 +736,9 @@ export class TabletSystem extends createSystem({
 
   private bind(document: UIKitDocument, tablet: Entity): void {
     const on = (id: string, handler: () => void) => {
-      document.getElementById(id)?.addEventListener("click", handler);
+      document.getElementById(id)?.addEventListener("click", () => {
+        this.observeUiClick(tablet, id, handler);
+      });
     };
     on("tab-overview", () => this.setView(tablet, "overview", "Economy overview"));
     on("tab-build", () => this.setView(tablet, "build", "Choose a building"));
@@ -813,6 +821,40 @@ export class TabletSystem extends createSystem({
     on("build-cancel", () => this.cancelCurrentBuild(tablet));
     on("craft-cancel", () => this.cancelCurrentBuild(tablet));
     on("unit-destroy", () => this.destroySelectedUnits(tablet));
+  }
+
+  /**
+   * UIKit's click callback is the first application-owned boundary for tablet
+   * input. Record its validation, visible state response and terminal result;
+   * the private UIKit hit test before it remains intentionally unobserved.
+   */
+  private observeUiClick(
+    tablet: Entity,
+    elementId: string,
+    action: () => void,
+  ): void {
+    const corr = beginUiInteraction(uiButtonId(elementId));
+    const beforeRevision = tablet.getValue(TabletState, "revision") ?? -1;
+    noteInteractionStage(corr, InteractionStage.GameplayValidation, beforeRevision);
+    try {
+      action();
+    } catch (error) {
+      finishInteraction(corr, Terminal.ActionFailure, Reason.SystemError);
+      throw error;
+    }
+    const afterRevision = tablet.getValue(TabletState, "revision") ?? -1;
+    if (afterRevision !== beforeRevision) {
+      noteInteractionStage(corr, InteractionStage.StateChange, afterRevision);
+      noteInteractionStage(corr, InteractionStage.VisualResponse, afterRevision);
+    }
+    const rejected =
+      afterRevision !== beforeRevision &&
+      tablet.getValue(TabletState, "statusKind") === "error";
+    finishInteraction(
+      corr,
+      rejected ? Terminal.RejectedWithReason : Terminal.Success,
+      Reason.None,
+    );
   }
 
   // The Build tab's one destructive action. It does not care what is selected:

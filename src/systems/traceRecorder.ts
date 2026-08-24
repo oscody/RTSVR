@@ -41,6 +41,7 @@ import {
   FLIGHT_RECORDER_CAPACITY,
   SNAPSHOT_CAPACITY,
   SNAPSHOT_POST_EVENTS,
+  SNAPSHOT_POST_TIMEOUT_MS,
   SNAPSHOT_PRE_EVENTS,
   SYSTEM_EXECUTION_TRACE_ENABLED,
   traceRecorderNeeded,
@@ -51,6 +52,7 @@ import {
   contractName,
   entityKindName,
   handednessName,
+  InteractionStage,
   interactionStageName,
   kindName,
   lifecycleName,
@@ -270,11 +272,14 @@ let busyDumps = 0;
 /** A snapshot is filling (post-trigger events still being collected). */
 let snapshotFilling = false;
 let snapshotPostRemaining = 0;
+/** `performance.now()` at the synthetic trigger event. */
+let snapshotTriggerAt = 0;
 /** A sealed snapshot is waiting to be formatted and printed. */
 let dumpPending = false;
 let dumpTriggerReason = 0;
 let dumpTriggerFrame = -1;
 let dumpTriggerSeq = 0;
+let dumpTriggerAt = 0;
 let dumpTriggerNote = "";
 let lastDumpMs = 0;
 let dumpsPrinted = 0;
@@ -326,7 +331,9 @@ export function disposeTraceRecorder(): void {
   eventsThisWindow = 0;
   snapshotFilling = false;
   snapshotPostRemaining = 0;
+  snapshotTriggerAt = 0;
   dumpPending = false;
+  dumpTriggerAt = 0;
   dumpsPrinted = 0;
   suppressedDumps = 0;
   busyDumps = 0;
@@ -344,10 +351,14 @@ export function isTraceRecording(): boolean {
 // ---------------------------------------------------------------------------
 
 /** Called at the top of the wrapped `world.update`. */
-export function beginTraceFrame(): void {
+export function beginTraceFrame(now = performance.now()): void {
   if (!recording) return;
   frameNumber += 1;
   inFrame = true;
+  // The post-trigger window is bounded by time as well as event count. This
+  // check is intentionally frame-driven so an idle game cannot leave a dump
+  // unsealed forever merely because no further trace event arrives.
+  sealSnapshotIfTimedOut(now);
   const ring = execution;
   if (!ring) return;
   ring.row = (ring.row + 1) % EXECUTION_RING_FRAMES;
@@ -553,20 +564,16 @@ export function executionOrderLine(
  * while a string is being built. Formatting is deferred to
  * {@link flushPendingDump}, which normally runs on the profiler's ~1 Hz tick.
  *
- * Automatic triggers collect the configured post-trigger event window before
- * they become printable. A manual request passes `collectPostTrigger = false`,
- * so it is sealed immediately. The console-facing manual helper deliberately
- * flushes that sealed snapshot synchronously; automatic snapshots stay deferred
- * so their formatting cannot add cost to the triggering frame.
+ * Automatic triggers copy the 64 events immediately before their synthetic
+ * trigger, preserve that trigger, and collect at most 64 later events. A
+ * frame-driven two-second deadline seals quiet captures too. Manual exports do
+ * not call this function: they format a bounded live-ring view synchronously
+ * and leave any automatic snapshot untouched.
  *
  * Returns `true` when a snapshot was started, `false` when a snapshot is
  * already filling/awaiting export or an automatic trigger is cooled down.
  */
-export function requestDump(
-  reason: number,
-  note = "",
-  collectPostTrigger = true,
-): boolean {
+export function requestDump(reason: number, note = ""): boolean {
   if (!recording || !events || !snapshot) return false;
 
   // A snapshot owns the emergency buffer until it is exported. Replacing it
@@ -579,11 +586,11 @@ export function requestDump(
 
   const now = performance.now();
   const slot = reason & 0xff;
-  // The operator explicitly asked for a manual export, so do not make that
-  // command wait behind the automatic per-reason cooldown. Automatic triggers
-  // retain the cooldown that prevents a hitch from becoming a log storm.
+  // A zero entry means this reason has never produced a dump. Do not suppress
+  // the first real trigger merely because the process is younger than the
+  // cooldown interval.
   if (
-    collectPostTrigger &&
+    lastDumpAt[slot] !== 0 &&
     now - lastDumpAt[slot] < DUMP_COOLDOWN_SECONDS * 1000
   ) {
     suppressedDumps += 1;
@@ -591,26 +598,32 @@ export function requestDump(
   }
   lastDumpAt[slot] = now;
 
-  // The trigger itself is an event, so the snapshot ends on the thing that
-  // caused it and a reader never has to infer where the window closed.
+  // Calculate the pre-trigger range BEFORE recording the synthetic trigger.
+  // The copied window is therefore always: previous events, trigger, later
+  // events — never a tail that happens to exclude what caused the dump.
+  const preHeld = Math.min(events.writes, events.capacity);
+  const preTake = Math.min(preHeld, SNAPSHOT_PRE_EVENTS);
+  const preFirstWrite = events.writes - preTake;
   recordEvent(TraceKind.Trigger, reason, 0, 0, 0, reason, 0, 0, now);
 
   const buffer = events;
-  const held = Math.min(buffer.writes, buffer.capacity);
-  const take = Math.min(held, SNAPSHOT_PRE_EVENTS);
-  const firstWrite = buffer.writes - take;
+  const triggerIndex = (buffer.writes - 1) % buffer.capacity;
   snapshot.writes = 0;
-  for (let offset = 0; offset < take; offset += 1) {
-    const from = (firstWrite + offset) % buffer.capacity;
+  for (let offset = 0; offset < preTake; offset += 1) {
+    const from = (preFirstWrite + offset) % buffer.capacity;
     copyEvent(buffer, from, snapshot, offset);
     snapshot.writes += 1;
   }
+  copyEvent(buffer, triggerIndex, snapshot, snapshot.writes);
+  snapshot.writes += 1;
 
-  snapshotFilling = collectPostTrigger && SNAPSHOT_POST_EVENTS > 0;
-  snapshotPostRemaining = snapshotFilling ? SNAPSHOT_POST_EVENTS : 0;
+  snapshotFilling = SNAPSHOT_POST_EVENTS > 0;
+  snapshotPostRemaining = SNAPSHOT_POST_EVENTS;
+  snapshotTriggerAt = now;
   dumpTriggerReason = reason;
-  dumpTriggerFrame = traceFrame();
-  dumpTriggerSeq = sequence;
+  dumpTriggerFrame = buffer.frame[triggerIndex];
+  dumpTriggerSeq = buffer.seq[triggerIndex];
+  dumpTriggerAt = buffer.at[triggerIndex];
   dumpTriggerNote = note;
   if (!snapshotFilling) dumpPending = true;
   return true;
@@ -628,6 +641,20 @@ function appendToSnapshot(from: EventBuffer, fromIndex: number): void {
   if (snapshotPostRemaining > 0 && target.writes < target.capacity) return;
   snapshotFilling = false;
   dumpPending = true;
+}
+
+/** Seal a quiet automatic snapshot after its bounded post-trigger time window. */
+export function sealSnapshotIfTimedOut(now = performance.now()): boolean {
+  if (
+    !snapshotFilling ||
+    now - snapshotTriggerAt < SNAPSHOT_POST_TIMEOUT_MS
+  ) {
+    return false;
+  }
+  snapshotFilling = false;
+  snapshotPostRemaining = 0;
+  dumpPending = true;
+  return true;
 }
 
 /** True while a sealed snapshot is waiting to be printed. */
@@ -649,21 +676,65 @@ export function flushPendingDump(nameForSystem: (id: number) => string): void {
   const started = performance.now();
   const buffer = snapshot;
   const held = Math.min(buffer.writes, buffer.capacity);
-  const first = Math.max(0, held - DUMP_MAX_LINES);
-  const lines: string[] = [];
-  for (let index = first; index < held; index += 1) {
-    lines.push(formatEvent(buffer, index, nameForSystem));
-  }
-  const elided = first > 0 ? ` (${first} earlier events elided)` : "";
+  // Automatic snapshots are capped at 129, equal to DUMP_MAX_LINES. Never
+  // trim this ordered pre/trigger/post window: the trigger is the evidence.
+  const lines = formatEventWindow(buffer, 0, held, nameForSystem);
   const header =
     `${DUMP_PREFIX} ${diagnosticHeader("TraceDump")} | ` +
-    `trigger ${reasonName(dumpTriggerReason)} at frame ${dumpTriggerFrame} ` +
-    `seq ${dumpTriggerSeq} | events ${held}${elided}` +
+    `trigger ${reasonName(dumpTriggerReason)} at mono ${dumpTriggerAt.toFixed(1)} ` +
+    `frame ${dumpTriggerFrame} seq ${dumpTriggerSeq} | events ${held}` +
     (dumpTriggerNote ? ` | ${dumpTriggerNote}` : "");
   console.log(`${header}\n${lines.join("\n")}`);
   dumpsPrinted += 1;
   lastDumpMs = performance.now() - started;
   dumpTriggerNote = "";
+}
+
+/**
+ * Print recent live recorder history without touching an automatic snapshot.
+ * This is intentionally the only synchronous formatting path and is reached
+ * exclusively by the explicit DevTools command.
+ */
+export function printManualDump(
+  note: string,
+  nameForSystem: (id: number) => string,
+): boolean {
+  const buffer = events;
+  if (!recording || !buffer) return false;
+  const started = performance.now();
+  const held = Math.min(buffer.writes, buffer.capacity);
+  const take = Math.min(held, DUMP_MAX_LINES);
+  const firstWrite = buffer.writes - take;
+  const lines = formatEventWindow(buffer, firstWrite, take, nameForSystem);
+  const elided = held - take;
+  const header =
+    `${DUMP_PREFIX} ${diagnosticHeader("TraceDump")} | ` +
+    `trigger ${reasonName(Reason.ManualDump)} at mono ${started.toFixed(1)} ` +
+    `frame ${traceFrame()} seq ${sequence} | events ${take}` +
+    (elided > 0 ? ` (${elided} earlier events elided)` : "") +
+    (note ? ` | ${note}` : "");
+  try {
+    console.log(`${header}\n${lines.join("\n")}`);
+  } catch {
+    return false;
+  }
+  dumpsPrinted += 1;
+  lastDumpMs = performance.now() - started;
+  return true;
+}
+
+/** Format a chronological range from either the live ring or compact snapshot. */
+function formatEventWindow(
+  buffer: EventBuffer,
+  firstWrite: number,
+  count: number,
+  nameForSystem: (id: number) => string,
+): string[] {
+  const lines: string[] = [];
+  for (let offset = 0; offset < count; offset += 1) {
+    lines.push(formatEvent(buffer, (firstWrite + offset) % buffer.capacity, nameForSystem));
+  }
+  return lines;
 }
 
 // ---------------------------------------------------------------------------
@@ -685,11 +756,18 @@ function formatEvent(
       ? ` w${buffer.wave[index]}/${buffer.waveStage[index]}`
       : "";
   const corr = buffer.corr[index] !== 0 ? ` corr#${buffer.corr[index]}` : "";
+  const isInteractionTiming =
+    kind === TraceKind.Interaction &&
+    buffer.subjectKind[index] === InteractionStage.Terminal &&
+    buffer.revision[index] === 1;
   const why =
-    buffer.reason[index] !== Reason.None
+    !isInteractionTiming && buffer.reason[index] !== Reason.None
       ? ` reason=${reasonName(buffer.reason[index])}`
       : "";
-  const rev = buffer.revision[index] !== 0 ? ` rev=${buffer.revision[index]}` : "";
+  const rev =
+    !isInteractionTiming && buffer.revision[index] !== 0
+      ? ` rev=${buffer.revision[index]}`
+      : "";
 
   let body: string;
   switch (kind) {
@@ -710,11 +788,13 @@ function formatEvent(
         `observed=${buffer.newValue[index]} limit=${buffer.oldValue[index]}`;
       break;
     case TraceKind.Interaction:
-      body =
-        ` ${interactionStageName(buffer.subjectKind[index])} ` +
-        `target=${buffer.subject[index]} ` +
-        `hand=${handednessName(buffer.oldValue[index])} ` +
-        `result=${terminalName(buffer.newValue[index])}`;
+      body = isInteractionTiming
+        ? ` elapsed=${(buffer.subject[index] / 1000).toFixed(1)}ms ` +
+          `frames=${buffer.newValue[index]} stages=0x${buffer.reason[index].toString(16)}`
+        : ` ${interactionStageName(buffer.subjectKind[index])} ` +
+          `target=${buffer.subject[index]} ` +
+          `hand=${handednessName(buffer.oldValue[index])} ` +
+          `result=${terminalName(buffer.newValue[index])}`;
       break;
     case TraceKind.Runtime:
       body =
