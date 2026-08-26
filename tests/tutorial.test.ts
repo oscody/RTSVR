@@ -94,10 +94,10 @@ const drillById = (id: string): TutorialDrill => {
 
 // ── The flag ────────────────────────────────────────────────────────────────
 
-test("the tutorial is off by default", () => {
+test("the tutorial is ON by default", () => {
   // TUTORIAL_ENABLED seeds DebugSettings.tutorialEnabled, which is what the
   // runtime reads — so this is the default, not the live value.
-  assert.equal(TUTORIAL_ENABLED, false);
+  assert.equal(TUTORIAL_ENABLED, true);
 });
 
 test("the settings tab exposes a tutorial toggle", () => {
@@ -127,7 +127,12 @@ test("headset visibility changes pause the tutorial instead of restarting it", (
   // the tutorial from the command-center drill.
   assert.doesNotMatch(tutorial, /visibilityState\.subscribe/);
   assert.match(tutorial, /visibilityState\.peek\(\) !== VisibilityState\.Visible/);
-  assert.match(tutorial, /this\.goDormant\(isTutorialEnabled\(\)\)/);
+  // Dormant either way; the argument decides whether it also holds the waves.
+  // See "desktop start must not hold the waves" below for why it is conditional.
+  assert.match(
+    tutorial,
+    /this\.goDormant\(isTutorialEnabled\(\) && matchAwaitingStart\(\)\)/,
+  );
   assert.match(scenarioReset, /resetTutorial\(\);/);
 });
 
@@ -1458,4 +1463,42 @@ test("the tablet clearance is derived from the two widths, not typed", () => {
     constants,
     /TUTORIAL_CARD_TABLET_CLEARANCE =\s*\n?\s*TUTORIAL_CARD_WIDTH \/ 2 \+ TABLET_FRAME_SIZE\[0\] \/ 2/,
   );
+});
+
+// ── Desktop start: the tutorial must not hold what it cannot run ───────────
+
+test("a desktop start releases the tutorial's wave hold", () => {
+  const tutorial = readFileSync(
+    new URL("../src/systems/tutorial.ts", import.meta.url),
+    "utf8",
+  );
+
+  // The rule: VR start respects the ON/OFF setting; a desktop start never runs
+  // the tutorial and never lets it hold the waves.
+  //
+  // The deadlock this closes, measured 2026-08-26 with the tutorial enabled and
+  // the match started flat: wave 0 pinned at `timer: 2`
+  // (TUTORIAL_WAVE_ACTIVATION_LEAD_SECONDS) indefinitely, three aliens prepared
+  // and never released, TutorialState inactive. The tutorial is VR-only, so it
+  // held a countdown it could never release.
+  assert.match(
+    tutorial,
+    /this\.goDormant\(isTutorialEnabled\(\) && matchAwaitingStart\(\)\)/,
+    "the 2D-preview hold must be conditional on the match not having started",
+  );
+  assert.match(
+    tutorial,
+    /import \{ matchAwaitingStart \} from "\.\/matchStart\.js";/,
+  );
+});
+
+test("matchStart has no import back into the tutorial", () => {
+  // tutorial.ts -> matchStart.ts is a new edge. matchStart must stay a leaf or
+  // it becomes the middle of a cycle, the same rule tutorialWaveGate.ts follows.
+  const start = readFileSync(
+    new URL("../src/systems/matchStart.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(start, /from "\.\/tutorial/);
+  assert.doesNotMatch(start, /from "\.\/tablet/);
 });

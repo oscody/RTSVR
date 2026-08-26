@@ -76,6 +76,7 @@ import {
   boardState,
 } from "./state.js";
 import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
+import { matchAwaitingStart } from "./matchStart.js";
 import { setEnvironmentDim } from "./skySystem.js";
 import {
   attachTutorialSpotlight,
@@ -714,10 +715,24 @@ export class TutorialSystem extends createSystem({
     // VisibleBlurred (headset off the face, or focus lost) is deliberately
     // excluded too: nothing should advance while the player cannot see it.
     if (this.world.visibilityState.peek() !== VisibilityState.Visible) {
-      // Dormant, but still holding. A tutorial run waiting in the 2D preview
-      // must keep its waves frozen, or the player puts the headset on to find
-      // wave 0 already half-spawned and the script skipped.
-      this.goDormant(isTutorialEnabled());
+      // Dormant. Whether it also HOLDS THE WAVES depends on whether the match
+      // has begun, and the distinction is the whole rule for desktop play:
+      //
+      //  - **Not started yet** (`awaiting-start`) — hold. A tutorial run waiting
+      //    in the 2D preview must keep its waves frozen, or the player puts the
+      //    headset on to find wave 0 already half-spawned and the script
+      //    skipped. (The start gate freezes them too; this is belt and braces.)
+      //  - **Started on desktop** — release. The tutorial is VR-only, so it can
+      //    never run here, and a holder that cannot run is a deadlock: the
+      //    countdown pins at TUTORIAL_WAVE_ACTIVATION_LEAD_SECONDS forever and
+      //    the match never progresses. Measured 2026-08-26: wave 0 stuck at
+      //    `timer: 2` indefinitely with 3 aliens prepared and never released.
+      //
+      // Releasing also retires the tutorial for this match (`goDormant(false)`
+      // marks it left), so putting the headset on mid-match does not drop the
+      // player into drill 1 of a game already underway — they are told to
+      // Restart, which is the existing re-arm path.
+      this.goDormant(isTutorialEnabled() && matchAwaitingStart());
       return;
     }
     if (!isTutorialEnabled()) {

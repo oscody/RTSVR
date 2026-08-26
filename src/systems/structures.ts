@@ -35,6 +35,7 @@ import { attachHealthBar } from "./healthBar.js";
 import { UNIT_BOX_GEOMETRY } from "./sharedGeometry.js";
 import { attachMinerAnimation } from "./minerAnimation.js";
 import { attachTurretAnimation } from "./turretAnimation.js";
+import { initialLoad } from "../app/initialLoad.js";
 import { registerDimmableObject } from "./board.js";
 import { isTutorialEnabled } from "./tutorial.js";
 import { attachUnitAnimation } from "./unitAnimation.js";
@@ -462,6 +463,14 @@ export function createInitialScenario(
 
 export class StructuresSystem extends createSystem({}) {
   init(): void {
-    createInitialScenario(this.world, { bareStart: isTutorialEnabled() });
+    try {
+      createInitialScenario(this.world, { bareStart: isTutorialEnabled() });
+    } finally {
+      // D4's definition of "presentable": the board exists, so the overlay may
+      // go. In a `finally` like every other reporting site — a scenario that
+      // throws must still release the loading screen rather than leaving an
+      // opaque splash over a broken app.
+      initialLoad.complete("scenario");
+    }
   }
 }

@@ -730,6 +730,8 @@ export function matchStatusId(status: string): number {
       return 3;
     case "restarting":
       return 4;
+    case "awaiting-start":
+      return 5;
     default:
       return 0;
   }

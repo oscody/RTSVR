@@ -12,7 +12,23 @@ export const ENEMY_MODEL_FORWARD_YAW: Readonly<Record<string, number>> = {
 };
 
 export type WaveStage = "countdown" | "active" | "stopped";
-export type MatchStatus = "playing" | "defeat" | "victory" | "restarting";
+/**
+ * `awaiting-start` is the state the app boots into: everything is loaded and
+ * standing still, waiting for the player to say go.
+ *
+ * It exists because nothing used to wait. `WaveSource.timer` was seeded with
+ * `INITIAL_WAVE_DELAY_SECONDS` and ticked from the first frame after
+ * `World.create()` resolved, so **an unattended tab played itself and lost** —
+ * found at `status: "defeat", commandCenterAlive: false` with nobody in the
+ * headset, and a driven run reached defeat at wave 1 in ~40 s. That silently
+ * corrupts any capture taken from a tab that was left open.
+ */
+export type MatchStatus =
+  | "awaiting-start"
+  | "playing"
+  | "defeat"
+  | "victory"
+  | "restarting";
 export type WaveClearOutcome = "none" | "advance" | "victory";
 
 export interface WaveClockState {
@@ -60,6 +76,12 @@ export function advanceWaveClock(
   delta: number,
   matchStatus: MatchStatus,
 ): boolean {
+  // HOLD, do not stop. Every other non-playing status is terminal or
+  // transitional and wants the clock cleared; `awaiting-start` is the opposite —
+  // the countdown must resume from the delay it was seeded with, so a player who
+  // waited five minutes on the landing page still gets the full wave-1 grace
+  // period rather than an immediate spawn.
+  if (matchStatus === "awaiting-start") return false;
   if (matchStatus !== "playing") {
     state.stage = "stopped";
     state.timer = 0;

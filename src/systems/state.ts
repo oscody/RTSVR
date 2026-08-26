@@ -85,7 +85,10 @@ export const WaveSource = createComponent("WaveSource", {
 });
 
 export const MatchState = createComponent("MatchState", {
-  status: { type: Types.String, default: "playing" },
+  // Boots held, not playing — see MatchStatus in waveRules.ts for why. The
+  // match starts when the player asks for it, from the landing page or by
+  // entering XR.
+  status: { type: Types.String, default: "awaiting-start" },
   commandCenterAlive: { type: Types.Boolean, default: true },
   revision: { type: Types.Int32, default: 0 },
 });

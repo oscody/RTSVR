@@ -230,14 +230,31 @@ export function mergeRigidGroups(
  * Merge every preloaded GLTF asset once, before any system clones one.
  * Must run before `registerSystem` calls that build scene content.
  */
-export function optimizeLoadedAssets(keys: string[], verbose = false): void {
+export function optimizeLoadedAssets(
+  keys: string[],
+  verbose = false,
+  /**
+   * Optional per-key progress, for the loading overlay.
+   *
+   * This pass is the honest half of the load bar: it is the one stretch where
+   * the app knows exactly how much work is left (31 keys, counted) and how far
+   * through it is. `command_center.glb` alone collapses 233 meshes to 15, so it
+   * is also slow enough to be worth showing.
+   */
+  onProgress?: (done: number, total: number) => void,
+): void {
   let before = 0;
   let after = 0;
   const twoPass: string[] = [];
+  let done = 0;
   for (const key of keys) {
     // `shared: true` returns the cached instance rather than a clone, so the
     // merge is inherited by every later clone of this key.
     const gltf = AssetManager.getGLTF(key, { shared: true });
+    // Reported before the `continue`, so a missing key still advances the bar.
+    // Otherwise one absent asset silently stalls the overlay short of 100%.
+    done += 1;
+    onProgress?.(done, keys.length);
     if (!gltf?.scene) continue;
     const stats = mergeRigidGroups(gltf.scene, gltf.animations ?? []);
     before += stats.before;
