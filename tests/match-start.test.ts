@@ -81,3 +81,26 @@ test("a restart begins playing immediately", () => {
   // Restart is an explicit player action, so it must not drop back to the gate.
   assert.match(source("scenarioResetRules.ts"), /matchStatus: "playing"/);
 });
+
+test("the gate is wired after the systems that create the wave source", () => {
+  const index = source("../index.ts");
+  // `visibilityState.subscribe` fires IMMEDIATELY with the current value
+  // (@preact/signals-core: subscribe wraps effect, which runs its body at once).
+  // `xr.offer: "always"` means a session can already be open when this .then()
+  // runs — a headset already on accepts the offered session during
+  // World.create. Subscribing before BoardSystem registers would fire while
+  // boardState.waveSource is null, startMatch() would return false, and since
+  // visibility never changes again the gate would never release.
+  assert.ok(
+    index.indexOf("registerSystem(BoardSystem)") <
+      index.indexOf("attachMatchStart(world)"),
+    "attachMatchStart must run after the wave source exists",
+  );
+});
+
+test("matchAwaitingStart fails SAFE when the board does not exist", () => {
+  const start = source("matchStart.ts");
+  // false would retire the tutorial, hide the landing page and let mining run —
+  // three different bad outcomes from one wrong default.
+  assert.match(start, /if \(!source\) return true;/);
+});

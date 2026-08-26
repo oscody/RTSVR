@@ -41,10 +41,25 @@ export function startMatch(): boolean {
   return true;
 }
 
-/** True while the app is loaded but the player has not begun. */
+/**
+ * True while the app is loaded but the player has not begun.
+ *
+ * **Defaults to `true` when the wave source does not exist yet**, and that
+ * direction is deliberate. No wave source means the board has not been built,
+ * which is emphatically "not started" — and every caller does something
+ * dangerous with `false`:
+ *
+ * - `TutorialSystem` would take the `goDormant(false)` branch, which calls
+ *   `markTutorialLeft()` and **retires the tutorial for the whole match**.
+ * - `setupLanding` would hide the landing page, leaving no way in.
+ * - `MiningSystem` would let a miner work before the match exists.
+ *
+ * The ordering in `index.ts` currently makes the null case unreachable, but
+ * that is a property of one call site rather than of this function.
+ */
 export function matchAwaitingStart(): boolean {
   const source = boardState.waveSource;
-  if (!source) return false;
+  if (!source) return true;
   return (source.getValue(MatchState, "status") ?? "") === "awaiting-start";
 }
 

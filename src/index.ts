@@ -232,10 +232,6 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     // detached, so the work happens during the countdown rather than on the frame
     // the whole reserve is released.
     attachGpuWarmup(world);
-    // The match boots held at `awaiting-start` so an unattended tab cannot play
-    // itself and lose. This releases it when a session begins by any route,
-    // including the browser's own Enter XR pill, which never touches our markup.
-    attachMatchStart(world);
     // Collapse each GLB's kit-bashed parts into one mesh per (rigid group,
     // material) BEFORE any system clones an asset, so every instance inherits it.
     try {
@@ -288,8 +284,21 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
       // would fail every time if the sweep ran mid-frame.
       .registerSystem(TraceDiagnosticsSystem);
     installFrameProfiler(world);
-    // Last, and after the systems that create the wave source: the chrome asks
-    // `matchAwaitingStart()`, which needs that singleton to exist.
+    // Both of these run LAST, and the ordering is load-bearing.
+    //
+    // `visibilityState.subscribe` fires **immediately** with the current value
+    // (`@preact/signals-core`: `subscribe` wraps `effect`, which runs its body
+    // at once). `xr.offer: "always"` means a session can already be open by the
+    // time this `.then()` runs — a headset that was already on accepts the
+    // offered session during `World.create`. Subscribing before `BoardSystem`
+    // registers would then fire the callback while `boardState.waveSource` is
+    // still null, `startMatch()` would return false, and because the visibility
+    // never changes again **the gate would never be released** — the game would
+    // sit at `awaiting-start` forever with no way in.
+    //
+    // Both `attachMatchStart` and `setupLanding` read that singleton, so both
+    // wait until the systems that create it have registered.
+    attachMatchStart(world);
     setupLanding(world);
   })
   .catch((error: unknown) => {

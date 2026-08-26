@@ -149,9 +149,14 @@ export const initialLoad = new InitialLoadTracker([
  * ## Why it polls
  *
  * The manager does not exist until `AssetManager.init` runs *inside*
- * `World.create()`, so there is nothing to attach to at call time. Polling on
- * animation frames catches it within a frame or two — and asset loading is
- * network-bound across 31 GLBs, so nothing meaningful is missed.
+ * `World.create()`, so there is nothing to attach to at call time. Polling
+ * catches it within a few milliseconds, and asset loading is network-bound
+ * across 31 GLBs, so nothing meaningful is missed.
+ *
+ * **`setTimeout`, not `requestAnimationFrame`.** rAF is throttled to a stop in
+ * a background tab, so a page opened in a background tab — which is exactly
+ * what happens when someone middle-clicks a link — would never attach and would
+ * report no progress at all. This is a poll, not an animation.
  *
  * Degrades rather than breaks: if the manager never appears, `assets` simply
  * never reports partials and the bar keeps its indeterminate sweep. The boot's
@@ -166,7 +171,7 @@ export function attachAssetLoadProgress(
     const manager = getManager();
     if (!manager) {
       if (Date.now() - started > deadlineMs) return;
-      requestAnimationFrame(tryAttach);
+      setTimeout(tryAttach, 16);
       return;
     }
     (
