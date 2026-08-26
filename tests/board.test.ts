@@ -159,8 +159,16 @@ test("grid visibility follows selection and placement modes", () => {
     selection.includes("boardState.gridOverlay"),
     "selection must control the grid overlay",
   );
+  // The selected-unit count was lifted into a local so the [GridVisual] edge
+  // log can report it alongside the decision. Assert the read and the disjunct
+  // separately rather than one inline expression, so naming the value does not
+  // fail a test about behaviour.
   assert.ok(
-    selection.includes("boardState.selectedUnits.size > 0"),
+    selection.includes("boardState.selectedUnits.size"),
+    "selection must read the selected-unit count",
+  );
+  assert.ok(
+    selection.includes("selectedUnits > 0"),
     "grid is shown while any unit is selected",
   );
   assert.ok(

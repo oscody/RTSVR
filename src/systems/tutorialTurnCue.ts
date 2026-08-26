@@ -19,6 +19,11 @@ import {
   TUTORIAL_TURN_CUE_SIZE,
 } from "./constants.ts";
 import { makeNonInteractive } from "./sharedGeometry.js";
+import {
+  attachTutorialVisualPool,
+  createTutorialVisualPool,
+  detachTutorialVisualPool,
+} from "./tutorialVisualPool.js";
 
 /**
  * "It is behind you" — a chevron at the edge of view pointing which way to turn.
@@ -39,7 +44,13 @@ import { makeNonInteractive } from "./sharedGeometry.js";
 let cueMesh: Mesh | null = null;
 let cueGeometry: BufferGeometry | null = null;
 let cueMaterial: MeshBasicMaterial | null = null;
-let attached = false;
+/**
+ * Anchor + detachable container. Persistent, because the turn cue belongs to
+ * the player's view rather than to the board.
+ */
+const visualPool = createTutorialVisualPool("TutorialTurnCue", true);
+/** Captured from TutorialSystem.init; the mesh is built on first use. */
+let cueWorld: World | null = null;
 let clock = 0;
 
 const tmpCamera = new Vector3();
@@ -59,9 +70,21 @@ function makeCueGeometry(): BufferGeometry {
   return geometry;
 }
 
-/** Called once from TutorialSystem.init. */
+/**
+ * Called once from TutorialSystem.init — captures the world and builds nothing.
+ *
+ * Lazy on purpose: this cue used to be created unconditionally in `init()`, so
+ * a player who never turned the tutorial on still paid for its mesh, its
+ * material and its entity. Now the first `showTutorialTurnCue` builds it.
+ */
 export function attachTutorialTurnCue(world: World): void {
-  if (attached) return;
+  cueWorld = world;
+}
+
+function ensureCue(): boolean {
+  // Builds once, then RE-ATTACHES after a detach so Restart reuses this mesh.
+  if (!attachTutorialVisualPool(visualPool, cueWorld)) return false;
+  if (cueMesh) return true;
   cueGeometry = makeCueGeometry();
   cueMaterial = new MeshBasicMaterial({
     color: TUTORIAL_TURN_CUE_COLOR,
@@ -86,8 +109,15 @@ export function attachTutorialTurnCue(world: World): void {
   cueMesh.frustumCulled = false;
   cueMesh.renderOrder = TUTORIAL_CUE_RENDER_ORDER;
   cueMesh.userData.drawCat = "tutorial";
-  world.createTransformEntity(cueMesh, { persistent: true });
-  attached = true;
+  // Plain child of the pool, not an entity: TransformSystem re-parents
+  // entities every frame and would undo the detach.
+  visualPool.group.add(cueMesh);
+  return true;
+}
+
+/** Remove the cue from the live scene, keeping its GPU resources. */
+export function detachTutorialTurnCue(): void {
+  detachTutorialVisualPool(visualPool);
 }
 
 /**
@@ -102,11 +132,9 @@ export function showTutorialTurnCue(
   subjectWorld: Vector3 | null,
   delta: number,
 ): void {
+  if (!ensureCue()) return;
   const mesh = cueMesh;
-  if (!mesh) {
-    console.warn("[TurnCueDiag] no mesh");
-    return;
-  }
+  if (!mesh) return;
   if (!subjectWorld) {
     hideTutorialTurnCue();
     return;

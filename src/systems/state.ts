@@ -94,6 +94,18 @@ export const MatchResultPanel = createComponent("MatchResultPanel", {
   visible: { type: Types.Boolean, default: false },
 });
 
+/**
+ * Marks the standalone playtesting-settings panel.
+ *
+ * It is its own document, created only while the Settings tab is open, because
+ * `PanelUISystem.update()` ticks every configured panel every frame regardless
+ * of visibility — so the 158 setting elements cost the same hidden inside the
+ * tablet as they did on screen. See `ui/rts-settings.uikitml`.
+ */
+export const SettingsPanel = createComponent("SettingsPanel", {
+  revision: { type: Types.Int32, default: 0 },
+});
+
 // Under-attack alerting lives in its own singleton rather than in
 // TabletState.status: a routine status write would immediately clobber the
 // warning, and the warning would hide a victory or defeat message. Presentation

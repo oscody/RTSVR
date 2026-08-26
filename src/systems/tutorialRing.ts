@@ -18,6 +18,11 @@ import {
 } from "./constants.ts";
 import { makeNonInteractive } from "./sharedGeometry.js";
 import { boardState } from "./state.js";
+import {
+  attachTutorialVisualPool,
+  createTutorialVisualPool,
+  detachTutorialVisualPool,
+} from "./tutorialVisualPool.js";
 
 /**
  * The tutorial's gaze ring: a flat ring on the ground that fills while the
@@ -40,8 +45,11 @@ import { boardState } from "./state.js";
 const wedges: Mesh[] = [];
 let ringMaterial: MeshBasicMaterial | null = null;
 let ringGeometries: RingGeometry[] = [];
-/** The board root the wedges hang off, so a rebuilt root is detected. */
-let pooledRoot: Object3D | null = null;
+/**
+ * Anchor + detachable container. The wedges are plain children of `pool.group`
+ * rather than entities — see `tutorialVisualPool.ts`.
+ */
+const pool = createTutorialVisualPool("TutorialRing");
 /** Captured from TutorialSystem.init — meshes must be entities, not bare adds. */
 let ringWorld: World | null = null;
 /** How many wedges are currently shown, so a repaint only happens on change. */
@@ -57,10 +65,10 @@ export function attachTutorialRingWorld(world: World): void {
 }
 
 function ensureRing(): boolean {
-  const root = boardState.boardRoot;
-  const rootObject = root?.object3D ?? null;
-  if (!root || !rootObject || !ringWorld) return false;
-  if (pooledRoot === rootObject && wedges.length > 0) return true;
+  // Builds once, then RE-ATTACHES after a detach so a Restart reuses the
+  // same 24 wedges instead of accumulating a second ring.
+  if (!attachTutorialVisualPool(pool, ringWorld)) return false;
+  if (wedges.length > 0) return true;
 
   wedges.length = 0;
   ringGeometries = [];
@@ -106,11 +114,11 @@ function ensureRing(): boolean {
     wedge.frustumCulled = false;
     wedge.renderOrder = TUTORIAL_CUE_RENDER_ORDER;
     wedge.userData.drawCat = "tutorial";
-    // No ScenarioObject: reset parks these, it does not dispose them.
-    ringWorld.createTransformEntity(wedge, { parent: root });
+    // Plain child of the pool, not an entity: TransformSystem re-parents
+    // entities every frame and would undo the detach.
+    pool.group.add(wedge);
     wedges.push(wedge);
   }
-  pooledRoot = rootObject;
   builtRadius = -1;
   shownWedges = -1;
   return true;
@@ -166,6 +174,11 @@ export function clearTutorialRing(): void {
   shownWedges = -1;
 }
 
+/** Remove the ring from the live scene, keeping its GPU resources. */
+export function detachTutorialRing(): void {
+  detachTutorialVisualPool(pool);
+}
+
 /** Current ring radius, for tests and debugging. */
 export function tutorialRingRadius(): number {
   return builtRadius;
@@ -173,13 +186,15 @@ export function tutorialRingRadius(): number {
 
 /** Genuine teardown only — a rebuilt board root orphans the old wedges. */
 export function disposeTutorialRing(): void {
+  detachTutorialVisualPool(pool);
   for (const wedge of wedges) wedge.removeFromParent();
   for (const geometry of ringGeometries) geometry.dispose();
   ringMaterial?.dispose();
   wedges.length = 0;
   ringGeometries = [];
   ringMaterial = null;
-  pooledRoot = null;
+  pool.anchor = null;
+  pool.builtFor = null;
   shownWedges = -1;
   builtRadius = -1;
 }

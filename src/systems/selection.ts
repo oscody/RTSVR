@@ -3,8 +3,10 @@ import {
   MeshBasicMaterial,
   RingGeometry,
   type Entity,
+  type Object3D,
   type World,
 } from "@iwsdk/core";
+import { VISUAL_VISIBILITY_TRACE_ENABLED } from "./traceFlags.js";
 import { TILE_SIZE } from "./board.js";
 import { makeNonInteractive } from "./sharedGeometry.js";
 import {
@@ -106,6 +108,12 @@ export function clearUnitSelections(): void {
   publishSelectionSummary();
 }
 
+/**
+ * Last value this function decided, so the log below is edge-triggered.
+ * `null` until the first decision, which is why the opening state is reported.
+ */
+let lastGridVisible: boolean | null = null;
+
 export function updateCommandGridVisibility(): void {
   const grid = boardState.gridOverlay?.object3D;
   if (!grid) return;
@@ -115,10 +123,41 @@ export function updateCommandGridVisibility(): void {
       ((tablet.getValue(TabletState, "buildPlacementActive") ?? false) ||
         (tablet.getValue(TabletState, "craftPlacementActive") ?? false)),
   );
-  grid.visible =
-    boardState.selectedUnits.size > 0 ||
-    Boolean(boardState.selectedTurret) ||
-    placementActive;
+  const selectedUnits = boardState.selectedUnits.size;
+  const turretSelected = Boolean(boardState.selectedTurret);
+  const visible = selectedUnits > 0 || turretSelected || placementActive;
+  grid.visible = visible;
+
+  // Triage for "the grid vanished" — see VISUAL_VISIBILITY_TRACE_ENABLED.
+  //
+  // This function is the ONLY writer of `grid.visible`, and all 16 of its
+  // callers are event-driven (selection, tablet placement, scenario reset), so
+  // logging every change costs a handful of lines per session, not per frame.
+  //
+  // The point is to separate two failures that look identical in the headset:
+  // the gate deciding `false` (a logic bug — the inputs below say why), and the
+  // gate deciding `true` while the object is detached or sits under a hidden
+  // ancestor (a scene-graph bug — `attached`/`hiddenBy` say which). Without
+  // this, both present as "the grid disappeared" and neither is falsifiable.
+  if (VISUAL_VISIBILITY_TRACE_ENABLED && visible !== lastGridVisible) {
+    lastGridVisible = visible;
+    // Walk to the root only on an edge, never per frame. An ancestor with
+    // `visible === false` hides the grid no matter what this function decided.
+    let hiddenBy = "";
+    let node: Object3D | null = grid.parent;
+    let depth = 0;
+    while (node) {
+      if (!node.visible && !hiddenBy) hiddenBy = node.name || `<unnamed@${depth}>`;
+      node = node.parent;
+      depth += 1;
+    }
+    console.log(
+      `[GridVisual] visible=${visible} units=${selectedUnits} ` +
+        `turret=${turretSelected} placement=${placementActive} ` +
+        `attached=${grid.parent !== null} ancestors=${depth}` +
+        (hiddenBy ? ` HIDDEN-BY ${hiddenBy}` : ""),
+    );
+  }
 }
 
 export function removeUnitFromSelection(unit: Entity): void {

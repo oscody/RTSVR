@@ -603,6 +603,12 @@
     margin-top: 5px;
   }
 
+  .settings-hint {
+    width: 548px;
+    height: 24px;
+    color: #244152;
+    font-size: 13px;
+  }
   .settings-row {
     flex-direction: row;
     align-items: center;
@@ -781,31 +787,12 @@
   </div>
   <div id="settings-view" class="view" style="display: none;">
     <span class="section-title">Playtesting settings</span>
-    <div class="settings-columns">
-      <div class="settings-column">
-        <div class="settings-row"><span class="settings-label">Alien Speed</span><div class="settings-controls"><button id="setting-alienMoveSpeed-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-alienMoveSpeed-value" class="settings-value">0.10</span><button id="setting-alienMoveSpeed-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Unit Speed</span><div class="settings-controls"><button id="setting-unitMoveSpeed-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-unitMoveSpeed-value" class="settings-value">0.35</span><button id="setting-unitMoveSpeed-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Wave Delay</span><div class="settings-controls"><button id="setting-initialWaveDelaySeconds-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-initialWaveDelaySeconds-value" class="settings-value">10</span><button id="setting-initialWaveDelaySeconds-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Max Aliens</span><div class="settings-controls"><button id="setting-waveMaxActiveAliens-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-waveMaxActiveAliens-value" class="settings-value">3</span><button id="setting-waveMaxActiveAliens-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Release Time</span><div class="settings-controls"><button id="setting-waveReleaseIntervalSeconds-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-waveReleaseIntervalSeconds-value" class="settings-value">8.0</span><button id="setting-waveReleaseIntervalSeconds-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Turret Range</span><div class="settings-controls"><button id="setting-turretRange-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-turretRange-value" class="settings-value">0.72</span><button id="setting-turretRange-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Astro Range</span><div class="settings-controls"><button id="setting-astronautAttackRange-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-astronautAttackRange-value" class="settings-value">0.29</span><button id="setting-astronautAttackRange-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Racer Range</span><div class="settings-controls"><button id="setting-craftRacerAttackRange-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-craftRacerAttackRange-value" class="settings-value">0.29</span><button id="setting-craftRacerAttackRange-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Mining Time</span><div class="settings-controls"><button id="setting-miningGatherTimeSeconds-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-miningGatherTimeSeconds-value" class="settings-value">1.1</span><button id="setting-miningGatherTimeSeconds-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-      </div>
-      <div class="settings-column">
-        <div class="settings-row"><span class="settings-label">Building HP x</span><div class="settings-controls"><button id="setting-buildingHealthScale-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-buildingHealthScale-value" class="settings-value">1.0</span><button id="setting-buildingHealthScale-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Astro HP</span><div class="settings-controls"><button id="setting-astronautHealth-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-astronautHealth-value" class="settings-value">75</span><button id="setting-astronautHealth-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Racer HP</span><div class="settings-controls"><button id="setting-craftRacerHealth-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-craftRacerHealth-value" class="settings-value">90</span><button id="setting-craftRacerHealth-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Miner HP</span><div class="settings-controls"><button id="setting-craftMinerHealth-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-craftMinerHealth-value" class="settings-value">100</span><button id="setting-craftMinerHealth-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Alien HP x</span><div class="settings-controls"><button id="setting-alienHealthScale-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-alienHealthScale-value" class="settings-value">1.0</span><button id="setting-alienHealthScale-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Astro Power</span><div class="settings-controls"><button id="setting-astronautAttackDamage-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-astronautAttackDamage-value" class="settings-value">8</span><button id="setting-astronautAttackDamage-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Racer Power</span><div class="settings-controls"><button id="setting-craftRacerAttackDamage-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-craftRacerAttackDamage-value" class="settings-value">12</span><button id="setting-craftRacerAttackDamage-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Turret Power</span><div class="settings-controls"><button id="setting-turretAttackDamage-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-turretAttackDamage-value" class="settings-value">18</span><button id="setting-turretAttackDamage-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Alert Volume</span><div class="settings-controls"><button id="setting-underAttackAlertVolume-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-underAttackAlertVolume-value" class="settings-value">0.25</span><button id="setting-underAttackAlertVolume-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-        <div class="settings-row"><span class="settings-label">Tutorial</span><div class="settings-controls"><button id="setting-tutorialEnabled-minus" class="settings-button"><MinusIcon class="settings-button-icon"></MinusIcon></button><span id="setting-tutorialEnabled-value" class="settings-value">1</span><button id="setting-tutorialEnabled-plus" class="settings-button"><PlusIcon class="settings-button-icon"></PlusIcon></button></div></div>
-      </div>
-    </div>
+    <!-- The 19 setting rows moved to ui/rts-settings.uikitml, which is created
+         only while this tab is open and destroyed when it closes.
+         They were 158 of this document's 328 elements, and PanelUISystem ticks
+         every configured panel each frame regardless of visibility, so hiding
+         them here saved nothing. Removing them does. -->
+    <span class="settings-hint">Controls open in their own panel below the tablet.</span>
   </div>
   <span id="tablet-status" class="status">Select an astronaut to build</span>
 </Panel>

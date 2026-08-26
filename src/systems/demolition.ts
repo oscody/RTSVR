@@ -9,7 +9,6 @@ import {
 } from "./construction.js";
 import { destroyRefund, footprintCells } from "./constructionRules.js";
 import { detachCommandCenterAnimation } from "./commandCenterAnimation.js";
-import { detachCraftProductionAnimation } from "./craftProductionAnimation.js";
 import { detachMinerAnimation } from "./minerAnimation.js";
 import { detachTurretAnimation } from "./turretAnimation.js";
 import { detachUnitAnimation } from "./unitAnimation.js";
@@ -140,7 +139,6 @@ function destroyCraftProductionSite(site: Entity): DemolitionResult {
   const x = site.getValue(CraftProductionSite, "x") ?? -1;
   const y = site.getValue(CraftProductionSite, "y") ?? -1;
   setTerrainAt(x, y, "open");
-  detachCraftProductionAnimation(site);
   releaseSiteBuilders(site);
   boardState.buildersBySite.delete(site.index);
   disposeEntity(site);

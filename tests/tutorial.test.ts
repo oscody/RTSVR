@@ -1277,3 +1277,120 @@ test("the tab pulse follows the recovery, not the drill", () => {
   // No recovery: unchanged behaviour.
   assert.equal(tabHintFor(drill, 9999, null), "build");
 });
+
+// ── Visual lifecycle: Finish/Skip detach, Restart reuses ────────────────────
+
+test("tutorial visuals are pooled under a non-entity group so detach sticks", () => {
+  const pool = readFileSync(
+    new URL("../src/systems/tutorialVisualPool.ts", import.meta.url),
+    "utf8",
+  );
+
+  // The whole design rests on this: TransformSystem re-parents every Transform
+  // entity every frame, so a detached ENTITY is put straight back next frame.
+  // Only the anchor may be an entity; the group and its meshes must not be.
+  assert.match(pool, /createTransformEntity/);
+  assert.match(pool, /removeFromParent/);
+  assert.match(pool, /TransformSystem/);
+
+  for (const module of [
+    "tutorialArrow",
+    "tutorialRing",
+    "tutorialPath",
+    "tutorialTurnCue",
+    "tutorialSpotlight",
+  ]) {
+    const source = readFileSync(
+      new URL(`../src/systems/${module}.ts`, import.meta.url),
+      "utf8",
+    );
+    assert.doesNotMatch(
+      source,
+      /createTransformEntity/,
+      `${module} must pool under the visual pool's anchor, not create entities ` +
+        `per mesh — an entity cannot stay detached`,
+    );
+    assert.match(
+      source,
+      /attachTutorialVisualPool/,
+      `${module} must re-attach through the pool so Restart reuses its objects`,
+    );
+  }
+});
+
+test("every tutorial visual layer can be detached", () => {
+  const tutorial = readFileSync(
+    new URL("../src/systems/tutorial.ts", import.meta.url),
+    "utf8",
+  );
+
+  // Finish or Skip must take the whole layer out of the scene, not hide it.
+  for (const detach of [
+    "detachTutorialVisualPool\\(cardPool\\)",
+    "detachTutorialArrows\\(\\)",
+    "detachTutorialRing\\(\\)",
+    "detachTutorialPaths\\(\\)",
+    "detachTutorialTurnCue\\(\\)",
+    "detachTutorialSpotlight\\(\\)",
+  ]) {
+    assert.match(tutorial, new RegExp(detach));
+  }
+});
+
+test("the turn cue and spotlight are lazy, not built in init", () => {
+  for (const module of ["tutorialTurnCue", "tutorialSpotlight"]) {
+    const source = readFileSync(
+      new URL(`../src/systems/${module}.ts`, import.meta.url),
+      "utf8",
+    );
+    // These two used to be created unconditionally in TutorialSystem.init(),
+    // so a player who never enabled the tutorial still paid for them.
+    assert.match(
+      source,
+      /function ensure(Cue|Spotlight)\(\): boolean/,
+      `${module} must build on first use`,
+    );
+  }
+});
+
+test("a finished tutorial stops doing per-frame work", () => {
+  const tutorial = readFileSync(
+    new URL("../src/systems/tutorial.ts", import.meta.url),
+    "utf8",
+  );
+  // Without this the card, arrow, ring and path checks ran every frame for
+  // the rest of the match after the script was over.
+  assert.match(tutorial, /if \(drillIndex < 0\) return;/);
+});
+
+test("re-enabling the tutorial mid-match requires a Restart", () => {
+  const gate = readFileSync(
+    new URL("../src/systems/tutorialWaveGate.ts", import.meta.url),
+    "utf8",
+  );
+  const tutorial = readFileSync(
+    new URL("../src/systems/tutorial.ts", import.meta.url),
+    "utf8",
+  );
+  const tablet = readFileSync(
+    new URL("../src/systems/tablet.ts", import.meta.url),
+    "utf8",
+  );
+
+  // The flag lives in the wave-gate leaf because the tablet has to read it and
+  // the tablet may never import the tutorial system (tablet.ts:135-136).
+  assert.match(gate, /export function tutorialRequiresRestart/);
+  assert.match(gate, /export function markTutorialLeft/);
+  assert.match(gate, /export function clearTutorialLeft/);
+  assert.doesNotMatch(
+    tablet,
+    /from "\.\/tutorial\.js"/,
+    "the tablet must not import the tutorial system — that is the cycle rule",
+  );
+
+  // Finish and Skip both latch it; only Restart clears it.
+  assert.match(tutorial, /markTutorialLeft\(\);/);
+  assert.match(tutorial, /clearTutorialLeft\(\);/);
+  assert.match(tutorial, /if \(tutorialRequiresRestart\(\)\) \{/);
+  assert.match(tablet, /Restart to begin Tutorial/);
+});

@@ -246,7 +246,6 @@ export const COMMAND_CENTER_DOOR_OPEN_CLIP = "Door_Open";
 export const COMMAND_CENTER_DOOR_CLOSE_CLIP = "Door_Close";
 export const COMMAND_CENTER_DOOR_HOLD_SECONDS = 0.25;
 
-export const CRAFT_SPAWN_CONSTRUCTION_CLIP = "Spawn_Construction";
 export const TURRET_FIRE_RECOIL_CLIP = "Fire_Recoil";
 
 // Pooled combat VFX (see combatEffects.ts). Damage stays range/cadence-based;
@@ -941,3 +940,17 @@ export const TUTORIAL_TURN_CUE_PULSE = 0.16;
  * tutorial let go. This says "not now", not "not available".
  */
 export const TABLET_TUTORIAL_LOCKED_OPACITY = 0.3;
+
+/**
+ * How far below the tablet the playtesting-settings panel sits, in metres.
+ *
+ * Below rather than beside: the tablet is authored for a right hand, and a
+ * panel to its side lands where the player's forearm already is.
+ *
+ * The number is geometry, not taste. The frame is `TABLET_FRAME_SIZE` = 0.55 m
+ * tall, so its lower edge is 0.275 m down; the settings document is 600x360 px
+ * into a 0.6 x 0.36 m box (same aspect, so it fills it) and its half-height is
+ * 0.18 m. 0.275 + 0.18 = 0.455 is where they touch, and this adds a 25 mm gap.
+ * Anything smaller intersects the tablet — 0.34 put the panel *inside* it.
+ */
+export const SETTINGS_PANEL_DROP = 0.48;

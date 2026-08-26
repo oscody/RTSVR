@@ -16,6 +16,11 @@ import {
   TUTORIAL_RING_RADIUS,
   TUTORIAL_RING_SUBJECT_MARGIN,
 } from "./constants.ts";
+import {
+  attachTutorialVisualPool,
+  createTutorialVisualPool,
+  detachTutorialVisualPool,
+} from "./tutorialVisualPool.js";
 
 /**
  * Lights ONE subject up while the rest of the world is dimmed.
@@ -70,18 +75,52 @@ const slots: HighlightSlot[] = [];
 /** The holder the slots were captured from; a reset rebuilds the base. */
 let capturedHolder: Object3D | null = null;
 let applied = -1;
+/**
+ * Anchor + detachable container. Persistent: the spotlight follows the drill's
+ * subject, not the board.
+ */
+const visualPool = createTutorialVisualPool("TutorialSpotlight", true);
+/** Captured from TutorialSystem.init; the light is built on first use. */
+let spotlightWorld: World | null = null;
 
 
-/** Called once from TutorialSystem.init, before any beat can run. */
+/**
+ * Called once from TutorialSystem.init — captures the world and builds nothing.
+ *
+ * Lazy on purpose: the light used to be created unconditionally in `init()`,
+ * so a player who never turned the tutorial on still carried a `PointLight`
+ * entity. Now the first `setSpotlightSubject` builds it.
+ */
 export function attachTutorialSpotlight(world: World): void {
-  if (spotlight) return;
+  spotlightWorld = world;
+}
+
+function ensureSpotlight(): boolean {
+  // Builds once, then RE-ATTACHES after a detach so Restart reuses this light.
+  if (!attachTutorialVisualPool(visualPool, spotlightWorld)) return false;
+  if (spotlight) return true;
   spotlight = new PointLight(
     TUTORIAL_SPOTLIGHT_LIGHT_COLOR,
     0,
     TUTORIAL_SPOTLIGHT_LIGHT_DISTANCE,
   );
   spotlight.name = "TutorialSpotlight";
-  world.createTransformEntity(spotlight, { persistent: true });
+  // Plain child of the pool, not an entity: TransformSystem re-parents
+  // entities every frame and would undo the detach.
+  visualPool.group.add(spotlight);
+  return true;
+}
+
+/**
+ * Remove the light from the live scene, keeping it for a Restart.
+ *
+ * Restores the captured materials first — a detached light cannot un-dim a
+ * model it left darkened, and the dim is written onto the subject's own
+ * materials rather than onto anything under this pool.
+ */
+export function detachTutorialSpotlight(): void {
+  clearSpotlightSubject();
+  detachTutorialVisualPool(visualPool);
 }
 
 function capture(holder: Object3D): void {
@@ -125,6 +164,7 @@ export function setSpotlightSubject(
   position: Vector3 | null,
   factor: number,
 ): void {
+  if (!ensureSpotlight()) return;
   const holder = subject;
   if (!holder) {
     // No object to brighten — but a tile target still gets the light, so the

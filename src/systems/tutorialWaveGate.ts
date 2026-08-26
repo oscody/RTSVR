@@ -38,6 +38,35 @@ let releaseBudget = 0;
 let spawnAnchor: TutorialSpawnAnchor | null = null;
 /** Monotonic marker used to verify initialization-time gate publication. */
 let revision = 0;
+/**
+ * Has the tutorial finished or been skipped in this match?
+ *
+ * Lives here rather than in `tutorial.ts` for the same reason everything else
+ * in this file does: `tablet.ts` needs to read it to answer "why did the toggle
+ * do nothing", and the tablet is forbidden from importing the tutorial system
+ * (`tablet.ts:135-136` — the dependency runs tutorial -> tablet only).
+ */
+let leftThisMatch = false;
+
+/**
+ * True when switching the tutorial back on would need a Restart to take effect.
+ *
+ * Re-enabling mid-match cannot resume the script: it assumes wave 0 and a fresh
+ * base, and dropping back into a drill would fight the wave system for control.
+ */
+export function tutorialRequiresRestart(): boolean {
+  return leftThisMatch;
+}
+
+/** Set by `TutorialSystem` when the script finishes or the player skips. */
+export function markTutorialLeft(): void {
+  leftThisMatch = true;
+}
+
+/** Cleared by `resetTutorial()` — Restart is the one path that re-arms it. */
+export function clearTutorialLeft(): void {
+  leftThisMatch = false;
+}
 
 /** Published by TutorialSystem every sample. */
 export function setTutorialWaveGate(state: {

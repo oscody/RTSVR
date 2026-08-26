@@ -1,20 +1,14 @@
 import {
-  AssetManager,
-  Box3,
   BoxGeometry,
   Entity,
   Group,
   Mesh,
   MeshBasicMaterial,
-  Object3D,
   RayInteractable,
-  Vector3,
   createSystem,
   type World,
 } from "@iwsdk/core";
-import type { AnimationClip } from "three";
 import { UNIT_BOX_GEOMETRY, makeNonInteractive } from "./sharedGeometry.js";
-import { disableModelRaycast } from "./structures.js";
 import { TILE_SIZE, gridToWorld } from "./board.js";
 import {
   CRAFT_PRODUCTION_FOUNDATION_COLOR,
@@ -33,11 +27,6 @@ import { buildRateMultiplier } from "./constructionRules.js";
 import { releaseSiteBuilders, takeQueueOrder } from "./construction.js";
 import { attachQueueBadge } from "./queueBadge.js";
 import { markOwnedResources, releaseEntity } from "./entityTeardown.js";
-import {
-  attachCraftProductionAnimation,
-  detachCraftProductionAnimation,
-  updateCraftProductionAnimation,
-} from "./craftProductionAnimation.js";
 import {
   CraftProductionSite,
   ScenarioObject,
@@ -104,47 +93,32 @@ export function createCraftProductionSite(
   progressFill.scale.x = 0.001;
   holder.add(progressFill);
 
-  let animatedModel: Object3D | null = null;
-  let animatedClips: AnimationClip[] = [];
-  if (spec.asset === "craftMinerAnimated" || spec.asset === "craftRacer") {
-    // Completed miners use the reduced model. Construction temporarily uses
-    // the full source model so its one-shot spawn effect remains unchanged.
-    const animationAsset = spec.asset === "craftMinerAnimated"
-      ? "craftMinerConstruction"
-      : spec.asset === "craftRacer"
-        ? "craftRacerConstruction"
-        : spec.asset;
-    const gltf = AssetManager.getGLTF(animationAsset);
-    if (!gltf) throw new Error(`${animationAsset} not preloaded`);
-    animatedModel = gltf.scene;
-    // Its own draw-call bucket, and this one earned it.
-    //
-    // Untagged, these meshes inherited `static` from the board root and hid
-    // inside the largest bucket in the census. A 15-minute capture shows `static`
-    // sitting at ~102 calls for 91% of the run and jumping to **150 and 188** for
-    // the rest — spikes of +50 and +86 that match these two models exactly
-    // (`craftRacerConstruction` 53 meshes, `craftMinerConstruction` 78).
-    //
-    // They are the leftover from the Phase B fix: moving the one-shot spawn FX
-    // OUT of the miner and racer is what let those collapse to 14 and 10 meshes,
-    // but the extracted FX models were never merged themselves (93 -> 78 and
-    // 69 -> 53) because every animated FX node is its own rigid group.
-    //
-    // The whole point of the Draw census is that no category can quietly become
-    // the most expensive thing on screen. This one did, for months, because it
-    // was not named.
-    animatedModel.userData.drawCat = "construction";
-    animatedModel.rotation.y = Math.PI;
-    const width = new Box3().setFromObject(animatedModel).getSize(new Vector3()).x;
-    animatedModel.scale.setScalar((TILE_SIZE * 0.9) / width);
-    seatModel(animatedModel);
-    holder.add(animatedModel);
-    animatedClips = gltf.animations;
-  }
+  // No craft model while building — the site is foundation + progress bar, the
+  // same treatment astronaut production has always had.
+  //
+  // **This replaced the single most expensive thing on screen.** Construction
+  // used to instantiate the full source model (`craftMinerConstruction` 78
+  // meshes, `craftRacerConstruction` 53) purely so its baked one-shot spawn
+  // effect would play, and `AssetManager.getGLTF` returns a *clone*, so every
+  // concurrent site paid again. Measured over two Quest sessions on 2026-08-24,
+  // the `construction` draw bucket ran 53/78/106/131/156/159 — exactly the sums
+  // of 53 and 78 — and cost roughly 75-80 draw calls and 6-8 FPS per site:
+  //
+  //   sites | 0     1     2     3
+  //   calls | 167   237   300   320
+  //   FPS   | 75.7  67.5  59.9  58.0   (run A; run B agreed on calls, not FPS)
+  //   miss% | 3.9   16.1  46.8  60.4
+  //
+  // The models merged badly because every animated FX node is its own rigid
+  // group (93 -> 78 and 69 -> 53), so mesh merging could not touch them. The
+  // astronaut never appeared in that bucket for one reason: it has no
+  // construction model at all. Miner and racer now match it.
+  //
+  // Restoring the effect means reinstating `craftProductionAnimation.ts` and
+  // the two `*Construction` manifest entries, both removed in the same change.
 
   // Clickable so an in-flight craft can be cancelled for a refund, same as a
-  // construction site. Single box proxy, so the animated model itself is never
-  // hit-tested by the pointer.
+  // construction site. Single box proxy — the only ray target the site owns.
   const proxyHeight = TILE_SIZE * 0.9;
   const proxy = new Mesh(UNIT_BOX_GEOMETRY, craftSiteProxyMaterial);
   proxy.name = "CraftProductionSiteInteractionProxy";
@@ -152,7 +126,6 @@ export function createCraftProductionSite(
   proxy.position.y = proxyHeight / 2;
   proxy.userData.drawCat = "proxy";
   holder.add(proxy);
-  if (animatedModel) disableModelRaycast(animatedModel);
   // Craft orders share the same build queue and badge as buildings.
   attachQueueBadge(holder);
 
@@ -175,14 +148,6 @@ export function createCraftProductionSite(
       builderCount: 0,
       beaconBuilder: null,
     });
-  if (animatedModel) {
-    attachCraftProductionAnimation(
-      entity,
-      animatedModel,
-      animatedClips,
-      spec.duration,
-    );
-  }
   return entity;
 }
 
@@ -222,7 +187,6 @@ export class CraftProductionSystem extends createSystem({
       );
       site.setValue(CraftProductionSite, "timer", this.cycle.timer);
       this.updateProgress(site);
-      updateCraftProductionAnimation(site, delta);
       if (transition === "completed") this.completed.push(site);
     }
     // A queued site may already be gone by the time the queue drains.
@@ -268,7 +232,6 @@ export class CraftProductionSystem extends createSystem({
     const sourceKind =
       site.getValue(CraftProductionSite, "sourceKind") ?? "command-center";
     setTerrainAt(x, y, "open");
-    detachCraftProductionAnimation(site);
     // Hand its astronauts back before the site goes away, or they keep a
     // dangling `ConstructionState.site` until the next frame notices.
     releaseSiteBuilders(site);
@@ -299,9 +262,3 @@ export class CraftProductionSystem extends createSystem({
   }
 }
 
-function seatModel(model: Object3D): void {
-  const box = new Box3().setFromObject(model);
-  model.position.x -= (box.min.x + box.max.x) / 2;
-  model.position.z -= (box.min.z + box.max.z) / 2;
-  model.position.y -= box.min.y;
-}

@@ -20,6 +20,11 @@ import {
 } from "./constants.ts";
 import { makeNonInteractive } from "./sharedGeometry.js";
 import { boardState } from "./state.js";
+import {
+  attachTutorialVisualPool,
+  createTutorialVisualPool,
+  detachTutorialVisualPool,
+} from "./tutorialVisualPool.js";
 
 /**
  * The tutorial's pointing layer: one cone that hovers point-down over whatever
@@ -45,8 +50,12 @@ import { boardState } from "./state.js";
 const arrowMeshes: Mesh[] = [];
 let arrowGeometry: ConeGeometry | null = null;
 let arrowMaterial: MeshBasicMaterial | null = null;
-/** The board root the mesh currently hangs off, so a reset rebuild is detected. */
-let pooledRoot: Object3D | null = null;
+/**
+ * Anchor + detachable container. The cones are plain children of `pool.group`,
+ * not entities — see `tutorialVisualPool.ts` for why that is what makes
+ * detaching stick.
+ */
+const pool = createTutorialVisualPool("TutorialArrows");
 /** Seconds since the arrow was built — drives bob and spin. */
 let animationClock = 0;
 /** Captured from TutorialSystem.init — the mesh must be an entity, not a bare add(). */
@@ -60,11 +69,10 @@ export function attachTutorialArrowWorld(world: World): void {
 }
 
 function ensureArrows(): boolean {
-  const root = boardState.boardRoot;
-  const rootObject = root?.object3D ?? null;
-  if (!root || !rootObject || !arrowWorld) return false;
-  if (pooledRoot === rootObject && arrowMeshes.length > 0) return true;
-  arrowMeshes.length = 0;
+  // Builds on first use and RE-ATTACHES on every use after a detach, so a
+  // Restart reuses these cones instead of allocating a second set.
+  if (!attachTutorialVisualPool(pool, arrowWorld)) return false;
+  if (arrowMeshes.length > 0) return true;
 
   arrowGeometry = new ConeGeometry(
     TUTORIAL_ARROW_RADIUS,
@@ -101,12 +109,17 @@ function ensureArrows(): boolean {
     // Its own draw-call category, so the tutorial's cost stays visible in the
     // profiler's Draw line rather than hiding in the "static" bucket.
     mesh.userData.drawCat = "tutorial";
-    // No ScenarioObject: reset should park these, not dispose them.
-    arrowWorld.createTransformEntity(mesh, { parent: root });
+    // Plain child of the pool, not its own entity: `TransformSystem` would
+    // re-attach an entity every frame and defeat the detach.
+    pool.group.add(mesh);
     arrowMeshes.push(mesh);
   }
-  pooledRoot = rootObject;
   return true;
+}
+
+/** Remove the cones from the live scene, keeping their GPU resources. */
+export function detachTutorialArrows(): void {
+  detachTutorialVisualPool(pool);
 }
 
 /**
@@ -180,12 +193,14 @@ export function clearTutorialArrow(): void {
  * away — since a rebuilt root leaves the old mesh orphaned and unreachable.
  */
 export function disposeTutorialArrow(): void {
+  detachTutorialVisualPool(pool);
   for (const mesh of arrowMeshes) mesh.removeFromParent();
   arrowGeometry?.dispose();
   arrowMaterial?.dispose();
   arrowMeshes.length = 0;
   arrowGeometry = null;
   arrowMaterial = null;
-  pooledRoot = null;
+  pool.anchor = null;
+  pool.builtFor = null;
   animationClock = 0;
 }

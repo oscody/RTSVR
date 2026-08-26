@@ -3,7 +3,6 @@ import { clearAlienAnimations } from "./alienAnimation.js";
 import { clearCombatEffects } from "./combatEffects.js";
 import { clearCommandCenterHud } from "./commandCenterHud.js";
 import { clearCommandCenterAnimations } from "./commandCenterAnimation.js";
-import { clearCraftProductionAnimations } from "./craftProductionAnimation.js";
 import { clearCraftVisualRise } from "./craftVisualRise.js";
 import { resetCraftSerial } from "./craftFactory.js";
 import { STARTING_CRYSTALS } from "./economyConstants.js";
@@ -91,7 +90,6 @@ export class ScenarioResetSystem extends createSystem({
     clearMeteors();
     clearAlienAnimations();
     clearCommandCenterAnimations();
-    clearCraftProductionAnimations();
     clearCraftVisualRise();
     clearMinerAnimations();
     clearTurretAnimations();

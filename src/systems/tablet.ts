@@ -70,6 +70,7 @@ import {
   TABLET_TAB_ACTIVE_BORDER,
   TABLET_TAB_INACTIVE_BACKGROUND,
   TABLET_TAB_INACTIVE_BORDER,
+  SETTINGS_PANEL_DROP,
   TABLET_TUTORIAL_LOCKED_OPACITY,
   TABLET_UNIT_BACKGROUND,
   TABLET_Y_OFFSET,
@@ -78,7 +79,10 @@ import {
   TUTORIAL_TAB_PULSE_SECONDS,
 } from "./constants.ts";
 import { tabPulseOn } from "./tutorialRules.ts";
-import { tutorialHoldsCountdown } from "./tutorialWaveGate.js";
+import {
+  tutorialHoldsCountdown,
+  tutorialRequiresRestart,
+} from "./tutorialWaveGate.js";
 import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
 import {
   clearUnitSelections,
@@ -109,6 +113,7 @@ import {
   Health,
   MatchState,
   SelectionState,
+  SettingsPanel,
   TabletState,
   TutorialState,
   Unit,
@@ -118,6 +123,7 @@ import {
   boardState,
   type DebugSettingKey,
 } from "./state.js";
+import { releaseEntity } from "./entityTeardown.js";
 import { observeMiningEconomyRead } from "./phase2Trace.js";
 import {
   beginUiInteraction,
@@ -207,12 +213,32 @@ interface LiveRosterEntry extends RosterEntry {
 
 export class TabletSystem extends createSystem({
   tablets: { required: [TabletState, PanelUI, PanelDocument] },
+  settingsPanels: { required: [SettingsPanel, PanelUI, PanelDocument] },
   buildings: { required: [Building, Health] },
   units: { required: [Unit, UnitSelection, Health] },
   enemies: { required: [Enemy, Health] },
 }) {
   private document: UIKitDocument | null = null;
   private tabletEntity: Entity | null = null;
+  /**
+   * The playtesting-settings panel, or null while the tab is closed.
+   *
+   * Created on opening Settings and destroyed on leaving it. Keeping it around
+   * hidden would save nothing: `PanelUISystem.update()` walks every configured
+   * panel each frame with no visibility check, which is exactly why moving
+   * these 158 elements out of the tablet document is the fix and hiding them
+   * was not.
+   */
+  private settingsEntity: Entity | null = null;
+  private settingsDocument: UIKitDocument | null = null;
+  /**
+   * The tablet's shell entity — the level that carries the pose.
+   *
+   * `tabletEntity` is the SCREEN, one level down, whose local transform is only
+   * a small z offset. Anything that wants to sit relative to the tablet must
+   * hang off the shell, or it lands at the board origin.
+   */
+  private tabletShellEntity: Entity | null = null;
   // Last value written to each element, so unchanged writes can be skipped.
   // WeakMap keyed on the element: entries vanish with a rebuilt document, so a
   // stale guard can never suppress a real update.
@@ -260,6 +286,17 @@ export class TabletSystem extends createSystem({
         this.document = PanelDocument.data.document[entity.index] as UIKitDocument;
         this.bind(this.document, entity);
         this.invalidateSnapshot();
+      }),
+    );
+    // The settings document loads asynchronously, so its rows are bound when
+    // it qualifies rather than when the entity is created.
+    this.cleanupFuncs.push(
+      this.queries.settingsPanels.subscribe("qualify", (entity) => {
+        this.settingsDocument = PanelDocument.data.document[
+          entity.index
+        ] as UIKitDocument;
+        this.bindSettings(this.settingsDocument);
+        this.applySettingsView();
       }),
     );
   }
@@ -421,6 +458,12 @@ export class TabletSystem extends createSystem({
         : "Place a building - an astronaut will come",
     );
     const view = tablet.getValue(TabletState, "view") ?? "overview";
+    // Driven from the OBSERVED view rather than from `setView`, because four
+    // call sites change the view without going through it — including
+    // `scenarioReset.ts:249`, where a Restart taken from the Settings tab would
+    // otherwise leave the panel behind for the rest of the match. Idempotent:
+    // it returns immediately when the panel already matches the tab.
+    this.syncSettingsPanel(view);
     // Tabs and view visibility are always applied: they are what makes the
     // switch happen, and they touch 10 elements, not 119.
     this.applyView(view);
@@ -631,6 +674,7 @@ export class TabletSystem extends createSystem({
     }
     tablet.object3D!.name = "RTSVRTabletScreen";
     tablet.object3D!.position.z = TABLET_SCREEN_Z_OFFSET;
+    this.tabletShellEntity = shell;
     tabletShell = shell.object3D as Group;
     // Startup is always non-immersive, so this lands on the preview pose first
     // and the subscription below swaps it the moment a session begins.
@@ -753,11 +797,6 @@ export class TabletSystem extends createSystem({
       if (!source) return;
       source.setValue(MatchState, "status", "restarting");
     });
-
-    for (const spec of DEBUG_SETTINGS_CATALOG) {
-      on(`setting-${spec.key}-minus`, () => this.adjustSetting(tablet, spec.key, -1));
-      on(`setting-${spec.key}-plus`, () => this.adjustSetting(tablet, spec.key, 1));
-    }
 
     for (const spec of BUILDING_CATALOG) {
       on(`build-${spec.kind}`, () => {
@@ -965,6 +1004,78 @@ export class TabletSystem extends createSystem({
     tablet.setValue(TabletState, "unitFilter", "all");
     tablet.setValue(TabletState, "unitPage", 0);
     this.setView(tablet, "units", "All live units");
+  }
+
+  /** Wire the +/- rows once their own document has loaded. */
+  private bindSettings(document: UIKitDocument): void {
+    const tablet = this.tabletEntity;
+    if (!tablet) return;
+    for (const spec of DEBUG_SETTINGS_CATALOG) {
+      for (const [suffix, direction] of [
+        ["minus", -1],
+        ["plus", 1],
+      ] as const) {
+        const id = `setting-${spec.key}-${suffix}`;
+        document.getElementById(id)?.addEventListener("click", () => {
+          this.observeUiClick(tablet, id, () =>
+            this.adjustSetting(tablet, spec.key, direction),
+          );
+        });
+      }
+    }
+  }
+
+  /**
+   * Create the settings document, or destroy it, to match the open tab.
+   *
+   * Opening pays one fetch + interpret. That is the deliberate trade: Settings
+   * is a playtesting tab opened occasionally, and the alternative is carrying
+   * its 158 elements through every frame of normal play.
+   */
+  private syncSettingsPanel(view: string): void {
+    const wanted = view === "settings";
+    if (wanted === (this.settingsEntity !== null)) return;
+    if (wanted) {
+      // Parented to the SHELL, not the board root. The shell is what carries
+      // the tablet's pose, so the panel inherits it for free — including when
+      // the player grabs the tablet and moves it, which copying a transform
+      // once would not survive.
+      const shell = this.tabletShellEntity;
+      if (!shell) return;
+      const panel = this.world
+        .createTransformEntity(undefined, { parent: shell })
+        .addComponent(PanelUI, {
+          config: "./ui/rts-settings.json",
+          // Matches the document's 600x360 aspect exactly. A mismatch makes
+          // UIKit fit to the tighter axis and shrink the text.
+          maxWidth: 0.6,
+          maxHeight: 0.36,
+        })
+        .addComponent(RayInteractable)
+        .addComponent(SettingsPanel);
+      panel.object3D!.name = "SettingsPanel";
+      this.placeSettingsPanel(panel.object3D!);
+      this.settingsEntity = panel;
+      return;
+    }
+    // `releaseEntity`, not `dispose()`: the panel's materials and font atlas are
+    // shared with the tablet, and IWSDK's `Entity.dispose()` traverse-frees a
+    // subtree's shared GPU resources — the defect that used to empty the
+    // program cache every wave.
+    const panel = this.settingsEntity;
+    this.settingsEntity = null;
+    this.settingsDocument = null;
+    if (panel) releaseEntity(panel);
+  }
+
+  /**
+   * Sit it just below the screen, in the shell's local space.
+   *
+   * A plain local offset: the shell already supplies position and rotation, so
+   * copying either would double-apply them.
+   */
+  private placeSettingsPanel(object: Object3D): void {
+    object.position.set(0, -SETTINGS_PANEL_DROP, TABLET_SCREEN_Z_OFFSET);
   }
 
   private setView(tablet: Entity, view: string, status: string): void {
@@ -1190,6 +1301,18 @@ export class TabletSystem extends createSystem({
       refreshUnitAttackRangeRingGeometry();
     }
     this.applyHealthSetting(spec.key, current, next);
+    // Turning the tutorial back on after it finished or was skipped cannot
+    // resume the script — it assumes wave 0 and a fresh base. Say so, rather
+    // than leaving the player looking at a toggle that reads "on" while
+    // nothing happens.
+    if (
+      spec.key === "tutorialEnabled" &&
+      next > 0 &&
+      tutorialRequiresRestart()
+    ) {
+      this.touch(tablet, "Restart to begin Tutorial");
+      return;
+    }
     this.touch(
       tablet,
       `${spec.label}: ${this.formatSettingValue(next, spec.decimals)}`,
@@ -1259,15 +1382,25 @@ export class TabletSystem extends createSystem({
     updateHealthBar(entity);
   }
 
+  /**
+   * Repaint the +/- readouts.
+   *
+   * Targets the settings document, which exists only while the tab is open, so
+   * this is a no-op the rest of the time rather than 19 lookups that can never
+   * match anything.
+   */
   private applySettingsView(): void {
     const settings = boardState.debugSettings;
-    if (!settings) return;
+    const document = this.settingsDocument;
+    if (!settings || !document) return;
     for (const spec of DEBUG_SETTINGS_CATALOG) {
       const value = (settings.getValue(DebugSettings, spec.key) as number) ?? spec.min;
-      this.setText(
-        `setting-${spec.key}-value`,
-        this.formatSettingValue(value, spec.decimals),
-      );
+      const target = element(document, `setting-${spec.key}-value`);
+      if (!target) continue;
+      const text = this.formatSettingValue(value, spec.decimals);
+      if (this.lastSetText.get(target) === text) continue;
+      this.lastSetText.set(target, text);
+      target.setProperties({ text });
     }
   }
 

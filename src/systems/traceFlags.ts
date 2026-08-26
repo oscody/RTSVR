@@ -91,6 +91,23 @@ export const XR_RUNTIME_TRACE_ENABLED = true;
  */
 export const INTERACTION_CORRELATION_TRACE_ENABLED = true;
 
+/**
+ * Edge-triggered logging of scene-object visibility decisions — currently the
+ * board's command grid (`selection.ts`).
+ *
+ * Added 2026-08-24 to triage reports of the grid and panel content vanishing
+ * mid-session. It fires **only when a decision changes**, never per frame, and
+ * the objects it watches are toggled by discrete events (selection, tablet
+ * placement, scenario reset) rather than by the update loop — so its cost when
+ * on is a handful of `console.log` calls per session, and zero when off.
+ *
+ * **Deliberately absent from {@link anyTraceEnabled} and
+ * {@link traceRecorderNeeded}.** It writes straight to the console, records
+ * nothing into the flight recorder and does not need it allocated, so folding
+ * it into either aggregator would switch on machinery it never uses.
+ */
+export const VISUAL_VISIBILITY_TRACE_ENABLED = true;
+
 /** True when at least one optional diagnostic is on. */
 export function anyTraceEnabled(): boolean {
   return (

@@ -88,7 +88,8 @@ test("completed miner asset keeps four clips with consolidated effects", () => {
   }
 });
 
-test("construction-only miner asset retains the complete spawn effect", () => {
+// Retained as SOURCE only — see the matching note in craft-racer-asset.test.ts.
+test("unshipped miner construction source retains the complete spawn effect", () => {
   const gltf = readGlbJson("../public/gltf/craft/craft_miner_construction.glb");
   const nodeNames = new Set(gltf.nodes.map((node) => node.name));
 

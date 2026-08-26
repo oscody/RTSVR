@@ -22,6 +22,11 @@ import {
 import { gridToWorld } from "./board.js";
 import { makeNonInteractive } from "./sharedGeometry.js";
 import { boardState } from "./state.js";
+import {
+  attachTutorialVisualPool,
+  createTutorialVisualPool,
+  detachTutorialVisualPool,
+} from "./tutorialVisualPool.js";
 import type { PathStyle } from "./tutorialCatalog.ts";
 
 /**
@@ -60,7 +65,11 @@ const pools: Record<PathStyle, PathPool> = {
   hostile: { chevrons: [], material: null, shown: 0 },
 };
 let pathGeometry: BufferGeometry | null = null;
-let pooledRoot: Object3D | null = null;
+/**
+ * Anchor + detachable container. Both chevron pools are plain children of
+ * `pool.group` rather than entities — see `tutorialVisualPool.ts`.
+ */
+const visualPool = createTutorialVisualPool("TutorialPaths");
 let pathWorld: World | null = null;
 /** Flow offset, in world units along the route. Shared, so both sides pulse together. */
 let flow = 0;
@@ -121,10 +130,10 @@ function makeChevronGeometry(): BufferGeometry {
 }
 
 function ensurePath(): boolean {
-  const root = boardState.boardRoot;
-  const rootObject = root?.object3D ?? null;
-  if (!root || !rootObject || !pathWorld) return false;
-  if (pooledRoot === rootObject && pools.friendly.chevrons.length > 0) return true;
+  // Builds once, then RE-ATTACHES after a detach so a Restart reuses the same
+  // 32 chevrons rather than allocating a second set.
+  if (!attachTutorialVisualPool(visualPool, pathWorld)) return false;
+  if (pools.friendly.chevrons.length > 0) return true;
 
   pathGeometry = makeChevronGeometry();
   for (const style of ["friendly", "hostile"] as PathStyle[]) {
@@ -152,14 +161,19 @@ function ensurePath(): boolean {
       mesh.frustumCulled = false;
       mesh.renderOrder = TUTORIAL_CUE_RENDER_ORDER;
       mesh.userData.drawCat = "tutorial";
-      // No ScenarioObject: reset parks these rather than disposing them.
-      pathWorld.createTransformEntity(mesh, { parent: root });
+      // Plain child of the visual pool, not an entity: TransformSystem
+      // re-parents entities every frame and would undo the detach.
+      visualPool.group.add(mesh);
       pool.chevrons.push(mesh);
     }
     pool.shown = 0;
   }
-  pooledRoot = rootObject;
   return true;
+}
+
+/** Remove both chevron pools from the live scene, keeping GPU resources. */
+export function detachTutorialPaths(): void {
+  detachTutorialVisualPool(visualPool);
 }
 
 /** Advance the shared flow. Call once per frame, before drawing anything. */
@@ -300,6 +314,7 @@ export function clearTutorialPath(): void {
 
 /** Genuine teardown only. */
 export function disposeTutorialPath(): void {
+  detachTutorialVisualPool(visualPool);
   for (const style of ["friendly", "hostile"] as PathStyle[]) {
     const pool = pools[style];
     for (const mesh of pool.chevrons) mesh.removeFromParent();
@@ -310,6 +325,7 @@ export function disposeTutorialPath(): void {
   }
   pathGeometry?.dispose();
   pathGeometry = null;
-  pooledRoot = null;
+  visualPool.anchor = null;
+  visualPool.builtFor = null;
   flow = 0;
 }

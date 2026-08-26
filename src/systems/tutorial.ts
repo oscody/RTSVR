@@ -49,6 +49,11 @@ import {
 import { GRID_SIZE, gridToWorld, setBoardDim, worldToGrid } from "./board.js";
 import { commandCenterHudTopWorldY } from "./commandCenterHud.js";
 import { makeNonInteractive } from "./sharedGeometry.js";
+import {
+  attachTutorialVisualPool,
+  createTutorialVisualPool,
+  detachTutorialVisualPool,
+} from "./tutorialVisualPool.js";
 import { liftAboveScene } from "./underAttackBanner.js";
 import {
   Building,
@@ -72,6 +77,7 @@ import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
 import { setEnvironmentDim } from "./skySystem.js";
 import {
   attachTutorialSpotlight,
+  detachTutorialSpotlight,
   clearSpotlightSubject,
   setSpotlightSubject,
   subjectRingRadius,
@@ -79,12 +85,16 @@ import {
 } from "./tutorialSpotlight.js";
 import { setTutorialAllowedKind, setTutorialTabHint } from "./tablet.js";
 import {
+  clearTutorialLeft,
   clearTutorialWaveGate,
+  markTutorialLeft,
   setTutorialWaveGate,
+  tutorialRequiresRestart,
   type TutorialSpawnAnchor,
 } from "./tutorialWaveGate.js";
 import {
   attachTutorialPathWorld,
+  detachTutorialPaths,
   clearTutorialPath,
   hideAllTutorialPaths,
   hideTutorialPath,
@@ -95,6 +105,7 @@ import {
 import { setTutorialFreeze } from "./tutorialFreeze.js";
 import {
   attachTutorialTurnCue,
+  detachTutorialTurnCue,
   clearTutorialTurnCue,
   hideTutorialTurnCue,
   showTutorialTurnCue,
@@ -102,12 +113,14 @@ import {
 import { alienRouteTiles } from "./wave.js";
 import {
   attachTutorialRingWorld,
+  detachTutorialRing,
   clearTutorialRing,
   hideTutorialRing,
   showTutorialRing,
 } from "./tutorialRing.js";
 import {
   attachTutorialArrowWorld,
+  detachTutorialArrows,
   clearTutorialArrow,
   hideTutorialArrow,
   hideTutorialArrowsFrom,
@@ -171,7 +184,11 @@ let cardMesh: Mesh | null = null;
 let cardMaterial: MeshBasicMaterial | null = null;
 let cardTexture: CanvasTexture | null = null;
 let cardContext: CanvasRenderingContext2D | null = null;
-let pooledRoot: Object3D | null = null;
+/**
+ * Anchor + detachable container for the card. See `tutorialVisualPool.ts` for
+ * why the mesh is a plain child rather than its own entity.
+ */
+const cardPool = createTutorialVisualPool("TutorialCard");
 
 /** Index into TUTORIAL_DRILLS; -1 once finished. */
 let drillIndex = 0;
@@ -412,7 +429,41 @@ function resolveSpawnAnchor(): TutorialSpawnAnchor | null {
 }
 
 /** Back to drill 1. Called by scenario reset — restart replays the tutorial. */
+/**
+ * Take every tutorial visual out of the live scene, keeping its GPU resources.
+ *
+ * The whole lifecycle in one rule: **Finish or Skip removes the visuals from
+ * the scene; Restart reuses them.** Nothing is left hidden-but-attached paying
+ * traversal, and nothing is duplicated on the next run.
+ *
+ * Detach rather than dispose, deliberately. The existing `dispose*` functions
+ * free geometries and materials, which is right for a genuine teardown and
+ * wrong for normal completion: re-creating the effects would pay a fresh
+ * allocation and shader-compile hitch on every Restart. `tutorialRing.ts:83-90`
+ * records the other half of that trap — the earlier rebuild-per-radius approach
+ * leaked entities because `removeFromParent()` detaches the mesh while the ECS
+ * entity survives. Pooling under a detachable non-entity group avoids both.
+ *
+ * Idempotent, so "skip before the tutorial ever drew anything" is a no-op
+ * rather than a special case.
+ */
+export function detachTutorialVisuals(): void {
+  detachTutorialVisualPool(cardPool);
+  detachTutorialArrows();
+  detachTutorialRing();
+  detachTutorialPaths();
+  detachTutorialTurnCue();
+  // Restores the dimmed subject materials before the light leaves, or a model
+  // darkened for a focus beat would stay dark for the rest of the match.
+  detachTutorialSpotlight();
+  setEnvironmentDim(1);
+  setBoardDim(1);
+}
+
 export function resetTutorial(): void {
+  // Restart is the one path that re-arms the tutorial. The pooled visuals
+  // re-attach lazily, the first time a drill actually needs each one.
+  clearTutorialLeft();
   drillIndex = 0;
   killsAtDrillStart = 0;
   sampleClock = 0;
@@ -669,6 +720,18 @@ export class TutorialSystem extends createSystem({
       this.goDormant(false);
       return;
     }
+    // Switched back on after finishing or skipping. Hold dormant rather than
+    // re-entering the script mid-match; the tablet tells the player that a
+    // Restart is what starts it. `goDormant(false)` is idempotent.
+    if (tutorialRequiresRestart()) {
+      this.goDormant(false);
+      return;
+    }
+    // Finished. `evaluate()` already detached the visuals and released the wave
+    // gate; without this the card, arrow, ring and path checks kept running
+    // every frame for the rest of the match, which is what made "tutorial over"
+    // still cost something.
+    if (drillIndex < 0) return;
     if (!this.ensureCard()) return;
 
     // 4 Hz. Nothing here needs frame-rate responsiveness, and the counts below
@@ -1342,6 +1405,14 @@ export class TutorialSystem extends createSystem({
     hideTutorialRing();
     hideTutorialTurnCue();
     hideAllTutorialPaths();
+    // `stillHoldingWaves` false means the tutorial is switched OFF, which is
+    // the skip case: detach, do not merely hide. When it is true the headset
+    // is simply off the face and the player is coming back to a live run, so
+    // hiding is right and detaching would cost a re-attach on their return.
+    if (!stillHoldingWaves) {
+      markTutorialLeft();
+      detachTutorialVisuals();
+    }
     // Dormant means the headset is off or the tutorial is disabled — either way
     // the player must not be left in a darkened world with no explanation.
     this.setWorldDim(1);
@@ -1409,6 +1480,11 @@ export class TutorialSystem extends createSystem({
       activeArrowTargets = resolvableTargets;
       this.setTabHint(null);
       this.setAllowedKind(null);
+      // The script is over: take the visuals out of the scene rather than
+      // leaving them hidden-but-attached paying traversal for the rest of the
+      // match. Restart re-attaches this same set.
+      markTutorialLeft();
+      detachTutorialVisuals();
       if (state && (state.getValue(TutorialState, "active") ?? false)) {
         state.setValue(TutorialState, "active", false);
         state.setValue(TutorialState, "drill", -1);
@@ -1734,10 +1810,10 @@ export class TutorialSystem extends createSystem({
   }
 
   private ensureCard(): boolean {
-    const root = boardState.boardRoot;
-    const rootObject = root?.object3D ?? null;
-    if (!root || !rootObject) return false;
-    if (pooledRoot === rootObject && cardMesh) return true;
+    // Builds once, then RE-ATTACHES after a detach so a Restart reuses the same
+    // canvas, texture and mesh instead of allocating a second card.
+    if (!attachTutorialVisualPool(cardPool, this.world)) return false;
+    if (cardMesh) return true;
     if (typeof document === "undefined") return false;
 
     const canvas = document.createElement("canvas");
@@ -1771,8 +1847,9 @@ export class TutorialSystem extends createSystem({
     // Its own draw-call category, so the tutorial's cost is visible in the
     // profiler's Draw line rather than hidden in the 100-mesh "static" bucket.
     cardMesh.userData.drawCat = "tutorial";
-    this.world.createTransformEntity(cardMesh, { parent: root });
-    pooledRoot = rootObject;
+    // Plain child of the pool, not an entity: TransformSystem re-parents
+    // entities every frame and would undo the detach.
+    cardPool.group.add(cardMesh);
     // Seed a sane placement so the first frame it becomes visible is already in
     // front of the viewer, rather than at the board origin for a quarter second.
     this.placeCard();
