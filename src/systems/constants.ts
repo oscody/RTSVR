@@ -954,3 +954,19 @@ export const TABLET_TUTORIAL_LOCKED_OPACITY = 0.3;
  * Anything smaller intersects the tablet — 0.34 put the panel *inside* it.
  */
 export const SETTINGS_PANEL_DROP = 0.48;
+
+/**
+ * Tablet thumbnail slots, in the UIKitML document's pixel space.
+ *
+ * These must match `.unit-image` / `.craft-image` in `ui/rts-tablet.uikitml`.
+ * They live here because `fitThumbnail` computes the rendered size from them —
+ * UIKit's `keepAspectRatio` ignores the CSS height, so the box is enforced in
+ * code rather than by the stylesheet. `tests/tablet-ui.test.ts` asserts the two
+ * stay in step.
+ */
+export const TABLET_UNIT_THUMB_WIDTH = 76;
+export const TABLET_UNIT_THUMB_HEIGHT = 70;
+export const TABLET_BUILD_THUMB_WIDTH = 72;
+export const TABLET_BUILD_THUMB_HEIGHT = 42;
+export const TABLET_CRAFT_THUMB_WIDTH = 78;
+export const TABLET_CRAFT_THUMB_HEIGHT = 70;

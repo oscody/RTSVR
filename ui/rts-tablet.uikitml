@@ -303,9 +303,14 @@
     color: #65737c;
   }
 
+  /* Width and height deliberately absent — they are set from code.
+     UIKit's <img> defaults to keepAspectRatio:true, which derives one axis from
+     the picture's own shape, so a box declared here can disagree with the image
+     and the taller sources overflow their card (astronautA is 40x72 and rendered
+     137px tall in a 70px box). `fitThumbnail` in tabletThumbnails.ts computes a
+     size that is consistent with each source's aspect; leaving the class silent
+     on size means there is nothing for it to conflict with. */
   .card-image {
-    width: 72px;
-    height: 42px;
     border-radius: 3px;
   }
 
@@ -369,9 +374,14 @@
     background-color: #e8f4f8;
   }
 
+  /* Width and height deliberately absent — they are set from code.
+     UIKit's <img> defaults to keepAspectRatio:true, which derives one axis from
+     the picture's own shape, so a box declared here can disagree with the image
+     and the taller sources overflow their card (astronautA is 40x72 and rendered
+     137px tall in a 70px box). `fitThumbnail` in tabletThumbnails.ts computes a
+     size that is consistent with each source's aspect; leaving the class silent
+     on size means there is nothing for it to conflict with. */
   .craft-image {
-    width: 78px;
-    height: 70px;
     border-radius: 3px;
   }
 
@@ -538,9 +548,14 @@
     background-color: #e8f4f8;
   }
 
+  /* Width and height deliberately absent — they are set from code.
+     UIKit's <img> defaults to keepAspectRatio:true, which derives one axis from
+     the picture's own shape, so a box declared here can disagree with the image
+     and the taller sources overflow their card (astronautA is 40x72 and rendered
+     137px tall in a 70px box). `fitThumbnail` in tabletThumbnails.ts computes a
+     size that is consistent with each source's aspect; leaving the class silent
+     on size means there is nothing for it to conflict with. */
   .unit-image {
-    width: 76px;
-    height: 70px;
     border-radius: 3px;
   }
 
@@ -742,12 +757,12 @@
   <div id="build-view" class="view" style="display: none;">
     <span id="builder-label" class="builder">Select an astronaut</span>
     <div class="card-row">
-      <button id="build-hangar" class="build-card" style="display: none;"><img class="card-image" src="/images/hangar_largeA.png"></img><span class="card-name">Hangar</span><span class="card-cost">40 crystals</span></button>
-      <button id="build-factory" class="build-card" style="display: none;"><img class="card-image" src="/images/kenney_style_aircraft_factory_preview.png"></img><span class="card-name">Aircraft Factory</span><span class="card-cost">60 crystals</span></button>
-      <button id="build-turret" class="build-card"><img class="card-image" src="/images/turret_single.png"></img><span class="card-name">Turret</span><span class="card-cost">30 crystals</span></button>
+      <button id="build-hangar" class="build-card" style="display: none;"><img id="build-image-hangar" class="card-image" src="/images/hangar_largeA.png"></img><span class="card-name">Hangar</span><span class="card-cost">40 crystals</span></button>
+      <button id="build-factory" class="build-card" style="display: none;"><img id="build-image-factory" class="card-image" src="/images/kenney_style_aircraft_factory_preview.png"></img><span class="card-name">Aircraft Factory</span><span class="card-cost">60 crystals</span></button>
+      <button id="build-turret" class="build-card"><img id="build-image-turret" class="card-image" src="/images/turret_single.png"></img><span class="card-name">Turret</span><span class="card-cost">30 crystals</span></button>
     </div>
     <div class="card-row">
-      <button id="build-astronaut" class="build-card"><img class="card-image" src="/images/astronautA.png"></img><span class="card-name">Astronaut</span><span class="card-cost">35 crystals</span></button>
+      <button id="build-astronaut" class="build-card"><img id="build-image-astronaut" class="card-image" src="/images/astronautA.png"></img><span class="card-name">Astronaut</span><span class="card-cost">35 crystals</span></button>
       <button id="build-relay" class="build-card locked-card" style="display: none;"><span class="locked-label">Relay - Locked</span></button>
       <button id="build-shield" class="build-card locked-card" style="display: none;"><span class="locked-label">Shield - Locked</span></button>
       <button id="build-lab" class="build-card locked-card" style="display: none;"><span class="locked-label">Research Lab - Locked</span></button>

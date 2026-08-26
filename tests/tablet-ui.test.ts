@@ -4,6 +4,21 @@ import test from "node:test";
 
 import { DEBUG_SETTINGS_CATALOG } from "../src/systems/debugSettingsCatalog.ts";
 import { SETTINGS_PANEL_DROP } from "../src/systems/constants.ts";
+import { ASTRONAUT_PRODUCTION_SPEC } from "../src/systems/craftCatalog.ts";
+import { BUILDING_CATALOG } from "../src/systems/buildingCatalog.ts";
+import {
+  fitThumbnail,
+  knownThumbnailSources,
+} from "../src/systems/tabletThumbnails.ts";
+import {
+  TABLET_BUILD_THUMB_HEIGHT,
+  TABLET_BUILD_THUMB_WIDTH,
+  TABLET_CRAFT_THUMB_HEIGHT,
+  TABLET_CRAFT_THUMB_WIDTH,
+  TABLET_UNIT_THUMB_HEIGHT,
+  TABLET_UNIT_THUMB_WIDTH,
+} from "../src/systems/constants.ts";
+
 
 test("tablet avoids unsupported multi-value Yoga spacing", () => {
   const source = readFileSync(
@@ -185,5 +200,135 @@ test("the settings document is tall enough for its rows", () => {
   assert.ok(
     declared >= needed,
     `settings-column is ${declared}px but ${perColumn} rows need ${needed}px`,
+  );
+});
+
+// ── Thumbnail letterboxing ─────────────────────────────────────────────────
+
+test("every thumbnail fits inside its slot without distortion", () => {
+  // UIKit's <img> defaults to keepAspectRatio:true, which overrides the CSS
+  // height with width/aspect. astronautA.png (40x72) rendered 137px tall in a
+  // 70px box and spilled out of its card. fitThumbnail computes both axes so
+  // there is nothing left for keepAspectRatio to override.
+  for (const src of knownThumbnailSources()) {
+    for (const [w, h] of [
+      [TABLET_UNIT_THUMB_WIDTH, TABLET_UNIT_THUMB_HEIGHT],
+      [TABLET_CRAFT_THUMB_WIDTH, TABLET_CRAFT_THUMB_HEIGHT],
+      [TABLET_BUILD_THUMB_WIDTH, TABLET_BUILD_THUMB_HEIGHT],
+    ]) {
+      const fit = fitThumbnail(src, w, h);
+      assert.ok(fit.width <= w, `${src} is ${fit.width}px wide in a ${w}px box`);
+      assert.ok(fit.height <= h, `${src} is ${fit.height}px tall in a ${h}px box`);
+      // One axis must touch the bound, or the image is smaller than it needs to be.
+      assert.ok(
+        fit.width === w || fit.height === h,
+        `${src} does not fill either axis of ${w}x${h}`,
+      );
+    }
+  }
+});
+
+test("the astronaut specifically fits, since that is the reported bug", () => {
+  const fit = fitThumbnail(
+    "/images/astronautA.png",
+    TABLET_UNIT_THUMB_WIDTH,
+    TABLET_UNIT_THUMB_HEIGHT,
+  );
+  // 40x72 letterboxed into 76x70 -> height-bound, width follows.
+  assert.equal(fit.height, TABLET_UNIT_THUMB_HEIGHT);
+  assert.equal(fit.width, Math.round(TABLET_UNIT_THUMB_HEIGHT * (40 / 72)));
+  assert.ok(fit.width < TABLET_UNIT_THUMB_WIDTH);
+});
+
+test("the intrinsic aspect table matches the real PNG headers", () => {
+  // The table is hardcoded because the images are static build assets. This is
+  // what stops it going stale: a re-export at a different size fails here.
+  for (const src of knownThumbnailSources()) {
+    const file = readFileSync(new URL(`../public${src}`, import.meta.url));
+    // PNG IHDR: width and height are big-endian uint32 at byte offsets 16, 20.
+    const width = file.readUInt32BE(16);
+    const height = file.readUInt32BE(20);
+    const fit = fitThumbnail(src, 1000, 1000);
+    const declared = fit.width / fit.height;
+    const actual = width / height;
+    // RELATIVE tolerance. The aspects span 0.52 to 8.60, and fitThumbnail
+    // rounds to whole pixels, so an absolute epsilon that suits 0.52 is far too
+    // tight at 8.60 (rounding alone moves it 0.02 there).
+    assert.ok(
+      Math.abs(declared - actual) / actual < 0.01,
+      `${src} is ${width}x${height} (${actual.toFixed(2)}) on disk but the ` +
+        `table implies ${declared.toFixed(2)}`,
+    );
+  }
+});
+
+test("image classes declare no size — the fit is computed", () => {
+  const tablet = readFileSync(
+    new URL("../ui/rts-tablet.uikitml", import.meta.url),
+    "utf8",
+  );
+  const box = (cls: string): [number, number] => {
+    const rule = new RegExp(`\\.${cls} \\{[^}]*\\}`).exec(tablet)?.[0] ?? "";
+    return [
+      Number(/width: (\d+)px/.exec(rule)?.[1] ?? -1),
+      Number(/height: (\d+)px/.exec(rule)?.[1] ?? -1),
+    ];
+  };
+  // The classes must NOT declare a size. A box declared there can disagree
+  // with the image's own aspect, which is the bug: UIKit derives one axis from
+  // the picture and the taller sources overflow. Size comes from fitThumbnail.
+  assert.deepEqual(box("unit-image"), [-1, -1]);
+  assert.deepEqual(box("craft-image"), [-1, -1]);
+  assert.deepEqual(box("card-image"), [-1, -1]);
+});
+
+test("every image the tablet can show is sized from code", () => {
+  const tablet = readFileSync(
+    new URL("../ui/rts-tablet.uikitml", import.meta.url),
+    "utf8",
+  );
+  // An <img> with no id cannot be reached by setProps, so it would keep the
+  // unsized class and fall back to UIKit's aspect-derived height. This is what
+  // the Build tab was doing — its four cards are static markup.
+  // Strip /* */ comments first — the explanatory notes in the stylesheet
+  // mention "<img>" and would otherwise be matched as markup.
+  const markup = tablet.replace(/\/\*[\s\S]*?\*\//g, "");
+  const images = markup.match(/<img[^>]*>/g) ?? [];
+  for (const img of images) {
+    assert.match(
+      img,
+      /id="/,
+      `image without an id cannot be sized from code: ${img.slice(0, 90)}`,
+    );
+  }
+});
+
+test("every build-image id in the markup is sized by code", () => {
+  const tablet = readFileSync(
+    new URL("../ui/rts-tablet.uikitml", import.meta.url),
+    "utf8",
+  );
+
+  // The regression this guards: the astronaut is NOT in BUILDING_CATALOG, so a
+  // sizing loop over that catalog skipped it. With no size in .card-image it
+  // rendered at zero and disappeared from the Build tab entirely.
+  const inMarkup = [...tablet.matchAll(/id="build-image-([a-z]+)"/g)].map(
+    (m) => m[1],
+  );
+  assert.ok(inMarkup.length > 0, "no build-image ids found");
+
+  const sized = new Set([
+    ...BUILDING_CATALOG.map((spec) => spec.kind),
+    ASTRONAUT_PRODUCTION_SPEC.kind,
+  ]);
+  for (const kind of inMarkup) {
+    assert.ok(
+      sized.has(kind),
+      `build-image-${kind} exists in the markup but no catalog entry sizes it`,
+    );
+  }
+  assert.ok(
+    inMarkup.includes("astronaut"),
+    "the astronaut card is the one that regressed; keep it covered",
   );
 });

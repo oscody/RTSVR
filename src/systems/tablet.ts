@@ -31,6 +31,7 @@ import {
   currentUnitMaxHealth,
 } from "./debugStatOverrides.js";
 import { DEBUG_SETTINGS_CATALOG } from "./debugSettingsCatalog.js";
+import { fitThumbnail } from "./tabletThumbnails.js";
 import { updateHealthBar } from "./healthBar.js";
 import {
   TABLET_CARD_BORDER,
@@ -71,6 +72,12 @@ import {
   TABLET_TAB_INACTIVE_BACKGROUND,
   TABLET_TAB_INACTIVE_BORDER,
   SETTINGS_PANEL_DROP,
+  TABLET_BUILD_THUMB_HEIGHT,
+  TABLET_BUILD_THUMB_WIDTH,
+  TABLET_CRAFT_THUMB_HEIGHT,
+  TABLET_CRAFT_THUMB_WIDTH,
+  TABLET_UNIT_THUMB_HEIGHT,
+  TABLET_UNIT_THUMB_WIDTH,
   TABLET_TUTORIAL_LOCKED_OPACITY,
   TABLET_UNIT_BACKGROUND,
   TABLET_Y_OFFSET,
@@ -818,6 +825,7 @@ export class TabletSystem extends createSystem({
       });
     }
     on("build-astronaut", () => this.selectBuildUnit(tablet));
+    this.sizeBuildThumbnails();
     for (let slot = 0; slot < 4; slot += 1) {
       on(`craft-card-${slot}`, () => {
         const page = tablet.getValue(TabletState, "craftPage") ?? 0;
@@ -1078,6 +1086,43 @@ export class TabletSystem extends createSystem({
     object.position.set(0, -SETTINGS_PANEL_DROP, TABLET_SCREEN_Z_OFFSET);
   }
 
+  /**
+   * Size the Build tab's four card images, once, when the document loads.
+   *
+   * They are static markup — unlike the unit and craft thumbnails, no code ever
+   * assigns their `src` — so there is no natural place to size them alongside a
+   * source change. Doing it here rather than inside a render pass matters:
+   * the first attempt hung this off `applySelectedCard`, which iterates
+   * `BUILDING_CATALOG.filter(item => !item.locked)`. **The astronaut is not a
+   * building** (`tablet.ts:827,1252` handle it from `ASTRONAUT_PRODUCTION_SPEC`),
+   * so it was filtered out, never sized, and — with the size removed from
+   * `.card-image` — rendered at zero and vanished from the tab.
+   *
+   * The list is derived from the catalogs rather than hardcoded, and
+   * `tests/tablet-ui.test.ts` checks it covers every `build-image-*` id in the
+   * markup, so adding a card without sizing it fails the suite.
+   */
+  private sizeBuildThumbnails(): void {
+    const entries: Array<[string, string | undefined]> = [
+      ...BUILDING_CATALOG.map(
+        (spec) => [spec.kind, spec.image] as [string, string | undefined],
+      ),
+      [ASTRONAUT_PRODUCTION_SPEC.kind, ASTRONAUT_PRODUCTION_SPEC.image],
+    ];
+    for (const [kind, image] of entries) {
+      if (!image) continue;
+      const fit = fitThumbnail(
+        image,
+        TABLET_BUILD_THUMB_WIDTH,
+        TABLET_BUILD_THUMB_HEIGHT,
+      );
+      this.setProps(`build-image-${kind}`, image, {
+        width: fit.width,
+        height: fit.height,
+      });
+    }
+  }
+
   private setView(tablet: Entity, view: string, status: string): void {
     tablet.setValue(TabletState, "view", view);
     // Switching tabs drops the site selection, so Cancel can never act on
@@ -1264,7 +1309,16 @@ export class TabletSystem extends createSystem({
         opacity: craftAllowed ? 1 : TABLET_TUTORIAL_LOCKED_OPACITY,
       });
       if (!spec) continue;
-      this.setProps(`craft-image-${slot}`, spec.image, { src: spec.image });
+      const craftFit = fitThumbnail(
+        spec.image,
+        TABLET_CRAFT_THUMB_WIDTH,
+        TABLET_CRAFT_THUMB_HEIGHT,
+      );
+      this.setProps(`craft-image-${slot}`, spec.image, {
+        src: spec.image,
+        width: craftFit.width,
+        height: craftFit.height,
+      });
       this.setText(`craft-name-${slot}`, spec.label);
       this.setText(`craft-cost-${slot}`, `${spec.cost} crystals`);
     }
@@ -1449,9 +1503,19 @@ export class TabletSystem extends createSystem({
           cursor: "pointer",
         });
         const unitSrc = this.unitImage(entry.entity, entry.kind);
+        // Size computed rather than left to CSS: UIKit's keepAspectRatio
+        // overrides the declared height, so a portrait source overflows its
+        // card. See tabletThumbnails.ts.
+        const unitFit = fitThumbnail(
+          unitSrc,
+          TABLET_UNIT_THUMB_WIDTH,
+          TABLET_UNIT_THUMB_HEIGHT,
+        );
         this.setProps(`unit-image-${slot}`, `flex:${unitSrc}`, {
           display: "flex",
           src: unitSrc,
+          width: unitFit.width,
+          height: unitFit.height,
         });
         this.setText(`unit-name-${slot}`, this.unitLabel(entry.kind));
         this.setText(
