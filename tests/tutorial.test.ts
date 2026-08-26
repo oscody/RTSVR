@@ -1,3 +1,9 @@
+import {
+  TUTORIAL_CARD_BACKGROUND,
+  TUTORIAL_CARD_DEAD_END_BACKGROUND,
+  TUTORIAL_CARD_DIM_BACKGROUND,
+  TUTORIAL_CARD_RECOVERY_BACKGROUND,
+} from "../src/systems/constants.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -88,10 +94,10 @@ const drillById = (id: string): TutorialDrill => {
 
 // ── The flag ────────────────────────────────────────────────────────────────
 
-test("the tutorial is on by default", () => {
+test("the tutorial is off by default", () => {
   // TUTORIAL_ENABLED seeds DebugSettings.tutorialEnabled, which is what the
   // runtime reads — so this is the default, not the live value.
-  assert.equal(TUTORIAL_ENABLED, true);
+  assert.equal(TUTORIAL_ENABLED, false);
 });
 
 test("the settings tab exposes a tutorial toggle", () => {
@@ -1393,4 +1399,63 @@ test("re-enabling the tutorial mid-match requires a Restart", () => {
   assert.match(tutorial, /clearTutorialLeft\(\);/);
   assert.match(tutorial, /if \(tutorialRequiresRestart\(\)\) \{/);
   assert.match(tablet, /Restart to begin Tutorial/);
+});
+
+// ── Finding B: card vs tablet ──────────────────────────────────────────────
+
+test("the tutorial card is near-opaque so the tablet cannot bleed through", () => {
+  // At 0.90 the Quest capture showed profiler rows and the Build tab rendering
+  // straight through the closing card. The material carries no `opacity`, so
+  // these canvas alphas are the only source of translucency.
+  const alphaOf = (fill: string): number =>
+    Number(/rgba\([^)]*,\s*([0-9.]+)\)/.exec(fill)?.[1]);
+  for (const [name, fill] of [
+    ["TUTORIAL_CARD_BACKGROUND", TUTORIAL_CARD_BACKGROUND],
+    ["TUTORIAL_CARD_RECOVERY_BACKGROUND", TUTORIAL_CARD_RECOVERY_BACKGROUND],
+    ["TUTORIAL_CARD_DEAD_END_BACKGROUND", TUTORIAL_CARD_DEAD_END_BACKGROUND],
+    ["TUTORIAL_CARD_DIM_BACKGROUND", TUTORIAL_CARD_DIM_BACKGROUND],
+  ] as const) {
+    const alpha = alphaOf(fill);
+    assert.ok(
+      Number.isFinite(alpha),
+      `${name} is not an rgba() string: ${fill}`,
+    );
+    assert.ok(
+      alpha >= 0.97,
+      `${name} alpha is ${alpha}; below 0.97 the tablet reads through the card`,
+    );
+  }
+});
+
+test("the card steps clear of the tablet when placed", () => {
+  const tutorial = readFileSync(
+    new URL("../src/systems/tutorial.ts", import.meta.url),
+    "utf8",
+  );
+  // Must run inside placeCard, before the anchor is converted to board space —
+  // afterwards the offset would be applied in the wrong coordinate system.
+  assert.match(
+    tutorial,
+    /this\.stepClearOfTablet\(\);[\s\S]{0,120}rootObject\.worldToLocal\(tmpAnchor\)/,
+    "stepClearOfTablet must run before worldToLocal",
+  );
+  // Zero allocation: it reuses the module-level temporaries like every other
+  // per-placement helper here.
+  const body = /private stepClearOfTablet\(\): void \{[\s\S]*?\n  \}/.exec(
+    tutorial,
+  )?.[0];
+  assert.ok(body, "stepClearOfTablet not found");
+  assert.doesNotMatch(body!, /new Vector3\(/);
+});
+
+test("the tablet clearance is derived from the two widths, not typed", () => {
+  const constants = readFileSync(
+    new URL("../src/systems/constants.ts", import.meta.url),
+    "utf8",
+  );
+  // Resizing the card or the tablet must move the clearance with it.
+  assert.match(
+    constants,
+    /TUTORIAL_CARD_TABLET_CLEARANCE =\s*\n?\s*TUTORIAL_CARD_WIDTH \/ 2 \+ TABLET_FRAME_SIZE\[0\] \/ 2/,
+  );
 });

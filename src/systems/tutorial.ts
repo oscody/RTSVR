@@ -34,6 +34,8 @@ import {
   TUTORIAL_CARD_MIN_DISTANCE,
   TUTORIAL_CARD_BOARD_CLEARANCE,
   TUTORIAL_CARD_SUBJECT_CLEARANCE,
+  TUTORIAL_CARD_TABLET_CLEARANCE,
+  TUTORIAL_CARD_TABLET_DEPTH_LIMIT,
   TUTORIAL_CARD_VIEW_ANGLE_MIN,
   TUTORIAL_CARD_WIDTH,
   TUTORIAL_GAZE_DOT_MIN,
@@ -290,6 +292,8 @@ const tmpFocus = new Vector3();
 let focusResolved = false;
 /** The card's own facing, for the leash's view-angle check. */
 const tmpCardFacing = new Vector3();
+const tmpTablet = new Vector3();
+const tmpRight = new Vector3();
 /** Board-root world position, for the card's ground clamp. */
 const tmpBoardTop = new Vector3();
 // Scratch for the arrow resolvers. Each has ONE owner, because they nest:
@@ -1802,11 +1806,55 @@ export class TutorialSystem extends createSystem({
       );
     }
 
+    this.stepClearOfTablet();
+
     // The mesh hangs off the board root, so convert into that space.
     rootObject.worldToLocal(tmpAnchor);
     mesh.position.copy(tmpAnchor);
     // Yaw-only turn back toward the viewer.
     mesh.rotation.set(0, Math.atan2(-tmpForward.x, -tmpForward.z), 0);
+  }
+
+  /**
+   * Slide the card sideways if the tablet is sitting where it wants to go.
+   *
+   * The tablet rides at the player's right hand and the card is placed dead
+   * ahead, so the two share view space whenever the tablet is raised — the
+   * Quest capture at t=192s shows the closing card and the Build tab overlaid.
+   * Making the card opaque stops the text bleeding through; this stops the
+   * overlap. Finding B of `plan/2026-08-20-Quest-Tutorial-Run-Fixes-Plan.md`.
+   *
+   * Reads and writes `tmpAnchor`, `tmpCamera` and `tmpForward`, which
+   * `placeCard` has already filled — it is a step of that method, not a
+   * standalone one, and it allocates nothing.
+   *
+   * **Placement-time only.** It runs when the card is placed or re-placed, not
+   * every frame: a card that dodged continuously would jitter as the hand moved,
+   * and `keepCardInView` only re-places on real drift. Raising the tablet while
+   * the card is already well-placed therefore does not move it — the overlap
+   * this fixes is the common case, where the tablet is already up when the next
+   * drill begins.
+   */
+  private stepClearOfTablet(): void {
+    const tablet = boardState.tablet?.object3D;
+    if (!tablet?.visible) return;
+    tablet.getWorldPosition(tmpTablet);
+    tmpTablet.sub(tmpCamera);
+
+    // Behind the viewer, or far enough away to be no threat to the card.
+    const depth = tmpTablet.dot(tmpForward);
+    if (depth <= 0 || depth > TUTORIAL_CARD_TABLET_DEPTH_LIMIT) return;
+
+    // Right-hand axis in the ground plane. forward (0,0,-1) gives (1,0,0).
+    tmpRight.set(-tmpForward.z, 0, tmpForward.x);
+    const lateral = tmpTablet.dot(tmpRight);
+    if (Math.abs(lateral) >= TUTORIAL_CARD_TABLET_CLEARANCE) return;
+
+    // Opposite side of the view from the tablet. A dead-centre tablet pushes
+    // the card LEFT, because the tablet is authored for the right hand and its
+    // grab handle extends further that way.
+    const side = lateral >= 0 ? -1 : 1;
+    tmpAnchor.addScaledVector(tmpRight, side * TUTORIAL_CARD_TABLET_CLEARANCE);
   }
 
   private ensureCard(): boolean {

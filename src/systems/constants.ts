@@ -617,11 +617,44 @@ export const TUTORIAL_CARD_BOARD_CLEARANCE = TILE_SIZE * 1.32;
 // 1.5 m it landed under the base's top edge and covered the very thing the
 // opening card names. Measuring the subject is what makes it height-proof.
 export const TUTORIAL_CARD_SUBJECT_CLEARANCE = TILE_SIZE * 0.33;
+
+/**
+ * How far sideways the card steps to clear the tablet, in metres.
+ *
+ * Half the card plus half the tablet frame plus a 40 mm gap, so the two cannot
+ * touch: 0.628/2 + 0.700/2 + 0.04. Derived from the two widths rather than
+ * typed as a number, so resizing either moves this with it.
+ *
+ * The tablet rides at the player's right hand and the card is placed dead
+ * ahead, so they share view space whenever the tablet is raised to be read —
+ * finding B of `plan/2026-08-20-Quest-Tutorial-Run-Fixes-Plan.md`.
+ */
+export const TUTORIAL_CARD_TABLET_CLEARANCE =
+  TUTORIAL_CARD_WIDTH / 2 + TABLET_FRAME_SIZE[0] / 2 + 0.04;
+
+/**
+ * Only a tablet nearer than this can hide the card, so a tablet parked across
+ * the board never pushes it aside. A little beyond the card's own distance.
+ */
+export const TUTORIAL_CARD_TABLET_DEPTH_LIMIT = TUTORIAL_CARD_DISTANCE + 0.5;
 export const TUTORIAL_CARD_TEXTURE_WIDTH = 1024;
 export const TUTORIAL_CARD_TEXTURE_HEIGHT = 320;
 /** Colour of the card's "saving toward" progress line. */
 export const TUTORIAL_CARD_PROGRESS_COLOR = "#8fe3b0";
-export const TUTORIAL_CARD_BACKGROUND = "rgba(10, 18, 24, 0.9)";
+/**
+ * Card panel fills. **All four are near-opaque on purpose** — see finding B of
+ * `plan/2026-08-20-Quest-Tutorial-Run-Fixes-Plan.md`.
+ *
+ * At 0.90 the tablet's text rendered straight through the card: a Quest capture
+ * at t=192s shows profiler rows and the Build tab's "astronaut will come"
+ * bleeding through the closing card mid-sentence. The card's material carries no
+ * `opacity` of its own, so these alphas were the only source of translucency —
+ * which makes this the whole of that fix.
+ *
+ * Not a flat 1.0: a hairline of the scene at the rounded corners keeps the card
+ * looking seated in the world rather than pasted onto the lens.
+ */
+export const TUTORIAL_CARD_BACKGROUND = "rgba(10, 18, 24, 0.98)";
 // The tutorial gets a hue of its own, distinct from every gameplay marker, so
 // "the tutorial is telling you something" never reads as a game state.
 export const TUTORIAL_CARD_BORDER = "#7dd3fc";
@@ -634,10 +667,10 @@ export const TUTORIAL_CARD_TITLE_COLOR = "#7dd3fc";
 // them. Amber for a setback you can still recover from, red for a run that
 // cannot continue — the same vocabulary the rest of the game already uses for
 // caution and danger.
-export const TUTORIAL_CARD_RECOVERY_BACKGROUND = "rgba(38, 26, 8, 0.94)";
+export const TUTORIAL_CARD_RECOVERY_BACKGROUND = "rgba(38, 26, 8, 0.98)";
 export const TUTORIAL_CARD_RECOVERY_BORDER = "#f59e0b";
 export const TUTORIAL_CARD_RECOVERY_TITLE_COLOR = "#fcd34d";
-export const TUTORIAL_CARD_DEAD_END_BACKGROUND = "rgba(42, 12, 12, 0.95)";
+export const TUTORIAL_CARD_DEAD_END_BACKGROUND = "rgba(42, 12, 12, 0.98)";
 export const TUTORIAL_CARD_DEAD_END_BORDER = "#ef4444";
 export const TUTORIAL_CARD_DEAD_END_TITLE_COLOR = "#fca5a5";
 export const TUTORIAL_CARD_BODY_COLOR = "#e8f4f8";
@@ -803,7 +836,7 @@ export const TUTORIAL_SPOTLIGHT_BOOST = 3.0;
  * than standing out. Brightening the panel and the border is what makes the
  * "floating sign" read as lit.
  */
-export const TUTORIAL_CARD_DIM_BACKGROUND = "rgba(22, 44, 58, 0.96)";
+export const TUTORIAL_CARD_DIM_BACKGROUND = "rgba(22, 44, 58, 0.98)";
 export const TUTORIAL_CARD_DIM_BORDER = "#bde9ff";
 
 // The tutorial spotlight's own light. See tutorialSpotlight.ts for why a real
