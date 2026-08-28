@@ -14,7 +14,7 @@ import type {
   MiningGridPosition,
   MiningStage,
 } from "./miningRules.js";
-import { matchAwaitingStart } from "./matchStart.js";
+import { matchAcceptsCommands } from "./matchStart.js";
 import { findApproachTile } from "./navigation.js";
 import {
   DebugSettings,
@@ -50,11 +50,16 @@ export class MiningSystem extends createSystem({
   };
 
   update(delta: number): void {
-    // Held before the player starts. Without this a miner keeps working through
-    // the landing page and the treasury grows in proportion to how long someone
-    // spent reading it — the same "the game plays itself" defect the start gate
-    // exists to close, just in the economy rather than the waves.
-    if (matchAwaitingStart()) return;
+    // Held at both ends of the match.
+    //
+    // Before the start: a miner working through the landing page grows the
+    // treasury in proportion to how long the player read it — the same "the
+    // game plays itself" defect the start gate exists to close, in the economy
+    // rather than the waves.
+    //
+    // After it: crystals arriving during a defeat screen change a total the
+    // player is still looking at.
+    if (!matchAcceptsCommands()) return;
     for (const miner of this.queries.miners.entities) {
       const stage = (miner.getValue(MinerState, "stage") ?? "idle") as MiningStage;
       if (stage === "idle") continue;

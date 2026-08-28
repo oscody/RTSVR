@@ -64,6 +64,28 @@ export function matchAwaitingStart(): boolean {
 }
 
 /**
+ * True only while the match is actually running.
+ *
+ * The complement of "the match is over, or has not begun". Gameplay that
+ * changes the world — commands, production, construction, mining — asks this
+ * so it stops at both ends: **before** the player starts (`awaiting-start`)
+ * and **after** victory or defeat, where units were still accepting orders and
+ * factories were still finishing craft over a decided match.
+ *
+ * `restarting` is excluded too: a scenario reset is mid-teardown, and acting on
+ * entities it is about to dispose is how dangling handles are made.
+ *
+ * **Not for UI.** The tablet must stay live when the match is over or the
+ * player cannot press Restart — its handlers live in `TabletSystem`, which
+ * deliberately does not consult this.
+ */
+export function matchAcceptsCommands(): boolean {
+  const source = boardState.waveSource;
+  if (!source) return false;
+  return (source.getValue(MatchState, "status") ?? "") === "playing";
+}
+
+/**
  * Release the gate when an immersive session begins, whatever started it.
  *
  * `VisibilityState.NonImmersive` is the 2D preview; anything else means a

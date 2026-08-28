@@ -25,6 +25,7 @@ import {
 } from "./craftRules.js";
 import { buildRateMultiplier } from "./constructionRules.js";
 import { releaseSiteBuilders, takeQueueOrder } from "./construction.js";
+import { matchAcceptsCommands } from "./matchStart.js";
 import { attachQueueBadge } from "./queueBadge.js";
 import { markOwnedResources, releaseEntity } from "./entityTeardown.js";
 import {
@@ -162,6 +163,11 @@ export class CraftProductionSystem extends createSystem({
   private readonly completed: Entity[] = [];
 
   update(delta: number): void {
+    // Held at both ends of the match. Before the player starts, and after
+    // victory or defeat — a factory finishing a craft over a decided match
+    // spawns a unit onto a board nobody is playing, and on defeat it can
+    // resurrect the roster the defeat check just emptied.
+    if (!matchAcceptsCommands()) return;
     for (const site of this.queries.sites.entities) {
       observePlacedSite(site.index, Consumer.Production);
       // Crafts now wait for an astronaut, and go faster with more of them.

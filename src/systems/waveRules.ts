@@ -1,6 +1,6 @@
 import type { GridPosition } from "./navigation.js";
 
-export const INITIAL_WAVE_DELAY_SECONDS = 30;
+export const INITIAL_WAVE_DELAY_SECONDS = 5;
 export const ALIEN_MOVE_SPEED = 0.1;
 export const ALIEN_ARRIVAL_EPSILON = 0.005;
 export const ALIEN_REPATH_DELAY = 0.2;

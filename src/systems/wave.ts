@@ -314,6 +314,29 @@ export class WaveSystem extends createSystem({
     }
   }
 
+  /**
+   * Build one alien, absorbing a failure rather than aborting the wave.
+   *
+   * One bad spawn — a missing asset, a tile that stopped being placeable
+   * between preparation and activation — used to take every alien after it with
+   * it, because the loop had no guard. The wave arrives short instead.
+   */
+  private buildAlienSafely(spawn: ResolvedWaveSpawn): void {
+    try {
+      this.createPreparedAlien(spawn);
+    } catch (error) {
+      traceError(
+        Reason.PreparationFailed,
+        this.clock.waveNumber,
+        `wave ${this.clock.waveNumber}: one alien failed to build; the rest of the wave continues`,
+      );
+      console.warn(
+        `[WaveBuild] wave ${this.clock.waveNumber}: alien build failed; continuing`,
+        error,
+      );
+    }
+  }
+
   private spawnWaveIfNeeded(source: Entity): void {
     if (
       (source.getValue(WaveSource, "spawnedWaveNumber") ?? NO_WAVE) ===
@@ -333,21 +356,48 @@ export class WaveSystem extends createSystem({
     let spawns: ResolvedWaveSpawn[];
     let buildMs: number;
     let activationFinishMs: number;
+    // Activation must not throw.
+    //
+    // Countdown preparation already degrades safely — it catches, records
+    // `preparationFailedWaveNumber` and returns so activation can retry. The
+    // retry itself did not, and neither did alien creation on either path: an
+    // exception here escapes `WaveSystem.update` and takes the whole frame with
+    // it, mid-wave, leaving `spawnedWaveNumber` unset so the next frame tries
+    // again and throws again. A wave that cannot be placed would wedge the
+    // match rather than arriving short.
+    //
+    // The contract now is: **build whatever can be built, mark the wave spawned
+    // either way.** A short wave is recoverable; a wedged frame loop is not.
     if (this.preparedWaveNumber === this.clock.waveNumber) {
       spawns = this.pendingSpawns;
       const finishStart = performance.now();
       while (this.spawnCursor < spawns.length) {
-        this.createPreparedAlien(spawns[this.spawnCursor]);
+        this.buildAlienSafely(spawns[this.spawnCursor]);
         this.spawnCursor += 1;
       }
       activationFinishMs = performance.now() - finishStart;
       buildMs = this.prepMs + activationFinishMs;
     } else {
       const buildStart = performance.now();
-      spawns = resolveWaveSpawns(spec, {
-        canSpawnAt: (x, y) => this.canSpawnAlienAt(x, y),
-      });
-      for (const spawn of spawns) this.createPreparedAlien(spawn);
+      try {
+        spawns = resolveWaveSpawns(spec, {
+          canSpawnAt: (x, y) => this.canSpawnAlienAt(x, y),
+        });
+      } catch (error) {
+        // The retry after a failed preparation is the likeliest place to land
+        // here, and it is exactly where the old code threw.
+        spawns = [];
+        traceError(
+          Reason.PreparationFailed,
+          this.clock.waveNumber,
+          `wave ${this.clock.waveNumber} activation could not resolve spawns; releasing an empty wave`,
+        );
+        console.warn(
+          `[WaveBuild] wave ${this.clock.waveNumber}: activation failed to resolve spawns; the wave will be empty`,
+          error,
+        );
+      }
+      for (const spawn of spawns) this.buildAlienSafely(spawn);
       activationFinishMs = performance.now() - buildStart;
       buildMs = activationFinishMs;
     }
@@ -459,7 +509,12 @@ export class WaveSystem extends createSystem({
     );
     while (this.spawnCursor < end) {
       const prepStart = performance.now();
-      this.createPreparedAlien(this.pendingSpawns[this.spawnCursor]);
+      // Guarded like the two activation paths, and this is the one that matters
+      // most: countdown preparation builds the bulk of every wave, a few aliens
+      // per frame, so it is the likeliest place for a bad spawn to surface.
+      // `createPreparedAlien` throws outright when the board root is missing.
+      // Unguarded, that escaped `WaveSystem.update` and took the frame with it.
+      this.buildAlienSafely(this.pendingSpawns[this.spawnCursor]);
       this.prepMs += performance.now() - prepStart;
       this.spawnCursor += 1;
     }

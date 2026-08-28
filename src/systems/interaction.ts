@@ -48,6 +48,9 @@ import {
   toggleUnitSelection,
   updateCommandGridVisibility,
 } from "./selection.js";
+import { matchAcceptsCommands } from "./matchStart.js";
+import {
+} from "./selection.js";
 import { assignGroupDestinations } from "./selectionRules.js";
 import {
   BoardSurface,
@@ -409,6 +412,15 @@ export class InteractionSystem extends createSystem({
    * callback and is deliberately not inspected or polled here.
    */
   private observeWorldPress(target: Entity, action: (corr: number) => void): void {
+    // Every gameplay press in this system funnels through here, so this is the
+    // one place that has to refuse them once the match is decided. Without it
+    // units keep taking orders and sites keep being cancelled over a finished
+    // match — the result panel is up and the board is still playable behind it.
+    //
+    // The tablet is untouched: its handlers live in TabletSystem, so Restart
+    // still works. That is the whole reason this gate is here and not on the
+    // system's update.
+    if (!matchAcceptsCommands()) return;
     const corr = beginWorldInteraction(target.index);
     const tablet = boardState.tablet;
     const beforeRevision = tablet?.getValue(TabletState, "revision") ?? -1;

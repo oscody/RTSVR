@@ -37,6 +37,7 @@ import {
   type SiteCycleState,
   type SiteStage,
 } from "./constructionRules.js";
+import { matchAcceptsCommands } from "./matchStart.js";
 import { findGridPath, type GridPosition } from "./navigation.js";
 import { markOwnedResources, releaseEntity } from "./entityTeardown.js";
 import {
@@ -394,6 +395,11 @@ export class ConstructionSystem extends createSystem({
   private readonly cameraWorld = new Vector3();
 
   update(delta: number): void {
+    // Same gate as craft production: no building should complete, and no
+    // builder should be assigned, once the match is decided or before it has
+    // begun. All four steps mutate the board, so the gate covers the whole
+    // update rather than any one of them.
+    if (!matchAcceptsCommands()) return;
     this.advanceBuilders();
     this.advanceSites(delta);
     this.assignIdleBuilders();

@@ -71,10 +71,12 @@ test("every entry route releases the gate", () => {
   assert.match(source("../index.ts"), /attachMatchStart\(world\)/);
 });
 
-test("the economy is held too, not just the waves", () => {
-  // A miner working through the landing page would grow the treasury in
-  // proportion to how long the player read it.
-  assert.match(source("mining.ts"), /if \(matchAwaitingStart\(\)\) return;/);
+test("the economy is held at BOTH ends of the match", () => {
+  // Before the start: a miner working through the landing page grows the
+  // treasury in proportion to how long the player read it.
+  // After it: crystals arriving during a defeat screen change a total the
+  // player is still looking at.
+  assert.match(source("mining.ts"), /if \(!matchAcceptsCommands\(\)\) return;/);
 });
 
 test("a restart begins playing immediately", () => {

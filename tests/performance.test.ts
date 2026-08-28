@@ -144,7 +144,11 @@ test("waves prepare incrementally while reserves stay cheap", () => {
   assert.match(constants, /WAVE_PREP_PER_FRAME = 1/);
   assert.match(wave, /this\.prepareWaveIncrementally\(source\)/);
   assert.match(wave, /this\.spawnCursor \+ WAVE_PREP_PER_FRAME/);
-  assert.match(wave, /this\.createPreparedAlien\(this\.pendingSpawns/);
+  // Was `this.createPreparedAlien(this.pendingSpawns[...])`. Now routed through
+  // `buildAlienSafely`, which is the same per-frame drain with a guard around
+  // it — countdown preparation builds the bulk of every wave, so an unguarded
+  // throw here escaped WaveSystem.update and killed the frame.
+  assert.match(wave, /this\.buildAlienSafely\(this\.pendingSpawns\[this\.spawnCursor\]\)/);
   assert.match(wave, /slowestBuildAsset = spawn\.asset/);
   assert.match(wave, /slowestBuildName = spawn\.name/);
   assert.match(wave, /alien\.object3D\.visible = true/);
