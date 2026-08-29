@@ -39,6 +39,7 @@ import { Consumer } from "./traceContracts.js";
 import { observePlacedSite } from "./phase2Trace.js";
 import { traceEntityDestroyed } from "./trace.js";
 import { EntityKind, Reason } from "./traceIds.js";
+import { playSfx } from "./sfx.js";
 
 const craftSiteProxyMaterial = new MeshBasicMaterial({
   colorWrite: false,
@@ -228,6 +229,7 @@ export class CraftProductionSystem extends createSystem({
   }
 
   private completeCraft(site: Entity): void {
+    playSfx("craftReady");
     const spec = getProductionSpec(
       site.getValue(CraftProductionSite, "kind") ?? "none",
     );

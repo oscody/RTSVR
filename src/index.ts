@@ -211,6 +211,56 @@ const assets: AssetManifest = {
     type: AssetType.Audio,
     priority: "background",
   },
+  sfxPlasma: {
+    url: "/audio/sfx-plasma.wav",
+    type: AssetType.Audio,
+    priority: "background",
+  },
+  sfxLaser: {
+    url: "/audio/sfx-laser.wav",
+    type: AssetType.Audio,
+    priority: "background",
+  },
+  sfxMelee: {
+    url: "/audio/sfx-melee.wav",
+    type: AssetType.Audio,
+    priority: "background",
+  },
+  sfxFriendlyDeath: {
+    url: "/audio/sfx-friendly-death.wav",
+    type: AssetType.Audio,
+    priority: "background",
+  },
+  sfxCrystal: {
+    url: "/audio/sfx-crystal.wav",
+    type: AssetType.Audio,
+    priority: "background",
+  },
+  sfxDeposit: {
+    url: "/audio/sfx-deposit.wav",
+    type: AssetType.Audio,
+    priority: "background",
+  },
+  sfxPlace: {
+    url: "/audio/sfx-place.wav",
+    type: AssetType.Audio,
+    priority: "background",
+  },
+  sfxBuildDone: {
+    url: "/audio/sfx-build-done.wav",
+    type: AssetType.Audio,
+    priority: "background",
+  },
+  sfxCraftReady: {
+    url: "/audio/sfx-craft-ready.wav",
+    type: AssetType.Audio,
+    priority: "background",
+  },
+  sfxDemolish: {
+    url: "/audio/sfx-demolish.wav",
+    type: AssetType.Audio,
+    priority: "background",
+  },
 };
 
 // BEFORE World.create, not inside its .then(): the overlay has to be driven

@@ -56,9 +56,31 @@ function makeLowpass(k) {
 const decay = (t, rate) => Math.exp(-rate * t);
 
 function writeWav(name, samples) {
+  // Refuse to write a broken clip.
+  //
+  // `sfx-plasma` shipped as 10 KB of zeros because `setup()` forgot one field,
+  // so `this.z += …` produced NaN for every sample. Normalization then read a
+  // NaN peak, `peak > 0` was false, gain fell back to 1, and `writeInt16LE(NaN)`
+  // wrote silence — a valid WAV of nothing, with no error anywhere. It was only
+  // caught by measuring the output afterwards.
+  //
+  // A generator that can emit silence without complaint is worse than one that
+  // crashes: the failure survives all the way to a device test.
   let peak = 0;
-  for (const s of samples) peak = Math.max(peak, Math.abs(s));
-  const gain = peak > 0 ? 0.89 / peak : 1;
+  let nans = 0;
+  for (const s of samples) {
+    if (!Number.isFinite(s)) nans += 1;
+    else peak = Math.max(peak, Math.abs(s));
+  }
+  if (nans > 0) {
+    throw new Error(
+      `${name}: ${nans} non-finite sample(s). A field used in render() is not initialized in setup().`,
+    );
+  }
+  if (peak <= 0) {
+    throw new Error(`${name}: rendered to silence (peak 0). The recipe produces no signal.`);
+  }
+  const gain = 0.89 / peak;
 
   const dataSize = samples.length * 2;
   const buf = Buffer.alloc(44 + dataSize);
@@ -151,6 +173,234 @@ const CLIPS = [
       const body = 300 + (80 - 300) * Math.min(1, t / 0.5);
       this.phase += (TAU * body) / SAMPLE_RATE;
       return (this.z * 1.6 + Math.sin(this.phase) * 0.5) * decay(t, 7);
+    },
+  },
+  {
+    // The racer's paired cannons: two detuned saws through a falling lowpass.
+    // Deliberately fatter and duller than the turret so a mixed volley reads as
+    // two weapons rather than one stuttering.
+    name: "sfx-plasma.wav",
+    dur: 0.22,
+    seed: 5504,
+    setup() {
+      this.z = 0;
+    },
+    render(t) {
+      // Saw from phase, cheaper and sharper than summing harmonics.
+      const saw = (f) => 2 * ((t * f) % 1) - 1;
+      const raw = saw(240) * 0.5 + saw(243) * 0.5;
+      // Falling cutoff: bright attack, dull tail.
+      const k = 0.35 * Math.max(0.08, 1 - t / 0.18);
+      this.z += k * (raw - this.z);
+      return this.z * decay(t, 18);
+    },
+  },
+  {
+    // Astronaut rifle: a fast chirp with an octave above it. Short and thin, so
+    // it cuts through a volley without adding weight.
+    name: "sfx-laser.wav",
+    dur: 0.15,
+    seed: 5505,
+    setup() {
+      this.phase = 0;
+      this.octave = 0;
+    },
+    render(t) {
+      const f = 1400 + (600 - 1400) * Math.min(1, t / 0.09);
+      this.phase += (TAU * f) / SAMPLE_RATE;
+      this.octave += (TAU * f * 2) / SAMPLE_RATE;
+      return (Math.sin(this.phase) + Math.sin(this.octave) * 0.2) * decay(t, 34);
+    },
+  },
+  {
+    // Alien strike: the `clank` modal stack transposed down, plus a heavy noise
+    // burst. No tonal sustain — it must read as impact, not as a weapon.
+    name: "sfx-melee.wav",
+    dur: 0.25,
+    seed: 5506,
+    setup() {
+      this.modes = [
+        [60, 14, 0.5],
+        [97, 20, 0.32],
+        [210, 30, 0.18],
+      ];
+    },
+    render(t) {
+      let s = 0;
+      for (const [f, d, a] of this.modes) s += Math.sin(TAU * f * t) * decay(t, d) * a;
+      return s + rand() * decay(t, 45) * 0.6;
+    },
+  },
+  {
+    // Losing something of ours. Same falling shape as the alien death, an
+    // octave lower and longer, plus a metallic debris tail at 180 ms so it
+    // reads as structure failing rather than a creature dying.
+    name: "sfx-friendly-death.wav",
+    dur: 0.8,
+    seed: 5507,
+    setup() {
+      this.z = 0;
+      this.phase = 0;
+      this.debris = [
+        [640, 26, 0.22],
+        [910, 32, 0.15],
+        [1330, 38, 0.1],
+      ];
+    },
+    render(t) {
+      const cutoff = 900 + (90 - 900) * Math.min(1, t / 0.6);
+      const k = Math.min(1, (TAU * cutoff) / SAMPLE_RATE);
+      this.z += k * (rand() - this.z);
+      const body = 150 + (50 - 150) * Math.min(1, t / 0.6);
+      this.phase += (TAU * body) / SAMPLE_RATE;
+      let s = (this.z * 1.5 + Math.sin(this.phase) * 0.6) * decay(t, 5);
+      if (t > 0.18) {
+        const d = t - 0.18;
+        for (const [f, rate, a] of this.debris) {
+          s += Math.sin(TAU * f * d) * decay(d, rate) * a;
+        }
+      }
+      return s;
+    },
+  },
+  {
+    // A miner has filled up. Two-tone chime, D6 -> G6, with a slightly detuned
+    // second partial so it rings rather than beeps. Quiet: it fires on a loop
+    // all match and must never compete with combat.
+    name: "sfx-crystal.wav",
+    dur: 0.35,
+    seed: 5508,
+    setup() {
+      this.a = 0;
+      this.b = 0;
+      this.det = 0;
+    },
+    render(t) {
+      this.a += (TAU * 1174) / SAMPLE_RATE;
+      this.b += (TAU * 1568) / SAMPLE_RATE;
+      this.det += (TAU * 1572) / SAMPLE_RATE;
+      // Second note enters at 90 ms, so it reads as two events not a chord.
+      const first = Math.sin(this.a) * decay(t, 9);
+      const second =
+        t > 0.09
+          ? (Math.sin(this.b) + Math.sin(this.det) * 0.3) * decay(t - 0.09, 9)
+          : 0;
+      return first * 0.7 + second * 0.6;
+    },
+  },
+  {
+    // Crystals arriving at the base: a rising triangle with a soft noise pour
+    // under it. Rising, where the pickup falls — the pair reads as a round trip.
+    name: "sfx-deposit.wav",
+    dur: 0.3,
+    seed: 5509,
+    setup() {
+      this.phase = 0;
+      this.z = 0;
+    },
+    render(t) {
+      const f = 660 + (880 - 660) * Math.min(1, t / 0.22);
+      this.phase += (TAU * f) / SAMPLE_RATE;
+      // Triangle from the phase: softer than a saw, less pure than a sine.
+      const tri = (2 / Math.PI) * Math.asin(Math.sin(this.phase));
+      this.z += 0.08 * (rand() - this.z);
+      return tri * decay(t, 11) * 0.8 + this.z * decay(t, 7) * 0.5;
+    },
+  },
+  {
+    // A stake going into ground. The melee modal stack an octave down at half
+    // amplitude, no noise tail — placement is a decision, not an impact.
+    name: "sfx-place.wav",
+    dur: 0.3,
+    seed: 5510,
+    setup() {
+      this.modes = [
+        [82, 16, 0.5],
+        [151, 24, 0.3],
+      ];
+    },
+    render(t) {
+      let s = 0;
+      for (const [f, d, a] of this.modes) s += Math.sin(TAU * f * t) * decay(t, d) * a;
+      return s * 0.55 + rand() * decay(t, 60) * 0.2;
+    },
+  },
+  {
+    // Three-note rising arpeggio, C5-E5-G5, then a closing thunk. The only
+    // clearly "musical" cue in the bank, because finishing a building is the
+    // rarest good thing that happens.
+    name: "sfx-build-done.wav",
+    dur: 0.9,
+    seed: 5511,
+    setup() {
+      this.notes = [523, 659, 784];
+    },
+    render(t) {
+      let s = 0;
+      for (let i = 0; i < this.notes.length; i++) {
+        const start = i * 0.18;
+        if (t < start) continue;
+        s += Math.sin(TAU * this.notes[i] * (t - start)) * decay(t - start, 6) * 0.5;
+      }
+      // Closing thunk at 0.54s, so the arpeggio lands rather than fading out.
+      if (t > 0.54) {
+        const d = t - 0.54;
+        s += Math.sin(TAU * 110 * d) * decay(d, 12) * 0.45;
+      }
+      return s;
+    },
+  },
+  {
+    // A craft rolling out: servo pitch ramp, then a two-tone confirm. Shares the
+    // build-done language without repeating it, so the two are distinguishable
+    // when they land seconds apart.
+    name: "sfx-craft-ready.wav",
+    dur: 0.7,
+    seed: 5512,
+    setup() {
+      this.phase = 0;
+      this.z = 0;
+      this.a = 0;
+      this.b = 0;
+    },
+    render(t) {
+      const f = 70 + (120 - 70) * Math.min(1, t / 0.4);
+      this.phase += (TAU * f) / SAMPLE_RATE;
+      this.z += 0.12 * (rand() - this.z);
+      const motor = (Math.sin(this.phase) * 0.6 + this.z * 0.4) * Math.min(1, t / 0.05);
+      const ramp = t < 0.45 ? motor * (1 - t / 0.6) : 0;
+      let confirm = 0;
+      if (t > 0.45) {
+        const d = t - 0.45;
+        this.a += (TAU * 784) / SAMPLE_RATE;
+        this.b += (TAU * 1047) / SAMPLE_RATE;
+        confirm = (Math.sin(this.a) * (d < 0.1 ? 1 : 0) + Math.sin(this.b) * (d >= 0.1 ? 1 : 0)) * decay(d, 10) * 0.55;
+      }
+      return ramp + confirm;
+    },
+  },
+  {
+    // Rubble. Longer decay than melee and deliberately without a tonal body —
+    // demolishing is destructive but voluntary, so it should sound heavy and
+    // final rather than violent.
+    name: "sfx-demolish.wav",
+    dur: 0.7,
+    seed: 5513,
+    setup() {
+      this.z = 0;
+      this.modes = [
+        [70, 7, 0.3],
+        [128, 10, 0.2],
+        [193, 13, 0.14],
+      ];
+    },
+    render(t) {
+      const cutoff = 1600 + (150 - 1600) * Math.min(1, t / 0.5);
+      const k = Math.min(1, (TAU * cutoff) / SAMPLE_RATE);
+      this.z += k * (rand() - this.z);
+      let s = this.z * decay(t, 4) * 1.4;
+      for (const [f, d, a] of this.modes) s += Math.sin(TAU * f * t) * decay(t, d) * a;
+      return s;
     },
   },
 ];

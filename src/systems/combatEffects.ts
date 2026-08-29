@@ -264,23 +264,40 @@ function entityVisualElevation(entity: Entity): number {
   return 0;
 }
 
-function shotProfile(attacker: Entity): ShotProfile {
+/**
+ * Which weapon this attacker is firing.
+ *
+ * Exported so the **sound** dispatches on the same decision the **visual** does,
+ * rather than on a parallel if-chain that can drift. It drifted once already:
+ * phase 1 played the turret zap for every attack, including alien melee, two
+ * lines below a comment saying aliens "play a melee energy burst".
+ *
+ * The key, not the profile — `turret` and `astronaut` share `shape: "laser"`
+ * but are different weapons and want different clips.
+ */
+export function shotProfileKey(attacker: Entity): keyof typeof SHOT_PROFILES {
   if (attacker.hasComponent(Enemy)) {
     const kind = attacker.getValue(Enemy, "kind") ?? "alien";
-    return SHOT_PROFILES[kind] ?? SHOT_PROFILES.alien;
+    return kind in SHOT_PROFILES
+      ? (kind as keyof typeof SHOT_PROFILES)
+      : "alien";
   }
   if (
     attacker.hasComponent(Building) &&
     attacker.getValue(Building, "kind") === "turret"
   ) {
-    return SHOT_PROFILES.turret;
+    return "turret";
   }
   if (attacker.hasComponent(Unit)) {
     const kind = attacker.getValue(Unit, "kind");
-    if (kind === "astronaut") return SHOT_PROFILES.astronaut;
+    if (kind === "astronaut") return "astronaut";
   }
   // Racer and any other friendly attacker default to plasma.
-  return SHOT_PROFILES.racer;
+  return "racer";
+}
+
+function shotProfile(attacker: Entity): ShotProfile {
+  return SHOT_PROFILES[shotProfileKey(attacker)];
 }
 
 function spawnFlash(

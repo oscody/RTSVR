@@ -19,8 +19,9 @@ import {
   currentUnitAttackSpec,
 } from "./debugStatOverrides.js";
 import { detachAlienAnimation } from "./alienAnimation.js";
-import { emitAttackVfx } from "./combatEffects.js";
+import { emitAttackVfx, shotProfileKey } from "./combatEffects.js";
 import { playSfx } from "./sfx.js";
+import type { SfxId } from "./sfxCatalog.js";
 import { detachCommandCenterAnimation } from "./commandCenterAnimation.js";
 import { releaseBuilder } from "./construction.js";
 import { updateHealthBar } from "./healthBar.js";
@@ -76,6 +77,24 @@ import {
   traceStateChange,
 } from "./trace.js";
 import { Contract, Lifecycle, Reason, State, entityKindId } from "./traceIds.js";
+
+/**
+ * Weapon -> clip. Keyed by `shotProfileKey` so the sound is chosen by the same
+ * decision as the bolt; a new weapon that adds a profile fails to compile here
+ * until it is given a sound, rather than silently falling back to a wrong one.
+ *
+ * The three alien kinds deliberately share `melee` — they are the same strike
+ * with different bodies, and three near-identical clips would cost 30 KB to
+ * make a wave muddier.
+ */
+const SHOT_SFX: Readonly<Record<ReturnType<typeof shotProfileKey>, SfxId>> = {
+  turret: "turretZap",
+  racer: "plasma",
+  astronaut: "laser",
+  alien: "melee",
+  alienDrake: "melee",
+  strongAlienMech: "melee",
+};
 
 export class CombatSystem extends createSystem({
   attackers: {
@@ -249,20 +268,15 @@ export class CombatSystem extends createSystem({
     // stop at the body; aliens play a melee energy burst. Damage below stays
     // range/cadence-based (the profile is chosen per attacker in combatEffects).
     emitAttackVfx(attacker, target);
-    // Sound sits beside the VFX call so the two cannot drift about WHEN a shot
-    // happened — but it must dispatch on WHO fired the same way
-    // `emitAttackVfx` does internally (`combatEffects.ts`, `shotProfile`).
+    // Sound and visual dispatch on the SAME decision, not on parallel
+    // if-chains: `shotProfileKey` is what `emitAttackVfx` uses internally to
+    // pick the bolt, and `SHOT_SFX` maps it to the clip. They cannot disagree
+    // about what fired without failing a test.
     //
-    // `applyAttack` is shared by all three attacker paths, aliens included, so
-    // firing the zap unconditionally played a turret laser for an alien melee
-    // strike. The comment above this block says aliens "play a melee energy
-    // burst"; the audio disagreed with it.
-    //
-    // Phase 1 ships one shot clip, so play it only for the attackers it
-    // actually depicts and leave aliens silent rather than wrong. Phase 2 adds
-    // `sfx-melee` and this becomes the full per-type dispatch the plan
-    // describes.
-    if (!attacker.hasComponent(Enemy)) playSfx("turretZap");
+    // They did disagree in phase 1 — the turret zap played for every attack
+    // including alien melee, two lines below a comment saying aliens "play a
+    // melee energy burst".
+    playSfx(SHOT_SFX[shotProfileKey(attacker)]);
 
     const targetType = this.targetType(target);
     resolveDamageInto(this.damage, current, spec.damage, hits, targetType);
@@ -325,6 +339,9 @@ export class CombatSystem extends createSystem({
       }
     }
     if (target.hasComponent(Unit)) {
+      // Ours, and it is gone. Buildings below share the clip — both read as
+      // "we lost something", and neither should sound like an alien dying.
+      playSfx("friendlyDeath");
       detachMinerAnimation(target);
       detachUnitAnimation(target);
       // A dead builder no longer takes the build with it. The site owns the
@@ -337,6 +354,7 @@ export class CombatSystem extends createSystem({
       boardState.pathByUnit.delete(target.index);
     }
     if (target.hasComponent(Building)) {
+      playSfx("friendlyDeath");
       const kind = target.getValue(Building, "kind") ?? "unknown";
       const x = target.getValue(Building, "x") ?? -1;
       const y = target.getValue(Building, "y") ?? -1;

@@ -32,6 +32,7 @@ import {
 import { newCorrelationId, traceDecision, traceStateChange, traceWrite } from "./trace.js";
 import { trackMiningDeposit } from "./phase2Trace.js";
 import { Reason, State } from "./traceIds.js";
+import { playSfx } from "./sfx.js";
 
 export class MiningSystem extends createSystem({
   miners: { required: [Unit, MinerState] },
@@ -111,6 +112,10 @@ export class MiningSystem extends createSystem({
           this.cycle.cargo,
           transition === "loadedCargo" ? Reason.Accepted : Reason.Deposited,
         );
+        // The two halves of a round trip. Hooked to the cargo CHANGE rather than
+        // the stage: a miner sitting in a stage does not re-report, and the same
+        // branch the trace already trusts decides which half this is.
+        playSfx(transition === "loadedCargo" ? "crystal" : "deposit");
       }
 
       if (this.cycle.nodeRemaining !== previousRemaining) {

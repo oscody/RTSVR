@@ -120,25 +120,33 @@ test("the reset stops audio, like every other subsystem", () => {
   assert.match(code("scenarioReset.ts"), /clearSfx\(\)/);
 });
 
-test("the shot sound dispatches on WHO fired, like the VFX does", () => {
-  // `applyAttack` is shared by all three attacker paths, aliens included, and
-  // `emitAttackVfx` dispatches per attacker internally (`combatEffects.ts`,
-  // `shotProfile`). Firing the zap unconditionally played a turret laser for an
-  // alien melee strike — audio contradicting the VFX two lines above it.
-  //
-  // Phase 1 has one shot clip, so aliens are silent rather than wrong. Phase 2
-  // replaces this with the full per-type dispatch.
+test("sound and visual dispatch on ONE decision, not two if-chains", () => {
+  // Phase 1 played the turret zap for every attack, aliens included, two lines
+  // below a comment saying aliens "play a melee energy burst". Mirroring the
+  // VFX's if-chain would have re-created that drift the first time a weapon was
+  // added, so the decision itself is now shared: `shotProfileKey` picks the
+  // bolt AND keys the clip.
   const combat = code("combat.ts");
-  assert.match(
-    combat,
-    /emitAttackVfx\(attacker, target\);[\s\S]{0,40}if \(!attacker\.hasComponent\(Enemy\)\) playSfx\("turretZap"\);/,
-    "the zap must be gated on the attacker not being an alien",
-  );
-  assert.doesNotMatch(
-    combat,
-    /\n\s*playSfx\("turretZap"\);/,
-    "an ungated zap fires for alien attacks too",
-  );
+  assert.match(combat, /playSfx\(SHOT_SFX\[shotProfileKey\(attacker\)\]\)/);
+  assert.match(code("combatEffects.ts"), /export function shotProfileKey/);
+  // combatEffects must USE it too, or the two can still diverge.
+  assert.match(code("combatEffects.ts"), /return SHOT_PROFILES\[shotProfileKey\(attacker\)\]/);
+  // No unconditional zap anywhere.
+  assert.doesNotMatch(combat, /\n\s*playSfx\("turretZap"\);/);
+});
+
+test("every weapon profile has a sound", () => {
+  // SHOT_SFX is typed on `ReturnType<typeof shotProfileKey>`, so a new weapon
+  // fails to compile until it is given a clip rather than silently inheriting
+  // a wrong one. Assert the map is complete against the profile table.
+  const effects = code("combatEffects.ts");
+  const profiles = [...(/const SHOT_PROFILES[\s\S]*?\n\};/.exec(effects)?.[0] ?? "")
+    .matchAll(/^  (\w+): \{/gm)].map((m) => m[1]);
+  assert.ok(profiles.length >= 6, "did not find the shot profiles");
+  const map = /const SHOT_SFX[\s\S]*?\n\};/.exec(code("combat.ts"))?.[0] ?? "";
+  for (const key of profiles) {
+    assert.match(map, new RegExp(`\\b${key}:`), `${key} has no sound in SHOT_SFX`);
+  }
 });
 
 test("a death sound means a kill, never a cleanup", () => {
@@ -163,4 +171,68 @@ test("generator clips reset every piece of their own state", () => {
   // guarantee that a partial re-render matches a full run.
   const gen = readFileSync(new URL("../scripts/generate-audio.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(gen, /this\.\w+ \?\? 0/, "per-clip state must be reset in setup(), not created lazily");
+});
+
+test("the economy cues sit past their own bail-outs", () => {
+  // Each of these has a path that must stay SILENT, and in every case the
+  // silent path is an early return above the hook.
+  //
+  // `place` fires after the site is fully built, not on entry — a placement
+  // rejected by validation must make no sound.
+  const construction = code("construction.ts");
+  const create = /export function createConstructionSite\([\s\S]*?\n\}/.exec(construction)?.[0] ?? "";
+  assert.ok(create, "createConstructionSite not found");
+  const placeAt = create.indexOf('playSfx("place")');
+  assert.ok(placeAt > 0, "place is not hooked");
+  assert.ok(placeAt < create.indexOf("return world"), "place must fire before the return");
+  assert.ok(placeAt > create.indexOf("attachQueueBadge"), "place must fire after the site is built");
+
+  // `demolish` fires past the refusal check.
+  const demolition = code("demolition.ts");
+  assert.match(
+    demolition,
+    /if \(refusal\) return refusal;[\s\S]{0,40}playSfx\("demolish"\)/,
+    "a refused demolish must stay silent",
+  );
+  // ...and must NOT reuse the friendly-death clip: losing something to aliens
+  // and choosing to remove it are different events.
+  assert.doesNotMatch(demolition, /playSfx\("friendlyDeath"\)/);
+});
+
+test("the miner's round trip is two different sounds", () => {
+  // Hooked to the cargo CHANGE, not the stage: a miner parked in a stage must
+  // not re-report, and the branch the trace already trusts decides which half
+  // of the trip this is.
+  const mining = code("mining.ts");
+  assert.match(
+    mining,
+    /if \(this\.cycle\.cargo !== previousCargo\)[\s\S]*?playSfx\(\s*transition === "loadedCargo" \? "crystal" : "deposit",?\s*\)/,
+  );
+});
+
+test("completion cues fire from the completion functions", () => {
+  assert.match(code("construction.ts"), /private completeBuilding\(site: Entity\): void \{\s*playSfx\("buildDone"\)/);
+  assert.match(code("craftProduction.ts"), /private completeCraft\(site: Entity\): void \{\s*playSfx\("craftReady"\)/);
+});
+
+test("economy cues are mixed under the weapons", () => {
+  // The phase's actual job. A crystal chime fires on a loop all match; if it
+  // sits at weapon volume it masks the cue that matters.
+  const loudestEconomy = Math.max(
+    SFX_CATALOG.crystal.volume,
+    SFX_CATALOG.deposit.volume,
+    SFX_CATALOG.place.volume,
+  );
+  const quietestWeapon = Math.min(
+    SFX_CATALOG.turretZap.volume,
+    SFX_CATALOG.plasma.volume,
+    SFX_CATALOG.laser.volume,
+  );
+  assert.ok(
+    loudestEconomy <= quietestWeapon,
+    `economy cue at ${loudestEconomy} is not below the quietest weapon at ${quietestWeapon}`,
+  );
+  // The most frequent cue in the game must be the quietest thing in the bank.
+  const all = Object.values(SFX_CATALOG).map((s) => s.volume);
+  assert.equal(SFX_CATALOG.crystal.volume, Math.min(...all));
 });

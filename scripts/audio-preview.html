@@ -41,7 +41,7 @@
 </style>
 <h1>RTSVR audio bank</h1>
 <p class="hint">
-  <kbd>1</kbd>–<kbd>9</kbd> play · <kbd>R</kbd> reload from disk ·
+  <kbd>1</kbd>–<kbd>9</kbd>, <kbd>a</kbd>–<kbd>d</kbd> play · <kbd>R</kbd> reload from disk ·
   <em>rapid</em> fires 8× at combat cadence
 </p>
 <table id="list"></table>
@@ -53,10 +53,28 @@
   const CLIPS = [
     "sfx-click.wav",
     "sfx-turret-zap.wav",
+    "sfx-plasma.wav",
+    "sfx-laser.wav",
+    "sfx-melee.wav",
     "sfx-alien-death.wav",
+    "sfx-friendly-death.wav",
+    "sfx-crystal.wav",
+    "sfx-deposit.wav",
+    "sfx-place.wav",
+    "sfx-build-done.wav",
+    "sfx-craft-ready.wav",
+    "sfx-demolish.wav",
   ];
-  // Combat cadence from the plan's per-clip cooldowns: shots 70ms, deaths 120ms.
-  const RAPID_MS = { "sfx-turret-zap.wav": 250, "sfx-click.wav": 120 };
+  // Rapid-fire cadence per clip, from the catalog's cooldowns. The weapons are
+  // the ones worth auditioning this way: a clip can sound clean once and turn
+  // into a smear at four shots a second.
+  const RAPID_MS = {
+    "sfx-turret-zap.wav": 250,
+    "sfx-plasma.wav": 250,
+    "sfx-laser.wav": 250,
+    "sfx-melee.wav": 300,
+    "sfx-click.wav": 120,
+  };
 
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const buffers = new Map();
@@ -118,7 +136,10 @@
   addEventListener("keydown", (e) => {
     if (e.key.toLowerCase() === "r") return void refresh();
     const n = Number(e.key);
-    if (n >= 1 && n <= CLIPS.length) play(CLIPS[n - 1]);
+    if (n >= 1 && n <= 9 && n <= CLIPS.length) return void play(CLIPS[n - 1]);
+    // 10th clip onward: a-d, since there is no key "10".
+    const extra = "abcd".indexOf(e.key.toLowerCase());
+    if (extra >= 0 && 9 + extra < CLIPS.length) play(CLIPS[9 + extra]);
   });
 
   refresh();

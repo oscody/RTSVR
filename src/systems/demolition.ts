@@ -18,6 +18,7 @@ import {
   disposeUnitSelectionVisuals,
   removeUnitFromSelection,
 } from "./selection.js";
+import { playSfx } from "./sfx.js";
 import {
   Building,
   ConstructionSite,
@@ -70,6 +71,11 @@ export function canDestroy(entity: Entity): DemolitionResult | null {
 export function destroyOwnEntity(entity: Entity): DemolitionResult {
   const refusal = canDestroy(entity);
   if (refusal) return refusal;
+
+  // Past the refusal, so a rejected demolish stays silent. Deliberately NOT
+  // `friendlyDeath`: losing something to aliens and choosing to remove it are
+  // different events and must not sound the same.
+  playSfx("demolish");
 
   if (entity.hasComponent(ConstructionSite)) {
     const label =

@@ -58,6 +58,7 @@ import { Consumer } from "./traceContracts.js";
 import { observePlacedSite } from "./phase2Trace.js";
 import { traceDecision, traceEntityDestroyed } from "./trace.js";
 import { EntityKind, Reason } from "./traceIds.js";
+import { playSfx } from "./sfx.js";
 
 const siteProxyMaterial = new MeshBasicMaterial({
   colorWrite: false,
@@ -133,6 +134,9 @@ export function createConstructionSite(
   // The floating queue number, positioned and sized like a health bar.
   attachQueueBadge(holder);
 
+  // Down here rather than at the top: everything above can still bail, and a
+  // placement that never happened must stay silent.
+  playSfx("place");
   return world
     .createTransformEntity(holder, { parent })
     .addComponent(ScenarioObject)
@@ -551,6 +555,7 @@ export class ConstructionSystem extends createSystem({
   }
 
   private completeBuilding(site: Entity): void {
+    playSfx("buildDone");
     const kind = site.getValue(ConstructionSite, "kind") ?? "none";
     const spec = getBuildingSpec(kind);
     const root = boardState.boardRoot;
