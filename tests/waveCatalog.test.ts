@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  WAVE_CATALOG,
+  getFinalWaveNumber,
   getNextWaveSpec,
   getWaveSpec,
   hasWaveSpec,
@@ -166,3 +169,37 @@ function threatTotal(groups: ReturnType<typeof resolveWaveSpawnGroups>): number 
   const costs = { alien: 1, alienDrake: 2, strongAlienMech: 4 };
   return groups.reduce((sum, group) => sum + group.count * costs[group.enemy], 0);
 }
+
+// ── The end of the campaign is derived, never written down ────────────────
+
+test("getFinalWaveNumber matches the catalog, not a constant", () => {
+  const expected = Math.max(...WAVE_CATALOG.map((s) => s.waveNumber));
+  assert.equal(getFinalWaveNumber(), expected);
+  // The property that matters: it is the wave after which nothing follows.
+  assert.equal(getNextWaveSpec(getFinalWaveNumber()), undefined);
+  assert.notEqual(getNextWaveSpec(getFinalWaveNumber() - 1), undefined);
+});
+
+test("adding a wave moves the ending — no source edit required", () => {
+  // The real regression risk. `resolveWaveClearOutcome` was already dynamic;
+  // the words the player READS were frozen at "LEVEL 1 COMPLETE", which is what
+  // a wave-6 winner was told (_after_B_level6.log, 116 aliens killed).
+  const final = getFinalWaveNumber();
+  const extended = [...WAVE_CATALOG, { ...WAVE_CATALOG[0], waveNumber: final + 7 }];
+  const derived = extended.reduce((h, s) => Math.max(h, s.waveNumber), 0);
+  assert.equal(derived, final + 7, "the ending must follow the catalog");
+});
+
+test("no user-visible string hardcodes a wave count", () => {
+  const read = (p: string): string =>
+    readFileSync(new URL(`../src/systems/${p}`, import.meta.url), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+  // The exact string that shipped, and the shape of it.
+  assert.doesNotMatch(read("matchResult.ts"), /LEVEL 1 COMPLETE/);
+  assert.doesNotMatch(read("matchResult.ts"), /LEVEL \d/);
+  // ...and the replacement must actually be derived.
+  assert.match(read("matchResult.ts"), /getFinalWaveNumber\(\)/);
+  // The three places that announce the win must agree, so all three derive it.
+  assert.match(read("combat.ts"), /getFinalWaveNumber\(\)/);
+});

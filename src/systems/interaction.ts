@@ -48,6 +48,7 @@ import {
   toggleUnitSelection,
   updateCommandGridVisibility,
 } from "./selection.js";
+import { ActionKind, logAction } from "./actionLog.js";
 import { matchAcceptsCommands } from "./matchStart.js";
 import {
 } from "./selection.js";
@@ -420,7 +421,7 @@ export class InteractionSystem extends createSystem({
     // The tablet is untouched: its handlers live in TabletSystem, so Restart
     // still works. That is the whole reason this gate is here and not on the
     // system's update.
-    if (!matchAcceptsCommands()) return;
+    if (!matchAcceptsCommands("world-press")) return;
     const corr = beginWorldInteraction(target.index);
     const tablet = boardState.tablet;
     const beforeRevision = tablet?.getValue(TabletState, "revision") ?? -1;
@@ -478,6 +479,15 @@ export class InteractionSystem extends createSystem({
   ): number {
     const eligible = units.filter(
       (unit) => unit.object3D && this.prepareManualOrder(unit),
+    );
+    // ONE line per click, not per unit. `issueGroupOrder` takes an array, so a
+    // click with six units selected is six orders — six lines for one decision,
+    // and this is the highest-volume event of the set. One player decision, one
+    // line.
+    logAction(
+      ActionKind.Order,
+      `${eligible.length} unit(s) -> tile ${targetX},${targetY}` +
+        (combatTarget ? " attack" : ""),
     );
     const moving = new Set(eligible);
     for (const unit of eligible) this.setCombatTarget(unit, null);

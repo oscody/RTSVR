@@ -30,6 +30,8 @@ import {
   currentEnemyMaxHealth,
   currentUnitMaxHealth,
 } from "./debugStatOverrides.js";
+import { ActionKind, logAction } from "./actionLog.js";
+import { traceManualDump } from "./trace.js";
 import { DEBUG_SETTINGS_CATALOG } from "./debugSettingsCatalog.js";
 import { fitThumbnail } from "./tabletThumbnails.js";
 import { updateHealthBar } from "./healthBar.js";
@@ -796,6 +798,20 @@ export class TabletSystem extends createSystem({
     on("tab-crafts", () => this.openCrafts(tablet));
     on("tab-units", () => this.openUnits(tablet));
     on("tab-settings", () => this.setView(tablet, "settings", "Playtesting settings"));
+    on("dump-trace", () => {
+      // traceManualDump() has existed since the trace was built and nothing
+      // could reach it — no window binding, no CLI action, no button. This is
+      // wiring, not implementation.
+      const printed = traceManualDump("manual: tablet");
+      logAction(ActionKind.Dump, `manual printed=${printed}`);
+      // In VR the console is invisible, so a button that appears to do nothing
+      // is worse than no button.
+      this.touch(
+        tablet,
+        printed ? "Trace dumped to console" : "Recorder is not running",
+        printed ? "success" : "error",
+      );
+    });
     on("exit-vr", () => {
       this.world.exitXR();
     });
@@ -861,13 +877,34 @@ export class TabletSystem extends createSystem({
       tablet.setValue(TabletState, "astronautIndex", -1);
       this.touch(tablet, "Unit selection cleared");
     });
-    on("build-produce", () => this.produceSelectedBuildItem(tablet));
-    on("craft-produce", () => this.produceSelectedCraft(tablet));
+    on("build-produce", () => {
+      logAction(
+        ActionKind.Produce,
+        `build ${tablet.getValue(TabletState, "selectedBuildingKind") ?? "none"}`,
+      );
+      this.produceSelectedBuildItem(tablet);
+    });
+    on("craft-produce", () => {
+      logAction(
+        ActionKind.Produce,
+        `craft ${tablet.getValue(TabletState, "selectedCraftKind") ?? "none"}`,
+      );
+      this.produceSelectedCraft(tablet);
+    });
     // Both tabs cancel the same thing — there is one build queue, so Build and
     // Crafts show the same target and the same label.
-    on("build-cancel", () => this.cancelCurrentBuild(tablet));
-    on("craft-cancel", () => this.cancelCurrentBuild(tablet));
-    on("unit-destroy", () => this.destroySelectedUnits(tablet));
+    on("build-cancel", () => {
+      logAction(ActionKind.Cancel, "build");
+      this.cancelCurrentBuild(tablet);
+    });
+    on("craft-cancel", () => {
+      logAction(ActionKind.Cancel, "craft");
+      this.cancelCurrentBuild(tablet);
+    });
+    on("unit-destroy", () => {
+      logAction(ActionKind.Cancel, "destroy selected units");
+      this.destroySelectedUnits(tablet);
+    });
   }
 
   /**
@@ -1124,6 +1161,7 @@ export class TabletSystem extends createSystem({
   }
 
   private setView(tablet: Entity, view: string, status: string): void {
+    logAction(ActionKind.Tab, view);
     tablet.setValue(TabletState, "view", view);
     // Switching tabs drops the site selection, so Cancel can never act on
     // something the player has stopped looking at.
@@ -1341,6 +1379,14 @@ export class TabletSystem extends createSystem({
     const raw = current + spec.step * direction;
     const rounded = Math.round(raw / spec.step) * spec.step;
     const next = Math.min(spec.max, Math.max(spec.min, rounded));
+    // Any knob flipped mid-session silently invalidates comparisons with
+    // earlier captures, and nothing recorded it. The 08-26 emulator run changed
+    // seven settings and only the chat transcript says which.
+    logAction(
+      ActionKind.Setting,
+      `${spec.key} ${this.formatSettingValue(current, spec.decimals)} -> ` +
+        `${this.formatSettingValue(next, spec.decimals)}`,
+    );
     settings.setValue(DebugSettings, spec.key, next);
     settings.setValue(
       DebugSettings,

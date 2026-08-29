@@ -76,6 +76,7 @@ import {
   boardState,
 } from "./state.js";
 import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
+import { ActionKind, logAction } from "./actionLog.js";
 import { matchAwaitingStart } from "./matchStart.js";
 import { setEnvironmentDim } from "./skySystem.js";
 import {
@@ -170,6 +171,7 @@ import {
 } from "./tutorialRules.ts";
 import { traceStateChange } from "./trace.js";
 import { State } from "./traceIds.js";
+import { createTutorialOmittedStructures } from "./structures.js";
 
 /**
  * Tutorial runtime — the world-facing half. All decisions live in
@@ -192,6 +194,16 @@ let cardContext: CanvasRenderingContext2D | null = null;
  * why the mesh is a plain child rather than its own entity.
  */
 const cardPool = createTutorialVisualPool("TutorialCard");
+
+/**
+ * Whether this run has already claimed wave 0. A LATCH, once per match.
+ *
+ * `claimTutorialLevel` guards on `waveNumber === 0`, which is not enough on its
+ * own: if wave 0 were cleared while drills remained, that guard would be false
+ * and the claim would yank the match back from wave 1. Claim once, at the start
+ * of a run, and never again until `resetTutorial`.
+ */
+let levelClaimed = false;
 
 /** Index into TUTORIAL_DRILLS; -1 once finished. */
 let drillIndex = 0;
@@ -351,6 +363,27 @@ export function publishTutorialWaveGate(
   releaseCurrent: boolean,
 ): void {
   const budget = releaseBudget(drill, releaseCurrent);
+  // KNOWN, DEFERRED: this reads the *setting*, not whether the tutorial will
+  // actually run. On a desktop landing page it is true, so the tutorial
+  // publishes "I govern the waves" for a match it will never join. That is the
+  // root of four bugs fixed 2026-08-27..29 — the wave-0 claim, the restart
+  // level, the bare board, and wave 1 arriving in 2s instead of 5s.
+  //
+  // Every symptom is closed and tested. The exposure that remains is the single
+  // frame between `startMatch` and TutorialSystem's next update, during which
+  // `held` is stale: it zeroes the wave clock's delta (`wave.ts:309`) and caps
+  // releases. Harmless for one frame — and bounded only by `WaveSystem` being
+  // registered at `index.ts:258` ahead of `TutorialSystem` at `:267`, which is
+  // not a guarantee anyone is maintaining.
+  //
+  // The fix is a `tutorialWillRun()` predicate (enabled AND immersive AND not
+  // retired) that everything except the settings UI asks instead. Deferred
+  // because `governing` also drives `tutorialReleaseAllowance` and the
+  // `TutorialGateBeforeWavePrep` contract, so changing when it is true is a
+  // behaviour change in the wave system — and because item 8 adds a fourth
+  // input to the same predicate. Do them together.
+  //
+  // Backlog item 18, `RTSVR_repos/devlog/2026-08-26-Finishing-Touches-Backlog.md`.
   const governing = tutorialGovernsWaves(isTutorialEnabled(), drill);
   const holdsCountdown = tutorialHoldsWaveCountdown(drill, budget);
   setTutorialWaveGate({
@@ -469,6 +502,7 @@ export function resetTutorial(): void {
   // Restart is the one path that re-arms the tutorial. The pooled visuals
   // re-attach lazily, the first time a drill actually needs each one.
   clearTutorialLeft();
+  levelClaimed = false;
   drillIndex = 0;
   killsAtDrillStart = 0;
   sampleClock = 0;
@@ -691,17 +725,38 @@ export class TutorialSystem extends createSystem({
     // NonImmersive -> Visible transition, so that transition is not a reliable
     // signal that the player chose to replay the match. ScenarioResetSystem is
     // the sole owner of a deliberate tutorial restart.
-    // Claim the tutorial level for this run. Done here rather than in
-    // BoardSystem because `boardState.waveSource` has to exist first, and
-    // TutorialSystem is registered after it.
-    //
-    // Deliberately NOT gated on being in VR: the card is a VR experience, the
-    // *level* is not. If the match sat at wave 1 in the preview and only became
-    // wave 0 on entering XR, the player would put the headset on mid-wave.
-    this.claimTutorialLevel();
     // Before the first update of ANY system: WaveSystem runs earlier in the
     // frame and prepares the wave once, so the anchor must already be published.
     publishTutorialWaveGate(drillIndex, false);
+
+    // Claim the tutorial's level the INSTANT the app turns immersive — never
+    // from a system update.
+    //
+    // Moving the claim into `update()` (to stop a desktop start landing on
+    // wave 0) broke the very ordering the line above depends on. WaveSystem
+    // runs BEFORE TutorialSystem and calls `prepareWaveIncrementally` on
+    // **every** countdown frame while playing, with no lead-time gate
+    // (`wave.ts:244`). So on the frame a session opened, WaveSystem saw
+    // `playing` + wave 1 and started building wave 1's aliens; the claim then
+    // switched the match to wave 0, and the next frame's
+    // `resetWavePreparation()` cleared the bookkeeping **without disposing the
+    // aliens already built**. Those are live entities parked in stage
+    // `waiting`, and `completeVictoryIfWaveCleared` counts every enemy with
+    // health, so the tutorial wave could never clear.
+    //
+    // A signal subscription fires synchronously on the transition, ahead of any
+    // system update that frame — the same "before the first update of ANY
+    // system" property `init()` used to give it, minus the desktop bug: on a
+    // flat start this never fires with `Visible`, so wave 1 stands.
+    //
+    // Latched, so the brief NonImmersive -> Visible flicker Quest reports when
+    // the headset is removed and replaced cannot re-claim anything.
+    this.cleanupFuncs.push(
+      this.world.visibilityState.subscribe((state) => {
+        if (state !== VisibilityState.Visible) return;
+        this.claimTutorialLevel();
+      }),
+    );
   }
 
   update(delta: number): void {
@@ -746,6 +801,28 @@ export class TutorialSystem extends createSystem({
       this.goDormant(false);
       return;
     }
+    // Reaching here is the proof the tutorial is actually going to run: the app
+    // is immersive, the setting is on, and this run has not been retired. THAT
+    // is when the level is claimed.
+    //
+    // It used to be claimed in `init()`, ungated, on the reasoning that "the
+    // card is a VR experience, the *level* is not" — if the match sat at wave 1
+    // in the preview and only became wave 0 on entering XR, the player would
+    // put the headset on mid-wave. That reasoning predates the start gate.
+    // Nothing spawns before the player picks a route now, so the decision can
+    // wait until the route is known instead of guessing at boot.
+    //
+    // Measured 2026-08-27 (`console-logs/..._Desktop_Vr.log`): a desktop start
+    // ran `Lvl 0` — the tutorial's own wave, three aliens on a bare board —
+    // while the tutorial itself retired on the first frame with
+    // `reason=not-immersive`. The player fought the teaching wave with no
+    // teaching. Desktop now stays on wave 1, which is what `WaveSource`
+    // defaults to, so this is the only code that ever moves it.
+    //
+    // The reverse case is protected by the latch and by the guard above:
+    // leaving the tutorial mid-run does NOT advance to wave 1. Nothing sets
+    // the wave forward on exit; the run simply stays where the player left it.
+    this.claimTutorialLevel();
     // Finished. `evaluate()` already detached the visuals and released the wave
     // gate; without this the card, arrow, ring and path checks kept running
     // every frame for the rest of the match, which is what made "tutorial over"
@@ -1409,7 +1486,33 @@ export class TutorialSystem extends createSystem({
    * a live session reads, and leaving `active: true` while nothing is running
    * would send them looking for a bug that is not there.
    */
+  /**
+   * Which of the four exits from the tutorial this is.
+   *
+   * Ordered most-specific first, because more than one can be true at once —
+   * a disabled tutorial in the 2D preview is both "disabled" and "not-visible",
+   * and *disabled* is the one that explains the player's intent.
+   */
+  private dormantReason(): string {
+    if (tutorialRequiresRestart()) return "already-left";
+    if (!isTutorialEnabled()) return "disabled";
+    if (this.world.visibilityState.peek() !== VisibilityState.Visible) {
+      return "not-immersive";
+    }
+    return "script-complete";
+  }
+
   private goDormant(stillHoldingWaves = false): void {
+    // `goDormant` runs EVERY FRAME while dormant and is deliberately
+    // idempotent — everything below is safe to repeat. So the log cannot live
+    // at the top: it must sit on the two state changes that genuinely happen
+    // once, which are the same two this function already guards.
+    //
+    // The first attempt logged on entry and leaned on a string-comparison
+    // repeat guard instead. That broke the moment the reason text changed —
+    // `disabled` on one frame, `already-left` on the next, as a different
+    // branch of `update()` reached the same call. Two lines, one event.
+    const wasRetired = tutorialRequiresRestart();
     if (stillHoldingWaves) {
       publishTutorialWaveGate(drillIndex, false);
     } else {
@@ -1429,6 +1532,21 @@ export class TutorialSystem extends createSystem({
     // is simply off the face and the player is coming back to a live run, so
     // hiding is right and detaching would cost a re-attach on their return.
     if (!stillHoldingWaves) {
+      // Once, on the frame the latch actually flips.
+      if (!wasRetired) {
+        logAction(
+          ActionKind.Tutorial,
+          `-> retired reason=${this.dormantReason()} drill=${drillIndex} ` +
+            `enabled=${isTutorialEnabled()}`,
+        );
+        // Retiring WITHOUT ever having claimed the level means the script never
+        // ran at all — a desktop start, or the setting switched off before it
+        // began. The board was built bare for a tutorial that is not coming, so
+        // give back what the bare start withheld. `levelClaimed` is the exact
+        // test: a run that got as far as claiming wave 0 taught the astronaut
+        // drill, so it must NOT be handed a free one on the way out.
+        if (!levelClaimed) createTutorialOmittedStructures(this.world);
+      }
       markTutorialLeft();
       detachTutorialVisuals();
     }
@@ -1440,6 +1558,14 @@ export class TutorialSystem extends createSystem({
     const state = boardState.tutorial;
     if (!state) return;
     if (!(state.getValue(TutorialState, "active") ?? false)) return;
+    // Reaching here means the tutorial really was active, so this is a
+    // transition rather than the hundredth idempotent re-entry.
+    if (stillHoldingWaves) {
+      logAction(
+        ActionKind.Tutorial,
+        `active -> dormant reason=${this.dormantReason()} drill=${drillIndex}`,
+      );
+    }
     state.setValue(TutorialState, "active", false);
     bumpRevision(state);
   }
@@ -1454,9 +1580,31 @@ export class TutorialSystem extends createSystem({
    * "already spawned".
    */
   private claimTutorialLevel(): void {
+    if (levelClaimed) return;
     if (!isTutorialEnabled()) return;
+    // A retired tutorial must never claim the level.
+    //
+    // `update()` checks this before calling, and while that was the only caller
+    // the check could live there. The visibility subscription added 2026-08-27
+    // is a second caller and did not carry the precondition, so putting a
+    // headset on **mid-match** re-claimed wave 0 on a match that had already
+    // started without the tutorial.
+    //
+    // Measured (`console-logs/..._Desktop_Vr_v2.log`): a desktop run was at
+    // `Lvl 1 active | Enemies 11 alive`; `[Action] xr enter` landed at line
+    // 1702; twelve lines later it read `Lvl 0 active | Enemies 14 alive` —
+    // the match dragged back to the teaching wave and wave 0's three aliens
+    // spawned on top of the eleven already fighting.
+    //
+    // This is exactly what the old `init()` comment warned about: "the player
+    // would put the headset on mid-wave". The rule it protects is unchanged —
+    // entering XR after a desktop start does not resume the tutorial, the
+    // player is told to Restart — so the guard belongs on the function, not on
+    // whichever caller happens to remember it.
+    if (tutorialRequiresRestart()) return;
     const source = boardState.waveSource;
     if (!source) return;
+    levelClaimed = true;
     if ((source.getValue(WaveSource, "waveNumber") ?? 1) === TUTORIAL_WAVE_NUMBER) {
       return;
     }
@@ -1505,6 +1653,11 @@ export class TutorialSystem extends createSystem({
       markTutorialLeft();
       detachTutorialVisuals();
       if (state && (state.getValue(TutorialState, "active") ?? false)) {
+        // Inside the guard, not before it. `evaluate()` runs at 4 Hz and
+        // `!active` stays true for the rest of the match, so logging above here
+        // fired every 250 ms and was saved only by the string repeat-guard —
+        // the crutch that already failed twice.
+        logAction(ActionKind.Tutorial, `-> complete drill=${before}`);
         state.setValue(TutorialState, "active", false);
         state.setValue(TutorialState, "drill", -1);
         bumpRevision(state);

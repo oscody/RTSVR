@@ -18,6 +18,7 @@ import {
   liftAboveScene,
   placeAtCommandCenterAlertPosition,
 } from "./underAttackBanner.js";
+import { getFinalWaveNumber } from "./waveCatalog.js";
 
 type UiElement = UIKit.Text & {
   setProperties(properties: Record<string, unknown>): void;
@@ -113,8 +114,13 @@ export class MatchResultSystem extends createSystem({
     this.element("result-panel")?.setProperties({
       borderColor: victory ? "#22c55e" : "#ef4444",
     });
+    // "LEVEL 1 COMPLETE" was hardcoded here, and told a player who had just
+    // cleared wave 6 that they had finished level 1. Victory only ever fires
+    // when the catalog has no next wave, so the number the player is congratulated
+    // with must come from the catalog too — add a wave and this follows.
+    const finalWave = getFinalWaveNumber();
     this.element("result-title")?.setProperties({
-      text: victory ? "LEVEL 1 COMPLETE" : "COMMAND CENTER LOST",
+      text: victory ? `ALL ${finalWave} WAVES CLEARED` : "COMMAND CENTER LOST",
       color: victory ? "#86efac" : "#fca5a5",
     });
     // Two ways to lose, and they want different words: the title says
@@ -123,7 +129,7 @@ export class MatchResultSystem extends createSystem({
       boardState.waveSource?.getValue(MatchState, "commandCenterAlive") ?? true;
     this.element("result-body")?.setProperties({
       text: victory
-        ? `Wave ${waveNumber} cleared. All aliens were defeated.`
+        ? `Wave ${waveNumber} was the last. All aliens were defeated.`
         : baseAlive
           ? "All friendly forces were destroyed."
           : "Your command center was destroyed.",

@@ -18,7 +18,7 @@ test("gameplay that mutates the board is gated on the match running", () => {
   ]) {
     assert.match(
       src(file),
-      /if \(!matchAcceptsCommands\(\)\) return;/,
+      /if \(!matchAcceptsCommands\("[a-z-]+"\)\) return;/,
       `${file} must refuse to act once the match is over`,
     );
   }
@@ -30,7 +30,7 @@ test("the gate covers both ends and the reset, not just defeat", () => {
   // on entities a reset is about to dispose is how dangling handles are made.
   assert.match(
     start,
-    /export function matchAcceptsCommands[\s\S]*?=== "playing"/,
+    /export function matchAcceptsCommands[\s\S]*?status === "playing"/,
   );
 });
 
@@ -42,7 +42,7 @@ test("commands are gated at the single funnel, not per subscription", () => {
   const funnel = /private observeWorldPress[\s\S]*?const corr = beginWorldInteraction/.exec(
     interaction,
   )?.[0] ?? "";
-  assert.match(funnel, /if \(!matchAcceptsCommands\(\)\) return;/);
+  assert.match(funnel, /if \(!matchAcceptsCommands\("[a-z-]+"\)\) return;/);
 });
 
 test("the tablet stays live so Restart still works", () => {
@@ -102,4 +102,56 @@ test("EVERY alien build site is guarded, not just the activation ones", () => {
   const guard = /private buildAlienSafely[\s\S]*?\n  \}/.exec(wave)?.[0] ?? "";
   assert.match(guard, /this\.createPreparedAlien\(/);
   assert.match(guard, /catch \(error\)/);
+});
+
+// ── Abandoned wave preparation must not leak aliens ───────────────────────
+
+test("aliens built for an abandoned wave are disposed, not orphaned", () => {
+  const wave = src("wave.ts");
+  const code = wave
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+
+  // Preparation creates REAL entities (`WaveUnit.stage = "waiting"`), a few per
+  // frame across the countdown. `resetWavePreparation` cleared the bookkeeping
+  // and left them alive — and `completeVictoryIfWaveCleared` counts every enemy
+  // with health regardless of stage, so the current wave could never clear.
+  assert.match(code, /private preparedAliens: Entity\[\] = \[\];/);
+  assert.match(code, /this\.preparedAliens\.push\(alien\);/);
+
+  // The reset must dispose whatever it still owns.
+  const reset = /private resetWavePreparation\(\): void \{[\s\S]*?\n  \}/.exec(code)?.[0] ?? "";
+  assert.ok(reset, "resetWavePreparation not found");
+  assert.match(reset, /this\.disposePreparedAliens\(\);/);
+
+  // Shared AssetManager geometry/materials: dispose() traverse-frees the whole
+  // subtree and takes the shared asset with it.
+  const disposer = /private disposePreparedAliens\(\): void \{[\s\S]*?\n  \}/.exec(code)?.[0] ?? "";
+  assert.ok(disposer, "disposePreparedAliens not found");
+  assert.match(disposer, /releaseEntity\(alien\)/);
+  assert.doesNotMatch(disposer, /\.dispose\(\)/);
+  // Entity indexes are pooled — anything keyed on one must be cleared.
+  assert.match(disposer, /clearThreat\(alien\)/);
+  assert.match(disposer, /disposeEnemyRangeRing\(alien\)/);
+  assert.match(disposer, /detachAlienAnimation\(alien\)/);
+  // Nothing killed these, so kill accounting must not move.
+  assert.doesNotMatch(disposer, /incrementEnemyKills|enemiesKilled/);
+  assert.doesNotMatch(disposer, /Reason\.Killed|Lifecycle\.Killed/);
+});
+
+test("activation disowns the prepared aliens BEFORE the reset", () => {
+  // resetWavePreparation() is called on the success path too (right after the
+  // [WaveBuild] line). Without the disown, the reset would dispose the very
+  // wave it just spawned.
+  const code = src("wave.ts")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+  const adopt = code.indexOf("this.adoptPreparedAliens();");
+  const reset = code.indexOf("this.resetWavePreparation();", adopt);
+  assert.ok(adopt >= 0, "activation never disowns the prepared aliens");
+  assert.ok(reset > adopt, "the disown must come before the reset");
+  // Disowning must NOT dispose — these are live now.
+  const fn = /private adoptPreparedAliens\(\): void \{[\s\S]*?\n  \}/.exec(code)?.[0] ?? "";
+  assert.match(fn, /this\.preparedAliens\.length = 0;/);
+  assert.doesNotMatch(fn, /releaseEntity|dispose/);
 });

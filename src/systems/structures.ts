@@ -37,7 +37,6 @@ import { attachMinerAnimation } from "./minerAnimation.js";
 import { attachTurretAnimation } from "./turretAnimation.js";
 import { initialLoad } from "../app/initialLoad.js";
 import { registerDimmableObject } from "./board.js";
-import { isTutorialEnabled } from "./tutorial.js";
 import { attachUnitAnimation } from "./unitAnimation.js";
 import {
   type BoardTerrain,
@@ -327,14 +326,32 @@ export function createEnemyEntity(
  */
 const TUTORIAL_OMITTED_STRUCTURES: ReadonlySet<string> = new Set(["AstronautA"]);
 
+/**
+ * Build the structures a bare start left out.
+ *
+ * The mirror of {@link TUTORIAL_OMITTED_STRUCTURES}: the board is always built
+ * bare, and this puts the missing pieces back once it is known the tutorial
+ * will not run — a desktop start, or the setting switched off before the script
+ * began. Same loop, same construction path, so a spec that gains a health bar
+ * or an animation gains it on both routes.
+ *
+ * Measured 2026-08-27 (`console-logs/..._Desktop_Vr.log`): a desktop player got
+ * the tutorial's bare board — no starting astronaut, which exists to force the
+ * drill order — while the tutorial itself never ran.
+ */
+export function createTutorialOmittedStructures(world: World): void {
+  createInitialScenario(world, { only: TUTORIAL_OMITTED_STRUCTURES });
+}
+
 export function createInitialScenario(
   world: World,
-  options: { bareStart?: boolean } = {},
+  options: { bareStart?: boolean; only?: ReadonlySet<string> } = {},
 ): void {
   const root = boardState.boardRoot;
   if (!root) throw new Error("Initial scenario requires BoardSystem first");
 
   for (const spec of STRUCTURES) {
+      if (options.only && !options.only.has(spec.name)) continue;
       if (options.bareStart && TUTORIAL_OMITTED_STRUCTURES.has(spec.name)) {
         continue;
       }
@@ -464,7 +481,18 @@ export function createInitialScenario(
 export class StructuresSystem extends createSystem({}) {
   init(): void {
     try {
-      createInitialScenario(this.world, { bareStart: isTutorialEnabled() });
+      // ALWAYS bare. At boot nobody knows whether the player will choose
+      // desktop or VR, so this cannot be decided here — and it used to be,
+      // via `isTutorialEnabled()`, which is the *setting* rather than whether
+      // the tutorial can run. TutorialSystem owns the difference now and calls
+      // `createTutorialOmittedStructures` the moment it learns it will not run.
+      //
+      // Bare is the safe default because the correction is ADDITIVE. Building
+      // the astronaut and removing it later would mean reproducing the
+      // seven-step teardown in `demolition.ts` — animations, selection,
+      // selection visuals, two board maps, then dispose — and missing one is a
+      // leak. Adding one reuses this exact loop.
+      createInitialScenario(this.world, { bareStart: true });
     } finally {
       // D4's definition of "presentable": the board exists, so the overlay may
       // go. In a `finally` like every other reporting site — a scenario that

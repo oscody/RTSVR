@@ -18,6 +18,7 @@ import {
 import {
   traceDecision,
   traceEntityCreated,
+  traceEntityDestroyed,
   traceEntityRequested,
   traceEntityTransition,
   traceError,
@@ -80,6 +81,10 @@ import {
   TUTORIAL_WAVE_NUMBER,
   type ResolvedWaveSpawn,
 } from "./waveCatalog.js";
+import { clearThreat } from "./underAttackVfx.js";
+import { detachAlienAnimation } from "./alienAnimation.js";
+import { disposeEnemyRangeRing } from "./selection.js";
+import { releaseEntity } from "./entityTeardown.js";
 
 interface AlienRoute {
   steps: Int16Array;
@@ -152,6 +157,28 @@ export class WaveSystem extends createSystem({
   // `preparedWaveNumber === 0` made spawnWaveIfNeeded take the already-prepared
   // branch with an empty list. Wave 0 spawned nothing, cleared instantly, and
   // the match silently advanced to wave 1, deleting the whole tutorial level.
+  /**
+   * Aliens BUILT for the wave being prepared but not yet handed to a live wave.
+   *
+   * Preparation creates real entities — `WaveUnit.stage = "waiting"`, detached
+   * from the render tree but fully present in the ECS — a few per frame across
+   * the countdown. If preparation is abandoned before activation, those
+   * entities have no owner: nothing releases them, nothing disposes them, and
+   * `completeVictoryIfWaveCleared` counts **every** enemy with health
+   * regardless of stage, so the current wave can never clear. A wedged match.
+   *
+   * Abandonment is not exotic. `prepareWaveIncrementally` resets whenever
+   * `WaveSource.revision` bumps mid-countdown (`wave.ts:449`) or the wave
+   * number changes under it (`wave.ts:454`) — both ordinary events.
+   *
+   * Ownership is explicit: {@link adoptPreparedAliens} disowns the list on the
+   * one path where the aliens become the live wave, and
+   * {@link resetWavePreparation} disposes whatever is left. That direction is
+   * deliberate — forgetting to disown destroys a wave loudly, forgetting to
+   * dispose leaks silently, and loud is the failure worth having.
+   */
+  private preparedAliens: Entity[] = [];
+
   private preparedWaveNumber = NO_WAVE;
   private pendingSpawns: ResolvedWaveSpawn[] = [];
   private spawnCursor = 0;
@@ -232,7 +259,54 @@ export class WaveSystem extends createSystem({
       traceRead(State.TutorialGoverning, governing ? 1 : 0);
       traceRead(State.TutorialHoldsCountdown, held ? 1 : 0);
     }
-    if (held) this.clock.timer = TUTORIAL_WAVE_ACTIVATION_LEAD_SECONDS;
+    // Pin the countdown to the tutorial's short lead ONLY while the match is
+    // actually running.
+    //
+    // The pin exists so a drill that releases the wave gate gets its alien
+    // promptly instead of waiting a full wave delay. It was unconditional, and
+    // that quietly undid the start gate one line below: `advanceWaveClock`
+    // deliberately HOLDS during `awaiting-start` so "a player who waited five
+    // minutes on the landing page still gets the full wave-1 grace period" —
+    // but this line had already overwritten the seeded delay with 2 and the
+    // write at the bottom of the block persisted it.
+    //
+    // The tutorial holds the waves on the landing page even on desktop, where
+    // it will never run, so every desktop start reached wave 1 after ~2s
+    // instead of the configured 5. Measured
+    // (`console-logs/..._Desktop_Vr_v3.log`): EXPLORE at t+14.6s, `Lvl 1
+    // active` at t+17.6s, against `INITIAL_WAVE_DELAY_SECONDS = 5`. The
+    // wave 1 -> 2 countdown in the same run was a correct 5.1s, which is what
+    // isolated this to the pre-start window.
+    //
+    // Pin the countdown to the tutorial's short lead, on the TUTORIAL'S OWN
+    // WAVE only.
+    //
+    // The lead exists so a drill that releases the gate gets its alien promptly
+    // instead of waiting a full wave delay. It used to be `if (held)` with no
+    // scope, and that shortened ordinary waves through a one-frame window.
+    //
+    // `held` already requires a playing match (see its definition above), so
+    // the landing page was never the problem — the problem is the FIRST FRAME
+    // AFTER a desktop start. `startMatch("landing-explore")` sets `playing`
+    // between frames; `WaveSystem` is registered at `index.ts:258` and
+    // `TutorialSystem` at `:267`, so this runs before the tutorial has had its
+    // update to retire and call `clearTutorialWaveGate()`. For that one frame
+    // the gate is stale, `held` is true, and the pin wrote 2 over the seeded 5
+    // — which the block below then persisted.
+    //
+    // Measured (`console-logs/..._Desktop_Vr_v3.log`): EXPLORE at t+14.6s,
+    // `Lvl 1 active` at t+17.6s against `INITIAL_WAVE_DELAY_SECONDS = 5`. After
+    // the scope was added (`..._v4.log`): EXPLORE t+6.5s -> active t+12.5s, and
+    // three post-restart countdowns at 5.0s, 5.0s, 5.1s.
+    //
+    // Scoping to wave 0 is also the honest statement of intent, and it holds
+    // regardless of registration order — which is the point. A finished
+    // tutorial releases the gate entirely and never governs a numbered wave, so
+    // this cannot take the lead away from the tutorial itself; verified in v4,
+    // where wave 0 still activated ~2s after the tutorial was switched off.
+    if (held && this.clock.waveNumber === TUTORIAL_WAVE_NUMBER) {
+      this.clock.timer = TUTORIAL_WAVE_ACTIVATION_LEAD_SECONDS;
+    }
     const activated = advanceWaveClock(
       this.clock,
       held ? 0 : delta,
@@ -414,6 +488,11 @@ export class WaveSystem extends createSystem({
       spawns.length,
       Reason.Accepted,
     );
+    // These aliens ARE the wave now — WaveSystem hands them to the release
+    // logic below. Disown before the reset, or the reset would dispose the wave
+    // it just spawned. Both branches above (prepared, and the resolve-now
+    // fallback) converge here, so this covers each of them.
+    this.adoptPreparedAliens();
     this.resetWavePreparation();
     source.setValue(WaveSource, "spawnedWaveNumber", this.clock.waveNumber);
     source.setValue(WaveSource, "releaseTimer", 0);
@@ -534,6 +613,7 @@ export class WaveSystem extends createSystem({
       yawDeg: spawn.yawDeg,
       healthMultiplier: spawn.healthMultiplier,
     });
+    this.preparedAliens.push(alien);
     const kindId = entityKindId(spawn.enemy);
     traceEntityCreated(alien.index, kindId, Lifecycle.Created);
     alien.setValue(WaveUnit, "stage", "waiting");
@@ -579,7 +659,52 @@ export class WaveSystem extends createSystem({
     }
   }
 
+  /**
+   * Give up ownership of the prepared aliens without disposing them.
+   *
+   * Called only from activation, where they become the live wave.
+   */
+  private adoptPreparedAliens(): void {
+    this.preparedAliens.length = 0;
+  }
+
+  /**
+   * Dispose aliens built for a wave that was abandoned before activation.
+   *
+   * Mirrors `CombatSystem.destroyTarget`'s enemy teardown, minus the kill
+   * accounting — nothing killed these, so `enemiesKilled` must not move and no
+   * wave-clear check should see them as a death.
+   *
+   * `releaseEntity`, never `entity.dispose()`: GLTF geometry and materials are
+   * shared `AssetManager` resources and dispose() traverse-frees the whole
+   * subtree, taking the shared asset with it.
+   */
+  private disposePreparedAliens(): void {
+    for (const alien of this.preparedAliens) {
+      // Entity indexes are pooled and reused, so anything keyed on this index
+      // would re-point at whatever entity is created next.
+      clearThreat(alien);
+      if (alien.hasComponent(RayInteractable)) {
+        alien.removeComponent(RayInteractable);
+      }
+      const kindId = entityKindId(alien.getValue(Enemy, "kind") ?? "alien");
+      traceEntityTransition(
+        alien.index,
+        kindId,
+        Lifecycle.Destroyed,
+        Reason.Cancelled,
+      );
+      traceEntityDestroyed(alien.index, kindId, Reason.Cancelled);
+      detachAlienAnimation(alien);
+      disposeEnemyRangeRing(alien);
+      releaseEntity(alien);
+    }
+    this.preparedAliens.length = 0;
+  }
+
   private resetWavePreparation(): void {
+    // Anything still owned here belongs to a wave that never activated.
+    this.disposePreparedAliens();
     this.preparedWaveNumber = NO_WAVE;
     this.pendingSpawns = [];
     this.spawnCursor = 0;

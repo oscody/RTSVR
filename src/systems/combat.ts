@@ -11,6 +11,7 @@ import {
   type DamageResult,
   type DamageTargetType,
 } from "./combatRules.js";
+import { ActionKind, logAction } from "./actionLog.js";
 import { worldToGrid } from "./board.js";
 import { footprintCells } from "./constructionRules.js";
 import {
@@ -63,7 +64,7 @@ import {
   type WaveStage,
 } from "./waveRules.js";
 import { isTutorialFrozen } from "./tutorialFreeze.js";
-import { getNextWaveSpec } from "./waveCatalog.js";
+import { getFinalWaveNumber, getNextWaveSpec } from "./waveCatalog.js";
 import { releaseEntity } from "./entityTeardown.js";
 import { Consumer, expectHandoff } from "./traceContracts.js";
 import {
@@ -373,9 +374,21 @@ export class CombatSystem extends createSystem({
     source.setValue(
       MatchState,
       "status",
-      resolveMatchAfterCommandCenterLoss(
-        (source.getValue(MatchState, "status") ?? "playing") as MatchStatus,
-      ),
+      (() => {
+        const current = (source.getValue(MatchState, "status") ??
+          "playing") as MatchStatus;
+        const next = resolveMatchAfterCommandCenterLoss(current);
+        // The words "victory" and "defeat" appear in ZERO existing log lines —
+        // `Lvl <n> stopped` prints for both. This is the only record of which.
+        //
+        // Compared against `current`, not tested for equalling "defeat": once
+        // the status IS defeat the resolver keeps returning defeat, so the
+        // value test was true on every later call. A change, not a state.
+        if (next !== current) {
+          logAction(ActionKind.MatchEnd, `${next} cause=command-center-lost`);
+        }
+        return next;
+      })(),
     );
     source.setValue(
       MatchState,
@@ -411,6 +424,7 @@ export class CombatSystem extends createSystem({
       "playing") as MatchStatus;
     const next = resolveMatchAfterFriendlyElimination(current, remaining);
     if (next === current) return;
+    logAction(ActionKind.MatchEnd, `${next} cause=all-friendlies-lost`);
     source.setValue(MatchState, "status", next);
     source.setValue(
       MatchState,
@@ -453,13 +467,27 @@ export class CombatSystem extends createSystem({
       this.advanceToNextWave(source, nextWave.waveNumber, tablet);
       return;
     }
+    // The two other MatchEnd sites are both LOSING paths. Winning the game was
+    // silent until 2026-08-27, when a session cleared all six waves and the
+    // narrative simply stopped — `Lvl 6 stopped | Enemies 0 alive / 116 killed`
+    // with the command centre standing, and no `[Action] match` line anywhere
+    // (`console-logs/..._after_B_level6.log`). A timeline that records every way
+    // to lose and no way to win is not a timeline of the match.
+    logAction(
+      ActionKind.MatchEnd,
+      `victory cause=all-waves-cleared wave=${waveNumber} of ${getFinalWaveNumber()}`,
+    );
     source.setValue(MatchState, "status", "victory");
     source.setValue(
       MatchState,
       "revision",
       (source.getValue(MatchState, "revision") ?? 0) + 1,
     );
-    this.setTabletStatus(tablet, `Wave ${waveNumber} cleared - victory`, "success");
+    this.setTabletStatus(
+      tablet,
+      `Wave ${waveNumber} of ${getFinalWaveNumber()} cleared - victory`,
+      "success",
+    );
   }
 
   private advanceToNextWave(

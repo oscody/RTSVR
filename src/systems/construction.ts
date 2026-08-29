@@ -399,7 +399,7 @@ export class ConstructionSystem extends createSystem({
     // builder should be assigned, once the match is decided or before it has
     // begun. All four steps mutate the board, so the gate covers the whole
     // update rather than any one of them.
-    if (!matchAcceptsCommands()) return;
+    if (!matchAcceptsCommands("construction")) return;
     this.advanceBuilders();
     this.advanceSites(delta);
     this.assignIdleBuilders();

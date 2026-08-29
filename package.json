@@ -18,7 +18,8 @@
     "asset:optimize-aliens": "bash scripts/with-supported-node.sh node scripts/optimize-aliens.mjs",
     "asset:optimize-buildings": "bash scripts/with-supported-node.sh node scripts/optimize-buildings.mjs",
     "typecheck": "bash scripts/with-supported-node.sh tsc --noEmit",
-    "test": "bash scripts/with-supported-node.sh node --experimental-strip-types --test tests/*.test.ts",
+    "test:unit": "bash scripts/with-supported-node.sh node --experimental-strip-types --test tests/*.test.ts",
+    "test": "npm run typecheck && npm run test:unit",
     "build": "bash scripts/with-supported-node.sh vite build",
     "preview": "bash scripts/with-supported-node.sh vite preview"
   },

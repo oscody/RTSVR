@@ -1,6 +1,7 @@
 import { VisibilityState, launchXR, type World } from "@iwsdk/core";
 import { initialLoad } from "./initialLoad.js";
 import { matchAwaitingStart, startMatch } from "../systems/matchStart.js";
+import { ActionKind, logAction } from "../systems/actionLog.js";
 
 /**
  * The landing chrome — the player's way in.
@@ -65,13 +66,24 @@ export function setupLanding(world: World): void {
   // every route in — this button, the browser pill, a headset-native entry —
   // starts the match at the same moment: when the session actually opens.
   enterButton?.addEventListener("click", () => {
+    // Intent only — it must NOT touch the gate. `attachMatchStart` still
+    // releases the match when the session actually opens, which is the
+    // invariant the bug above established.
+    //
+    // Why a line is needed at all: removing `startMatch()` also made this
+    // button **indistinguishable from the browser's own Enter XR pill**. Both
+    // now report `via=xr-session`, so the five 2026-08-27 captures cannot say
+    // which route any of them used — and "our button or Chrome's?" is exactly
+    // the question that started the bug hunt. A `via=xr-session` preceded by
+    // this line is our button; one without it is the pill.
+    logAction(ActionKind.Xr, "launch requested via=landing-button");
     launchXR(world);
   });
 
   // Explore in browser: the desktop player's start. RTSVR plays flat, and
   // without this a machine with no headset has no way to begin at all.
   exploreButton?.addEventListener("click", () => {
-    startMatch();
+    startMatch("landing-explore");
     applyLandingChrome();
   });
 

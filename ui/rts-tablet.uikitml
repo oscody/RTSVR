@@ -618,6 +618,29 @@
     margin-top: 5px;
   }
 
+  /* The one debug affordance reachable inside the headset — the CLI is not.
+     Lives in the tab, not the split-out settings panel, so it does not reopen
+     that work. Costs one element in the always-loaded tablet document. */
+  .settings-dump {
+    width: 280px;
+    height: 30px;
+    margin-top: 10px;
+    align-items: center;
+    justify-content: center;
+    background-color: #c8d4dc;
+    border-width: 1px;
+    border-color: #8497a5;
+    border-radius: 5px;
+    color: #1d3442;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .settings-dump:hover {
+    background-color: #b4c7d2;
+  }
+
   .settings-hint {
     width: 548px;
     height: 24px;
@@ -808,6 +831,7 @@
          every configured panel each frame regardless of visibility, so hiding
          them here saved nothing. Removing them does. -->
     <span class="settings-hint">Controls open in their own panel below the tablet.</span>
+    <button id="dump-trace" class="settings-dump">DUMP TRACE TO CONSOLE</button>
   </div>
   <span id="tablet-status" class="status">Select an astronaut to build</span>
 </Panel>

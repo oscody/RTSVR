@@ -1,4 +1,5 @@
 import { VisibilityState, type World } from "@iwsdk/core";
+import { ActionKind, logAction } from "./actionLog.js";
 import { MatchState, boardState } from "./state.js";
 
 /**
@@ -27,11 +28,12 @@ import { MatchState, boardState } from "./state.js";
  * Idempotent on purpose: several of these can fire for one entry, and a restart
  * that is already `playing` must not be knocked back to the start gate.
  */
-export function startMatch(): boolean {
+export function startMatch(via = "unknown"): boolean {
   const source = boardState.waveSource;
   if (!source) return false;
   const status = source.getValue(MatchState, "status") ?? "awaiting-start";
   if (status !== "awaiting-start") return false;
+  logAction(ActionKind.MatchStart, `awaiting-start -> playing via=${via}`);
   source.setValue(MatchState, "status", "playing");
   source.setValue(
     MatchState,
@@ -64,6 +66,30 @@ export function matchAwaitingStart(): boolean {
 }
 
 /**
+ * Last status each named system was blocked by, so a refusal logs on the edge.
+ *
+ * **This must be edge-triggered or it is unusable.** Three of the four callers
+ * ask on every frame, so an unconditional line would be ~360 a second — the
+ * exact "mechanism, not decision" flood the action log exists to avoid.
+ *
+ * Suppressing it *here* rather than in `logAction` is the rule learned on
+ * 2026-08-27: the sink cannot tell an action from a state, but this function
+ * can. "The match is over" is a **state**, so it prints once per episode; a
+ * player pressing Produce twice is two **actions**, so those print twice.
+ */
+const blockedBy = new Map<string, string>();
+
+/**
+ * The statuses that mean "the match is decided".
+ *
+ * Deliberately **not** every non-playing status — see the filter in
+ * {@link matchAcceptsCommands}. `tutorialDeadEnd` is absent because it is a
+ * `MatchState` value the tutorial sets, never a `MatchStatus`, and the gate
+ * reads the latter.
+ */
+const MATCH_OVER: ReadonlySet<string> = new Set(["victory", "defeat"]);
+
+/**
  * True only while the match is actually running.
  *
  * The complement of "the match is over, or has not begun". Gameplay that
@@ -78,12 +104,45 @@ export function matchAwaitingStart(): boolean {
  * **Not for UI.** The tablet must stay live when the match is over or the
  * player cannot press Restart — its handlers live in `TabletSystem`, which
  * deliberately does not consult this.
+ *
+ * @param system Optional name. Passing one makes the refusal **observable**:
+ * the first frame this system is blocked, and again whenever the blocking
+ * status changes, it logs `[Action] blocked <system> status=<status>`.
+ *
+ * Why it was worth adding: on 2026-08-27 a session ended in victory and the
+ * board went quiet — but with **no miners, nothing in production, nothing under
+ * construction and no wave 7**, the quiet was over-determined. *With every gate
+ * removed that board would have looked identical.* Four of the five gates were
+ * bare `return`s that no log could see, so the ✅ rested on a single manual
+ * check. A named gate reports itself.
+ *
+ * Re-arms automatically: when the match returns to `playing` the record clears,
+ * so a restart logs the next block afresh rather than staying silent.
  */
-export function matchAcceptsCommands(): boolean {
+export function matchAcceptsCommands(system?: string): boolean {
   const source = boardState.waveSource;
-  if (!source) return false;
-  return (source.getValue(MatchState, "status") ?? "") === "playing";
+  const status = source
+    ? ((source.getValue(MatchState, "status") ?? "") as string)
+    : "no-board";
+  const accepts = status === "playing";
+  if (system !== undefined) {
+    // Only a DECIDED match is reported. `awaiting-start` and `restarting` also
+    // block, but both already have their own narrative line
+    // (`match awaiting-start -> playing`, `restart scenario reset requested`),
+    // and reporting them would add four lines at every boot and four more at
+    // every restart — roughly a 40% longer narrative, none of it new. "" is the
+    // re-armed state and is never logged; only the edge INTO a decided match is.
+    const now = MATCH_OVER.has(status) ? status : "";
+    if (blockedBy.get(system) !== now) {
+      blockedBy.set(system, now);
+      if (now !== "") {
+        logAction(ActionKind.Blocked, `${system} status=${now}`);
+      }
+    }
+  }
+  return accepts;
 }
+
 
 /**
  * Release the gate when an immersive session begins, whatever started it.
@@ -93,8 +152,20 @@ export function matchAcceptsCommands(): boolean {
  * path entirely — it fires at most a handful of times per session.
  */
 export function attachMatchStart(world: World): void {
+  // `subscribe` fires IMMEDIATELY with the current value, and at boot that is
+  // always NonImmersive — so logging an exit unconditionally reported leaving a
+  // session that had never been entered, once per page load. Same shape as the
+  // tutorial's spurious boot line: an edge log must see a real edge.
+  let wasImmersive = false;
   world.visibilityState.subscribe((state) => {
-    if (state === VisibilityState.NonImmersive) return;
-    startMatch();
+    const immersive = state !== VisibilityState.NonImmersive;
+    if (!immersive) {
+      if (wasImmersive) logAction(ActionKind.Xr, "exit -> non-immersive");
+      wasImmersive = false;
+      return;
+    }
+    if (!wasImmersive) logAction(ActionKind.Xr, `enter state=${String(state)}`);
+    wasImmersive = true;
+    startMatch("xr-session");
   });
 }

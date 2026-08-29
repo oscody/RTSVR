@@ -125,7 +125,30 @@ test("headset visibility changes pause the tutorial instead of restarting it", (
   // A headset removal may briefly look like exiting and re-entering XR. It
   // must preserve the current drill; only the explicit Restart action replays
   // the tutorial from the command-center drill.
-  assert.doesNotMatch(tutorial, /visibilityState\.subscribe/);
+  //
+  // This used to ban `visibilityState.subscribe` outright. That was the
+  // mechanism, not the rule — there is now exactly one subscription, and it
+  // does nothing but claim the level (latched, once per match). Assert the
+  // RULE: whatever the subscription does, it must not be able to restart the
+  // script or move the player's place in it.
+  const subs = tutorial.match(/visibilityState\.subscribe\([\s\S]*?\n      \}\)/g) ?? [];
+  assert.equal(subs.length, 1, "one visibility subscription, or the rule below is unchecked");
+  for (const body of subs) {
+    assert.match(body, /this\.claimTutorialLevel\(\)/);
+    for (const forbidden of [
+      "drillIndex =",
+      "resetTutorial",
+      "clearTutorialLeft",
+      "markTutorialLeft",
+      "goDormant",
+    ]) {
+      assert.doesNotMatch(
+        body,
+        new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+        `the visibility subscription must not ${forbidden} — a headset flicker would replay the tutorial`,
+      );
+    }
+  }
   assert.match(tutorial, /visibilityState\.peek\(\) !== VisibilityState\.Visible/);
   // Dormant either way; the argument decides whether it also holds the waves.
   // See "desktop start must not hold the waves" below for why it is conditional.
@@ -1501,4 +1524,149 @@ test("matchStart has no import back into the tutorial", () => {
   );
   assert.doesNotMatch(start, /from "\.\/tutorial/);
   assert.doesNotMatch(start, /from "\.\/tablet/);
+});
+
+// ── Which level a run starts on, added 2026-08-27 ─────────────────────────
+
+const systemSrc = (path: string): string =>
+  readFileSync(new URL(`../src/systems/${path}`, import.meta.url), "utf8");
+const systemCode = (path: string): string =>
+  systemSrc(path)
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+
+test("a desktop start never claims the tutorial's wave", () => {
+  // Measured (`console-logs/..._Desktop_Vr.log`): a desktop run played `Lvl 0`
+  // — the teaching wave, three aliens on a bare board — while the tutorial
+  // retired on the first frame with `reason=not-immersive`. The player fought
+  // the teaching wave with no teaching.
+  const code = systemCode("tutorial.ts");
+
+  // It must not be claimed UNCONDITIONALLY at init, where desktop-vs-VR is not
+  // yet known — but it may be claimed from init's visibility subscription,
+  // which only fires once the app is actually immersive. The distinction is the
+  // whole fix, so assert the guard rather than the absence.
+  const init = /\n  init\(\): void \{[\s\S]*?\n  \}\n/.exec(code)?.[0] ?? "";
+  assert.ok(init, "init() not found");
+  const bare = init.replace(
+    /this\.world\.visibilityState\.subscribe\([\s\S]*?\n      \}\),/,
+    "",
+  );
+  assert.doesNotMatch(
+    bare,
+    /claimTutorialLevel/,
+    "init() must not claim the level outside the immersive subscription",
+  );
+  // And that subscription must be gated on Visible, not on any XR state.
+  assert.match(init, /if \(state !== VisibilityState\.Visible\) return;/);
+
+  // It must be claimed inside update(), AFTER the immersive guard — that guard
+  // is what makes "the tutorial will actually run" true.
+  const update = /\n  update\(delta: number\): void \{[\s\S]*?\n  \}\n/.exec(code)?.[0] ?? "";
+  assert.ok(update, "update() not found");
+  const guard = update.indexOf("visibilityState.peek() !== VisibilityState.Visible");
+  const claim = update.indexOf("this.claimTutorialLevel()");
+  assert.ok(guard >= 0, "the immersive guard is gone");
+  assert.ok(claim >= 0, "update() never claims the level");
+  assert.ok(claim > guard, "the claim must sit BEHIND the immersive guard");
+});
+
+test("leaving the tutorial does not advance the match to wave 1", () => {
+  // The other half of the owner's rule: desktop starts at 1, but a VR run that
+  // exits the tutorial stays where it is. Claiming is latched to once per
+  // match, so a wave-0 clear mid-script cannot pull the match back either.
+  const code = systemCode("tutorial.ts");
+  assert.match(code, /let levelClaimed = false;/);
+  assert.match(code, /if \(levelClaimed\) return;/);
+  assert.match(code, /levelClaimed = true;/);
+  // Cleared only by a restart, which is the one deliberate re-arm path.
+  const reset = /export function resetTutorial\(\): void \{[\s\S]*?\n\}/.exec(code)?.[0] ?? "";
+  assert.ok(reset, "resetTutorial not found");
+  assert.match(reset, /levelClaimed = false;/);
+  // And nothing in the tutorial ever pushes the wave forward.
+  assert.doesNotMatch(code, /setValue\(WaveSource, "waveNumber", 1\)/);
+});
+
+test("restart has ONE owner for the wave-0 decision", () => {
+  const code = systemCode("scenarioReset.ts");
+  // It used to branch on `isTutorialEnabled()` — the setting, not whether the
+  // tutorial can run — so a desktop restart went back to wave 0. Two owners of
+  // one decision, and the one without the immersive check won.
+  assert.doesNotMatch(code, /TUTORIAL_WAVE_NUMBER/);
+  assert.match(code, /"waveNumber",\s*SCENARIO_RESET_DEFAULTS\.waveNumber,/);
+  // resetTutorial() must still run, since clearing the latch is what lets the
+  // tutorial re-claim wave 0 on the next update when it really is going to run.
+  assert.match(code, /resetTutorial\(\)/);
+});
+
+test("only the tutorial reads the tutorial setting", () => {
+  // The whole class of bug behind both fixes: `isTutorialEnabled()` is the
+  // SETTING, which defaults on, and says nothing about whether the tutorial can
+  // actually run. Two other files branched on it and both got desktop wrong —
+  // the wave (structures/scenarioReset gave wave 0) and the board (a bare start
+  // with no astronaut, for a tutorial that never arrived).
+  for (const file of ["structures.ts", "scenarioReset.ts"]) {
+    assert.doesNotMatch(
+      systemCode(file),
+      /isTutorialEnabled/,
+      `${file} must not branch on the tutorial setting`,
+    );
+  }
+  // And the cycle that used to make this impossible is gone.
+  assert.doesNotMatch(systemCode("structures.ts"), /from "\.\/tutorial\.js"/);
+});
+
+test("the board is always built bare; the tutorial gives back what it withheld", () => {
+  // Bare is the safe default because the correction is ADDITIVE. Building the
+  // astronaut and removing it later would mean reproducing demolition.ts's
+  // seven-step teardown, and missing one step is a leak.
+  const structures = systemCode("structures.ts");
+  assert.match(structures, /createInitialScenario\(this\.world, \{ bareStart: true \}\)/);
+  assert.match(systemCode("scenarioReset.ts"), /createInitialScenario\(this\.world, \{ bareStart: true \}\)/);
+
+  // The additive path must reuse the same loop, not re-implement placement.
+  assert.match(
+    structures,
+    /export function createTutorialOmittedStructures\(world: World\): void \{\s*createInitialScenario\(world, \{ only: TUTORIAL_OMITTED_STRUCTURES \}\);/,
+  );
+
+  // Restored exactly when the script never ran — and NOT when it did, or a run
+  // that reached the astronaut drill would be handed a free one on the way out.
+  const tutorial = systemCode("tutorial.ts");
+  assert.match(tutorial, /if \(!levelClaimed\) createTutorialOmittedStructures\(this\.world\);/);
+  // It sits inside the once-per-match retirement block, not on the every-frame
+  // dormant path — goDormant runs ~90x/s and this creates entities.
+  const dormant = /private goDormant[\s\S]*?\n  \}/.exec(tutorial)?.[0] ?? "";
+  const guardAt = dormant.indexOf("if (!wasRetired) {");
+  const restoreAt = dormant.indexOf("createTutorialOmittedStructures");
+  assert.ok(guardAt >= 0 && restoreAt > guardAt, "the restore must be behind the once-only guard");
+});
+
+test("entering XR mid-match never drags the match back to the tutorial wave", () => {
+  // Measured (`console-logs/..._Desktop_Vr_v2.log`): a desktop run sat at
+  // `Lvl 1 active | Enemies 11 alive`; `[Action] xr enter` landed at line 1702;
+  // twelve lines later it read `Lvl 0 active | Enemies 14 alive`. The match was
+  // dragged back to the teaching wave and wave 0's three aliens spawned on top
+  // of the eleven already fighting.
+  //
+  // Cause: `claimTutorialLevel` relied on `tutorialRequiresRestart()` being
+  // checked by `update()`, its only caller at the time. The visibility
+  // subscription became a second caller and did not carry the precondition.
+  const code = systemCode("tutorial.ts");
+  const claim = /private claimTutorialLevel\(\): void \{[\s\S]*?\n  \}/.exec(code)?.[0] ?? "";
+  assert.ok(claim, "claimTutorialLevel not found");
+
+  // Self-guarding: the check must be IN the function, not only in a caller.
+  assert.match(claim, /if \(tutorialRequiresRestart\(\)\) return;/);
+
+  // ...and it must come before anything is written to the wave source, or the
+  // guard would run after the damage.
+  const guardAt = claim.indexOf("tutorialRequiresRestart()");
+  const writeAt = claim.indexOf('setValue(WaveSource, "waveNumber"');
+  assert.ok(writeAt > guardAt, "the retirement guard must precede the wave write");
+
+  // The latch must not be consumed by a refused claim either — a run that
+  // legitimately claims later must still be able to.
+  const latchAt = claim.indexOf("levelClaimed = true;");
+  assert.ok(latchAt > guardAt, "a refused claim must not burn the latch");
 });

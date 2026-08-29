@@ -253,6 +253,29 @@ export function hasWaveSpec(waveNumber: number): boolean {
   return getWaveSpec(waveNumber) !== undefined;
 }
 
+/**
+ * The wave that ends the campaign, derived rather than written down.
+ *
+ * Victory is already decided dynamically — {@link resolveWaveClearOutcome}
+ * returns `"victory"` exactly when {@link getNextWaveSpec} finds nothing — so
+ * the campaign length is a property of {@link WAVE_CATALOG} and nothing else.
+ *
+ * **Anything that *names* the last wave has to derive it the same way, or the
+ * two drift silently.** They did: the result panel read `"LEVEL 1 COMPLETE"` to
+ * a player who had just cleared **wave 6** and killed 116 aliens
+ * (`console-logs/2026-08-27-Action-Timeline-Options_after_B_level6.log`). The
+ * rule was dynamic; only the words the player actually reads were frozen.
+ *
+ * Returns 0 for an empty catalog, which no caller can reach — a catalog with no
+ * waves never starts a match — but is the honest answer rather than a throw.
+ */
+export function getFinalWaveNumber(): number {
+  return WAVE_CATALOG.reduce(
+    (highest, spec) => Math.max(highest, spec.waveNumber),
+    0,
+  );
+}
+
 export function getNextWaveSpec(waveNumber: number): WaveSpec | undefined {
   // WAVE_CATALOG deliberately excludes wave 0, so clearing the tutorial finds
   // wave 1 here and the normal ladder resumes with no special case.

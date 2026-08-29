@@ -1,5 +1,6 @@
 import { createSystem, type Entity } from "@iwsdk/core";
 import { clearAlienAnimations } from "./alienAnimation.js";
+import { ActionKind, logAction } from "./actionLog.js";
 import { clearCombatEffects } from "./combatEffects.js";
 import { clearCommandCenterHud } from "./commandCenterHud.js";
 import { clearCommandCenterAnimations } from "./commandCenterAnimation.js";
@@ -10,7 +11,7 @@ import { clearMeteors } from "./meteorSystem.js";
 import { clearMinerAnimations } from "./minerAnimation.js";
 import { clearUnitSelections, updateCommandGridVisibility } from "./selection.js";
 import { clearTurretAnimations } from "./turretAnimation.js";
-import { isTutorialEnabled, resetTutorial } from "./tutorial.js";
+import { resetTutorial } from "./tutorial.js";
 import { clearSpotlightSubject } from "./tutorialSpotlight.js";
 import { resetUnderAttackAlert } from "./underAttackAlert.js";
 import { clearUnderAttackVfx } from "./underAttackVfx.js";
@@ -37,7 +38,6 @@ import {
 import { clearDimmableScenario } from "./board.js";
 import { createInitialScenario } from "./structures.js";
 import { INITIAL_WAVE_DELAY_SECONDS } from "./waveRules.js";
-import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
 import { releaseEntity } from "./entityTeardown.js";
 import { clearHandoffs } from "./traceContracts.js";
 import { clearPhase2Trace } from "./phase2Trace.js";
@@ -57,6 +57,8 @@ export class ScenarioResetSystem extends createSystem({
   // footprint blocked for the whole next match.
   sites: { required: [ConstructionSite] },
 }) {
+  private loggedRestart = false;
+
   update(): void {
     const source = boardState.waveSource;
     if (
@@ -65,7 +67,19 @@ export class ScenarioResetSystem extends createSystem({
         source.getValue(MatchState, "status") ?? "playing",
       )
     ) {
+      // Re-arm here, NOT after the reset below. `update()` runs every frame and
+      // the status stays "restarting" until `resetScenario` clears it; clearing
+      // the latch in the same call left it re-armed for the very next frame, so
+      // a reset that ever took two frames would still have logged twice — the
+      // exact repeat the latch exists to stop. It only looked correct because
+      // `resetScenario` finishes in one frame and this early return then fires.
+      // Re-arming on the way out ties the latch to the restart being OVER.
+      this.loggedRestart = false;
       return;
+    }
+    if (!this.loggedRestart) {
+      this.loggedRestart = true;
+      logAction(ActionKind.Restart, "scenario reset requested");
     }
     this.resetScenario(source);
   }
@@ -147,7 +161,10 @@ export class ScenarioResetSystem extends createSystem({
     resetBoardTerrain();
     this.hideBoardMarkers();
     this.resetSingletons(source);
-    createInitialScenario(this.world, { bareStart: isTutorialEnabled() });
+    // Always bare, for the same reason as the boot build: `resetTutorial()`
+    // above cleared the claim latch, so TutorialSystem re-decides on its next
+    // update and puts the astronaut back itself if it is not going to run.
+    createInitialScenario(this.world, { bareStart: true });
     this.resetTablet();
   }
 
@@ -195,15 +212,24 @@ export class ScenarioResetSystem extends createSystem({
         (selection.getValue(SelectionState, "revision") ?? 0) + 1,
       );
     }
-    // Restart replays the tutorial, which means restarting at ITS level — not
-    // wave 1. The default stays 1 so a disabled tutorial resets to today's
-    // behaviour exactly.
+    // Always wave 1. **TutorialSystem is the sole owner of the wave-0
+    // decision** — `resetTutorial()` above cleared its latch, so if the
+    // tutorial is actually going to run it re-claims wave 0 on its next update,
+    // and if it is not, the match correctly stays on wave 1.
+    //
+    // This used to branch on `isTutorialEnabled()`, which is the *setting*, not
+    // whether the tutorial can run. On desktop the setting is on and the
+    // tutorial never runs, so a restart put the player back on wave 0 with no
+    // tutorial — visible in `console-logs/..._Desktop_Vr.log`, where the run
+    // after the restart is `Lvl 0` again. Two owners of one decision, and the
+    // one without the immersive check won.
+    //
+    // The one-frame window at wave 1 before the tutorial re-claims is inert:
+    // the status is `restarting`, so WaveSystem is gated out entirely.
     source.setValue(
       WaveSource,
       "waveNumber",
-      isTutorialEnabled()
-        ? TUTORIAL_WAVE_NUMBER
-        : SCENARIO_RESET_DEFAULTS.waveNumber,
+      SCENARIO_RESET_DEFAULTS.waveNumber,
     );
     source.setValue(
       WaveSource,

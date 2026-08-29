@@ -119,6 +119,38 @@ test("restart clears transient state and rebuilds the initial scenario", () => {
   // that reset rebuilds the scenario at all, not the exact argument list.
   assert.match(source, /createInitialScenario\(this\.world/);
   assert.match(source, /resetTablet\(\)/);
-  // Restart must re-arm the tutorial's own level, not drop back to wave 1.
-  assert.match(source, /TUTORIAL_WAVE_NUMBER/);
+  // Restart must re-arm the tutorial's own level — but it is no longer this
+  // file's job to do it. `resetTutorial()` clears the claim latch, and
+  // TutorialSystem re-claims wave 0 on its next update IF the tutorial is
+  // actually going to run. Branching here on `isTutorialEnabled()` read the
+  // *setting* rather than whether it can run, so a desktop restart dropped the
+  // player back onto the teaching wave with no tutorial
+  // (`console-logs/..._Desktop_Vr.log`). One owner, and it is the one that
+  // knows whether the app is immersive.
+  assert.doesNotMatch(source, /TUTORIAL_WAVE_NUMBER/);
+  assert.match(source, /resetTutorial\(\)/);
+  assert.match(source, /"waveNumber",\s*SCENARIO_RESET_DEFAULTS\.waveNumber,/);
+});
+
+test("the restart log latch survives a multi-frame reset", () => {
+  const src = readFileSync(
+    new URL("../src/systems/scenarioReset.ts", import.meta.url),
+    "utf8",
+  );
+  const update = /\n  update\(\): void \{[\s\S]*?\n  \}\n/.exec(src)?.[0] ?? "";
+  assert.ok(update, "update() not found");
+
+  // The latch was cleared in the SAME call that set it, so it was re-armed for
+  // the very next frame and a two-frame reset would still log twice — the exact
+  // repeat it exists to stop. It only looked right because `resetScenario`
+  // finishes in one frame and the early return then fires.
+  const earlyReturn = update.slice(0, update.indexOf("return;"));
+  assert.match(
+    earlyReturn,
+    /this\.loggedRestart = false;/,
+    "the latch must re-arm on the way OUT, when the restart is actually over",
+  );
+  // ...and must NOT be cleared after the reset, which is what made it a no-op.
+  const afterReset = update.slice(update.indexOf("this.resetScenario(source);"));
+  assert.doesNotMatch(afterReset, /this\.loggedRestart = false;/);
 });

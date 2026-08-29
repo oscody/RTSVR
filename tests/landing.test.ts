@@ -47,7 +47,7 @@ test("desktop always gets a way to start", () => {
   // apparent dead end, and a machine with no headset could not begin at all.
   assert.doesNotMatch(html, /id="explore-button"[^>]*hidden/);
   assert.match(landing, /exploreButton\?\.addEventListener\("click"/);
-  assert.match(landing, /startMatch\(\)/);
+  assert.match(landing, /startMatch\("landing-explore"\)/);
 });
 
 test("capability detection does not use world.xrEnabled", () => {
@@ -84,7 +84,9 @@ test("ENTER VR must NOT start the match itself", () => {
 test("the desktop button is what releases the gate on the flat path", () => {
   const landing = code("src/app/landing.ts");
   const explore = /exploreButton\?\.addEventListener[\s\S]*?\}\);/.exec(landing)?.[0] ?? "";
-  assert.match(explore, /startMatch\(\)/);
+  // Labelled, so the action timeline records which of the three entry routes
+  // released the gate.
+  assert.match(explore, /startMatch\("landing-explore"\)/);
 });
 
 test("every XR entry route starts the match at the same moment", () => {
@@ -92,7 +94,9 @@ test("every XR entry route starts the match at the same moment", () => {
   // the browser pill, this button and a headset-native entry cannot diverge.
   const start = code("src/systems/matchStart.ts");
   assert.match(start, /visibilityState\.subscribe/);
-  assert.match(start, /startMatch\(\)/);
+  // startMatch now takes a `via` label so the timeline records which of the
+  // three entry routes released the gate.
+  assert.match(start, /startMatch\("xr-session"\)/);
 });
 
 test("the chrome hides once the match begins", () => {

@@ -59,7 +59,7 @@ export class MiningSystem extends createSystem({
     //
     // After it: crystals arriving during a defeat screen change a total the
     // player is still looking at.
-    if (!matchAcceptsCommands()) return;
+    if (!matchAcceptsCommands("mining")) return;
     for (const miner of this.queries.miners.entities) {
       const stage = (miner.getValue(MinerState, "stage") ?? "idle") as MiningStage;
       if (stage === "idle") continue;

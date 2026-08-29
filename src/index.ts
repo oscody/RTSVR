@@ -10,7 +10,10 @@ import { ConstructionSystem } from "./systems/construction.js";
 import { CombatSystem } from "./systems/combat.js";
 import { CombatEffectsSystem } from "./systems/combatEffects.js";
 import { CommandCenterHudSystem } from "./systems/commandCenterHud.js";
-import { installFrameProfiler } from "./systems/frameProfiler.js";
+import {
+  installFrameProfiler,
+  isFrameProfilerEnabled,
+} from "./systems/frameProfiler.js";
 import { AlienAnimationSystem } from "./systems/alienAnimation.js";
 import { CommandCenterAnimationSystem } from "./systems/commandCenterAnimation.js";
 import { CraftProductionSystem } from "./systems/craftProduction.js";
@@ -39,6 +42,9 @@ import { attachGpuWarmup, GpuWarmupSystem } from "./systems/gpuWarmup.js";
 import { ProgramChurnSystem } from "./systems/programChurn.js";
 import { attachAssetLoadProgress, initialLoad } from "./app/initialLoad.js";
 import { setupLanding } from "./app/landing.js";
+import { ActionKind, logAction } from "./systems/actionLog.js";
+import { anyTraceEnabled } from "./systems/traceFlags.js";
+import { TUTORIAL_ENABLED } from "./systems/tutorialCatalog.js";
 import { setupLoadingScreen, showLoadingFailure } from "./app/loadingScreen.js";
 import { attachMatchStart } from "./systems/matchStart.js";
 import { placeViewpoint } from "./systems/viewpoint.js";
@@ -284,6 +290,14 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
       // would fail every time if the sweep ran mid-frame.
       .registerSystem(TraceDiagnosticsSystem);
     installFrameProfiler(world);
+    // The one line that makes every capture attributable. Until now a log could
+    // not say which code produced it, which is the ambiguity the landing plan's
+    // deferred `[Build]` line was meant to close.
+    logAction(
+      ActionKind.Session,
+      `start tutorialDefault=${TUTORIAL_ENABLED} ` +
+        `diagnostics=${anyTraceEnabled()} profiler=${isFrameProfilerEnabled()}`,
+    );
     // Both of these run LAST, and the ordering is load-bearing.
     //
     // `visibilityState.subscribe` fires **immediately** with the current value
