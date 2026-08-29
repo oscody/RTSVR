@@ -77,6 +77,10 @@ const STABLE_IDS: Readonly<Record<string, number>> = {
   UnderAttackVfxSystem: 111,
   UnderAttackBannerSystem: 112,
   UnderAttackAudioSystem: 113,
+  // Appended at the end of the range rather than slotted next to the other
+  // audio systems: these ids are written into trace events, so renumbering an
+  // existing one would make every previously captured log decode wrong.
+  SfxSystem: 131,
   CommandCenterHudSystem: 114,
   TutorialSystem: 115,
   AlienAnimationSystem: 116,

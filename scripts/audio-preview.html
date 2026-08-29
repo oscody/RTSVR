@@ -1,0 +1,125 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>RTSVR audio bank</title>
+<!--
+  Tuning aid for `scripts/generate-audio.mjs`. Open directly in a browser:
+
+      open scripts/audio-preview.html
+
+  Without this the tuning loop is: edit a recipe -> re-run the script -> build
+  -> launch -> enter a match -> trigger the sound -> decide it is too bright.
+  For nineteen clips that is unworkable. Here it is: re-run the script, hit R,
+  press a key.
+
+  Deliberately dependency-free and NOT part of the build. It reads the WAVs
+  straight off disk via relative paths, so it works from `file://` with no dev
+  server. It is a workshop tool, not a shipped page.
+
+  "Rapid fire" is the one thing worth checking that a single play cannot show:
+  a clip can sound clean once and turn into a smear at combat cadence. That is
+  the question `maxInstances` + PlaybackMode.Overlap answers in-engine, and
+  this is the cheap desktop rehearsal for it.
+-->
+<style>
+  :root { color-scheme: dark; }
+  body { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+         background: #11151c; color: #d7dee8; margin: 0; padding: 28px; }
+  h1 { font-size: 15px; letter-spacing: .08em; text-transform: uppercase;
+       color: #7dd3fc; margin: 0 0 4px; }
+  p.hint { color: #7b8794; margin: 0 0 22px; }
+  table { border-collapse: collapse; width: 100%; max-width: 760px; }
+  td { padding: 7px 10px; border-bottom: 1px solid #1e2733; vertical-align: middle; }
+  td.key { color: #7b8794; width: 2.5em; text-align: center; }
+  td.name { color: #e8eef6; }
+  td.meta { color: #7b8794; text-align: right; font-size: 12px; }
+  button { font: inherit; background: #1c2530; color: #d7dee8; border: 1px solid #2c3a4a;
+           border-radius: 5px; padding: 4px 12px; cursor: pointer; }
+  button:hover { background: #24303d; border-color: #3d5063; }
+  button.rapid { color: #fcd34d; }
+  #missing { color: #fca5a5; }
+  kbd { background:#1c2530; border:1px solid #2c3a4a; border-radius:3px; padding:0 5px; }
+</style>
+<h1>RTSVR audio bank</h1>
+<p class="hint">
+  <kbd>1</kbd>–<kbd>9</kbd> play · <kbd>R</kbd> reload from disk ·
+  <em>rapid</em> fires 8× at combat cadence
+</p>
+<table id="list"></table>
+<p id="missing"></p>
+
+<script>
+  // Keep in step with CLIPS in generate-audio.mjs. Listed rather than globbed
+  // because file:// cannot enumerate a directory.
+  const CLIPS = [
+    "sfx-click.wav",
+    "sfx-turret-zap.wav",
+    "sfx-alien-death.wav",
+  ];
+  // Combat cadence from the plan's per-clip cooldowns: shots 70ms, deaths 120ms.
+  const RAPID_MS = { "sfx-turret-zap.wav": 250, "sfx-click.wav": 120 };
+
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const buffers = new Map();
+  const missing = [];
+
+  async function load(name) {
+    const res = await fetch(`../public/audio/${name}?t=${Date.now()}`);
+    if (!res.ok) throw new Error(res.status);
+    buffers.set(name, await ctx.decodeAudioData(await res.arrayBuffer()));
+  }
+
+  function play(name) {
+    const buf = buffers.get(name);
+    if (!buf) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start();
+  }
+
+  function rapid(name) {
+    const gap = RAPID_MS[name] ?? 200;
+    for (let i = 0; i < 8; i++) setTimeout(() => play(name), i * gap);
+  }
+
+  async function refresh() {
+    missing.length = 0;
+    buffers.clear();
+    for (const name of CLIPS) {
+      try { await load(name); } catch { missing.push(name); }
+    }
+    render();
+  }
+
+  function render() {
+    const rows = CLIPS.map((name, i) => {
+      const buf = buffers.get(name);
+      const meta = buf
+        ? `${buf.duration.toFixed(2)}s · ${buf.sampleRate} Hz`
+        : "not generated";
+      return `<tr>
+        <td class="key">${i + 1}</td>
+        <td class="name">${name}</td>
+        <td class="meta">${meta}</td>
+        <td><button data-play="${name}" ${buf ? "" : "disabled"}>play</button></td>
+        <td><button class="rapid" data-rapid="${name}" ${buf ? "" : "disabled"}>rapid ×8</button></td>
+      </tr>`;
+    });
+    document.getElementById("list").innerHTML = rows.join("");
+    document.getElementById("missing").textContent = missing.length
+      ? `Not on disk: ${missing.join(", ")} — run: node scripts/generate-audio.mjs`
+      : "";
+    for (const b of document.querySelectorAll("[data-play]"))
+      b.onclick = () => play(b.dataset.play);
+    for (const b of document.querySelectorAll("[data-rapid]"))
+      b.onclick = () => rapid(b.dataset.rapid);
+  }
+
+  addEventListener("keydown", (e) => {
+    if (e.key.toLowerCase() === "r") return void refresh();
+    const n = Number(e.key);
+    if (n >= 1 && n <= CLIPS.length) play(CLIPS[n - 1]);
+  });
+
+  refresh();
+</script>

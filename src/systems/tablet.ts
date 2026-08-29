@@ -31,6 +31,7 @@ import {
   currentUnitMaxHealth,
 } from "./debugStatOverrides.js";
 import { ActionKind, logAction } from "./actionLog.js";
+import { playSfx } from "./sfx.js";
 import { traceManualDump } from "./trace.js";
 import { DEBUG_SETTINGS_CATALOG } from "./debugSettingsCatalog.js";
 import { fitThumbnail } from "./tabletThumbnails.js";
@@ -1162,6 +1163,7 @@ export class TabletSystem extends createSystem({
 
   private setView(tablet: Entity, view: string, status: string): void {
     logAction(ActionKind.Tab, view);
+    playSfx("click");
     tablet.setValue(TabletState, "view", view);
     // Switching tabs drops the site selection, so Cancel can never act on
     // something the player has stopped looking at.

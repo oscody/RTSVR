@@ -20,6 +20,7 @@ import {
 } from "./debugStatOverrides.js";
 import { detachAlienAnimation } from "./alienAnimation.js";
 import { emitAttackVfx } from "./combatEffects.js";
+import { playSfx } from "./sfx.js";
 import { detachCommandCenterAnimation } from "./commandCenterAnimation.js";
 import { releaseBuilder } from "./construction.js";
 import { updateHealthBar } from "./healthBar.js";
@@ -248,6 +249,20 @@ export class CombatSystem extends createSystem({
     // stop at the body; aliens play a melee energy burst. Damage below stays
     // range/cadence-based (the profile is chosen per attacker in combatEffects).
     emitAttackVfx(attacker, target);
+    // Sound sits beside the VFX call so the two cannot drift about WHEN a shot
+    // happened — but it must dispatch on WHO fired the same way
+    // `emitAttackVfx` does internally (`combatEffects.ts`, `shotProfile`).
+    //
+    // `applyAttack` is shared by all three attacker paths, aliens included, so
+    // firing the zap unconditionally played a turret laser for an alien melee
+    // strike. The comment above this block says aliens "play a melee energy
+    // burst"; the audio disagreed with it.
+    //
+    // Phase 1 ships one shot clip, so play it only for the attackers it
+    // actually depicts and leave aliens silent rather than wrong. Phase 2 adds
+    // `sfx-melee` and this becomes the full per-type dispatch the plan
+    // describes.
+    if (!attacker.hasComponent(Enemy)) playSfx("turretZap");
 
     const targetType = this.targetType(target);
     resolveDamageInto(this.damage, current, spec.damage, hits, targetType);
@@ -354,6 +369,7 @@ export class CombatSystem extends createSystem({
       const kindId = entityKindId(kind);
       traceEntityTransition(target.index, kindId, Lifecycle.Killed, Reason.Killed);
       traceEntityDestroyed(target.index, kindId, Reason.Killed);
+      playSfx("alienDeath");
       detachAlienAnimation(target);
       // Index recycling: a ring left keyed to this dead alien would reappear
       // under whatever entity claims the index next.
