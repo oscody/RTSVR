@@ -1,7 +1,13 @@
 import { AudioSource, AudioUtils, PlaybackMode, createSystem } from "@iwsdk/core";
 import type { Entity } from "@iwsdk/core";
 import { reportAudioContextIfSuspended } from "./audioUnlock.js";
-import { SFX_CATALOG, type SfxId } from "./sfxCatalog.js";
+import { DebugSettings, MatchState, boardState } from "./state.js";
+import {
+  AMBIENCE_IDS,
+  SFX_CATALOG,
+  sfxSpec,
+  type SfxId,
+} from "./sfxCatalog.js";
 
 /**
  * The shared sound bank: one emitter per clip, created once, replayed forever.
@@ -45,8 +51,23 @@ const emitters = new Map<SfxId, Entity>();
 /** Last play time per clip, for the cooldown. Monotonic ms. */
 const lastPlayedAt = new Map<SfxId, number>();
 
-let sfxEnabled = true;
+/**
+ * Master scale, 0..1, mirrored from `DebugSettings.sfxVolume` each frame.
+ *
+ * **0 is the off switch.** A separate enabled flag would be a second way to say
+ * the same thing, and the bank costs 0.047 ms/frame measured on device, so
+ * skipping the work buys nothing worth a second control.
+ */
 let volumeScale = 1;
+
+/** Last scale pushed to the emitters, so the poll below only writes on change. */
+let appliedScale = 1;
+
+/** Whether the beds are running, so a repeat start does not restart them. */
+let ambiencePlaying = false;
+
+/** Long enough that the bed is never heard arriving or leaving. */
+const AMBIENCE_FADE_SECONDS = 2;
 
 /**
  * Play a one-shot.
@@ -56,11 +77,13 @@ let volumeScale = 1;
  * to take down a frame.
  */
 export function playSfx(id: SfxId): void {
-  if (!sfxEnabled) return;
   const entity = emitters.get(id);
   if (!entity) return;
 
-  const spec = SFX_CATALOG[id];
+  const spec = sfxSpec(id);
+  // A loop started through the one-shot path would never stop, and the cooldown
+  // below would make the failure intermittent rather than obvious.
+  if (spec.loop) return;
   const now = performance.now();
   const last = lastPlayedAt.get(id) ?? -Infinity;
   // Dropped, not queued. A queued backlog would keep firing after the fight
@@ -78,11 +101,6 @@ export function playSfx(id: SfxId): void {
   AudioUtils.play(entity);
 }
 
-/** Single gate, matching `setAlertAudioEnabled`. Ready for a settings toggle. */
-export function setSfxEnabled(enabled: boolean): void {
-  sfxEnabled = enabled;
-}
-
 /**
  * Global volume scale, 0..1, applied on top of each clip's own volume.
  *
@@ -92,8 +110,40 @@ export function setSfxEnabled(enabled: boolean): void {
  */
 export function setSfxVolume(scale: number): void {
   volumeScale = Math.max(0, Math.min(1, scale));
+  appliedScale = volumeScale;
   for (const [id, entity] of emitters) {
     entity.setValue(AudioSource, "volume", SFX_CATALOG[id].volume * volumeScale);
+  }
+}
+
+/**
+ * Start the ambient beds.
+ *
+ * Idempotent: `PlaybackMode.Ignore` means a second call while playing is a
+ * no-op rather than a restart, so this can be called on every match start
+ * without cutting the bed off mid-breath.
+ *
+ * Faded in over two seconds — a bed that arrives instantly is heard arriving,
+ * which is the one thing ambience must not do.
+ */
+export function startAmbience(): void {
+  if (ambiencePlaying) return;
+  ambiencePlaying = true;
+  for (const id of AMBIENCE_IDS) {
+    const entity = emitters.get(id);
+    if (!entity) continue;
+    reportAudioContextIfSuspended(id);
+    AudioUtils.play(entity, AMBIENCE_FADE_SECONDS);
+  }
+}
+
+/** Stop the beds. Faded, for the same reason they fade in. */
+export function stopAmbience(): void {
+  if (!ambiencePlaying) return;
+  ambiencePlaying = false;
+  for (const id of AMBIENCE_IDS) {
+    const entity = emitters.get(id);
+    if (entity) AudioUtils.pause(entity, AMBIENCE_FADE_SECONDS);
   }
 }
 
@@ -107,27 +157,77 @@ export function setSfxVolume(scale: number): void {
 export function clearSfx(): void {
   for (const entity of emitters.values()) AudioUtils.stop(entity);
   lastPlayedAt.clear();
+  // A bed left marked playing would make the next `startAmbience` a no-op and
+  // the match would run silent.
+  ambiencePlaying = false;
 }
 
 export class SfxSystem extends createSystem({}) {
+  /**
+   * Mirror the Settings knob into the emitters, on change only.
+   *
+   * A pull-and-compare rather than a subscription, matching how every other
+   * system reads `DebugSettings` (`movement.ts:19`, `selection.ts:41`,
+   * `wave.ts:944`). One `getValue` and a float compare per frame; the write
+   * itself touches every emitter and runs only when the number actually moves.
+   *
+   * Reading the setting inside `playSfx` instead would put a component read on
+   * a path that runs at combat rates, which is exactly what `volume` being
+   * component data is meant to avoid.
+   */
+  update(): void {
+    // Beds are DERIVED from match status, not started by whoever remembers to.
+    //
+    // They were hooked to `startMatch` and the result transition, and a Restart
+    // goes through neither: `scenarioReset` calls `clearSfx()` (which stops the
+    // beds) and then writes `status` directly, so nothing ever started them
+    // again and the rest of the session ran silent. `startMatch` would not have
+    // helped even if called — it returns early unless the status is
+    // `awaiting-start`.
+    //
+    // Deriving from the status cannot be forgotten by a new code path, which
+    // is the same reason `matchAcceptsCommands` is a predicate rather than a
+    // flag each system maintains. Both calls are idempotent, so running this
+    // every frame costs a status read.
+    const status = boardState.waveSource?.getValue(MatchState, "status");
+    if (status === "playing") startAmbience();
+    else stopAmbience();
+
+    const setting = boardState.debugSettings?.getValue(
+      DebugSettings,
+      "sfxVolume",
+    );
+    // `null` as well as `undefined`: the component reader returns null before
+    // the singleton exists, and Math.min would coerce it to 0 — silencing the
+    // bank for the first frames of every session.
+    if (setting === undefined || setting === null) return;
+    const scale = Math.max(0, Math.min(1, setting));
+    if (scale === appliedScale) return;
+    setSfxVolume(scale);
+  }
+
   init(): void {
     for (const id of Object.keys(SFX_CATALOG) as SfxId[]) {
-      const spec = SFX_CATALOG[id];
+      const spec = sfxSpec(id);
       const entity = this.world
         .createTransformEntity(undefined, { persistent: true })
         .addComponent(AudioSource, {
           // The URL, byte-identical to the manifest entry — never the key.
           src: spec.url,
           volume: spec.volume * volumeScale,
-          loop: false,
+          loop: spec.loop ?? false,
           autoplay: false,
           // Listener-relative; see the note above on Open Decision 1.
           positional: false,
           maxInstances: spec.voices,
           // Overlap where the clip expects concurrency, Restart where a repeat
           // should replace rather than layer.
-          playbackMode:
-            spec.voices > 1 ? PlaybackMode.Overlap : PlaybackMode.Restart,
+          playbackMode: spec.loop
+            ? // A second start must not restart a running bed.
+              PlaybackMode.Ignore
+            : spec.voices > 1
+              ? PlaybackMode.Overlap
+              : PlaybackMode.Restart,
         });
       entity.object3D!.name = `Sfx:${id}`;
       emitters.set(id, entity);

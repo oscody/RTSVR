@@ -365,6 +365,15 @@ export const DebugSettings = createComponent("DebugSettings", {
     type: Types.Float32,
     default: UNDER_ATTACK_ALERT_VOLUME,
   },
+  /**
+   * Master scale for the sound bank, on top of each clip's own volume.
+   *
+   * Separate from `underAttackAlertVolume` on purpose: the alert pair is a
+   * warning the player may want loud while turning the rest of the bank down,
+   * or off entirely to hear the room. 0 silences the bank without touching the
+   * alarm.
+   */
+  sfxVolume: { type: Types.Float32, default: 1 },
   revision: { type: Types.Int32, default: 0 },
 });
 
@@ -390,6 +399,7 @@ export type DebugSettingKey =
   | "turretAttackDamage"
   | "miningGatherTimeSeconds"
   | "underAttackAlertVolume"
+  | "sfxVolume"
   | "tutorialEnabled";
 
 export const boardState = {

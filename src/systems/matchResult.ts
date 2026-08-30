@@ -19,6 +19,7 @@ import {
   placeAtCommandCenterAlertPosition,
 } from "./underAttackBanner.js";
 import { getFinalWaveNumber } from "./waveCatalog.js";
+import { playSfx } from "./sfx.js";
 
 type UiElement = UIKit.Text & {
   setProperties(properties: Record<string, unknown>): void;
@@ -76,6 +77,13 @@ export class MatchResultSystem extends createSystem({
     if (!panel?.object3D || status === this.lastStatus) return;
     this.lastStatus = status;
     if (visible) {
+      // Past the `status === this.lastStatus` guard, so this is the transition
+      // and not the hundredth frame of a decided match. `tutorialDeadEnd` is
+      // deliberately silent: nothing was destroyed and the player did nothing
+      // wrong, so a defeat sting would misreport it — the same reason the panel
+      // styles it amber rather than red.
+      if (status === "victory") playSfx("victory");
+      else if (status === "defeat") playSfx("defeat");
       this.presentResult(status);
       placeAtCommandCenterAlertPosition(panel.object3D, this.camera);
       // Same spot as the alert banner, so it needs the same protection from the

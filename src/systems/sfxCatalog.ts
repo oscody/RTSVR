@@ -41,6 +41,15 @@ export interface SfxSpec {
    * a wave arriving as thirty audible thuds when what is wanted is a texture.
    */
   readonly cooldownMs: number;
+  /**
+   * A sustained bed rather than an event.
+   *
+   * Loops are started and stopped explicitly ({@link startAmbience}), never
+   * through `playSfx`, and use `PlaybackMode.Ignore` so a second start is a
+   * no-op instead of restarting the bed mid-breath — the same choice
+   * `underAttackAudio.ts` makes for the alarm.
+   */
+  readonly loop?: boolean;
 }
 
 export type SfxId = keyof typeof SFX_CATALOG;
@@ -147,14 +156,14 @@ export const SFX_CATALOG = {
    */
   buildDone: {
     url: "/audio/sfx-build-done.wav",
-    volume: 0.6,
+    volume: 0.52,
     voices: 1,
     cooldownMs: 200,
   },
   /** A craft rolling out. Shares the build-done language without repeating it. */
   craftReady: {
     url: "/audio/sfx-craft-ready.wav",
-    volume: 0.5,
+    volume: 0.42,
     voices: 1,
     cooldownMs: 200,
   },
@@ -165,7 +174,87 @@ export const SFX_CATALOG = {
     voices: 1,
     cooldownMs: 200,
   },
+
+  // ── Wave and match ──────────────────────────────────────────────────────
+  //
+  // The loudest cues in the bank: they mark the only moments that change what
+  // the player should be doing. All three are one-shot and transition-gated.
+  //
+  // **These volumes are set from measured loudness, not by eye.** Every clip is
+  // peak-normalized to 0.89, so `volume` alone says nothing about how loud one
+  // sounds against another — what matters is `volume x rms`, and the bank's rms
+  // spans 0.11 to 0.51. The siren is a dense sawtooth at rms 0.506, roughly
+  // 3x a weapon's, so its low-looking 0.34 lands *above* victory's 0.90.
+  // `tests/sfx.test.ts` asserts the resulting hierarchy rather than the raw
+  // numbers, because the raw numbers are not comparable.
+
+  /**
+   * Wave incoming. One-shot, not a loop: the wave arriving is the event, and a
+   * sustained siren would still be wailing through the fight it announced.
+   */
+  waveSiren: {
+    url: "/audio/sfx-wave-siren.wav",
+    volume: 0.34,
+    voices: 1,
+    cooldownMs: 1000,
+  },
+  /** Cleared the last wave. The only fully consonant sound in the bank. */
+  victory: {
+    url: "/audio/sfx-victory.wav",
+    volume: 0.9,
+    voices: 1,
+    cooldownMs: 1000,
+  },
+  /** Command centre lost. Slow decay, so it outlasts the moment rather than punctuating it. */
+  defeat: {
+    url: "/audio/sfx-defeat.wav",
+    volume: 0.9,
+    voices: 1,
+    cooldownMs: 1000,
+  },
+
+  // ── Ambience ────────────────────────────────────────────────────────────
+  //
+  // Both loop seamlessly, by two different techniques: the hum forces every
+  // partial to a whole number of cycles across the file, the wind crossfades
+  // its own overhang because noise cannot be made periodic. A loop that does
+  // not arrive back where it started ticks once per period, forever.
+  //
+  // **Deliberately quiet.** A bed under a twenty-minute session becomes
+  // fatiguing long before it becomes noticeable, and the plan's open question
+  // is exactly that. These ship low with the Settings knob available, to be
+  // revisited after one real playtest rather than tuned by guesswork now.
+
+  /** Reactor bed under the base. 4s, periodic by construction. */
+  ambBaseHum: {
+    url: "/audio/amb-base-hum.wav",
+    volume: 0.12,
+    voices: 1,
+    cooldownMs: 0,
+    loop: true,
+  },
+  /** Martian wind. 6s, crossfaded seam. */
+  ambWind: {
+    url: "/audio/amb-wind.wav",
+    volume: 0.1,
+    voices: 1,
+    cooldownMs: 0,
+    loop: true,
+  },
 } as const satisfies Record<string, SfxSpec>;
+
+/** The ids that are sustained beds rather than events. */
+export const AMBIENCE_IDS = ["ambBaseHum", "ambWind"] as const;
+
+/**
+ * One clip's spec, widened to {@link SfxSpec}.
+ *
+ * `as const satisfies` narrows every entry to its own literal type, which is
+ * what makes `SfxId` exact — but it also means an entry that omits the optional
+ * `loop` has no `loop` property at all, and reading it is a type error. This
+ * widens once so callers see the interface rather than seventeen literal types.
+ */
+export const sfxSpec = (id: SfxId): SfxSpec => SFX_CATALOG[id];
 
 /** Every URL the bank needs preloaded, for the manifest cross-check. */
 export const SFX_URLS: readonly string[] = Object.values(SFX_CATALOG).map(

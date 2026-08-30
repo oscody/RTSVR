@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
-import { SFX_CATALOG, SFX_URLS, type SfxId } from "../src/systems/sfxCatalog.ts";
+import {
+  AMBIENCE_IDS,
+  SFX_CATALOG,
+  SFX_URLS,
+  type SfxId,
+  type SfxSpec,
+} from "../src/systems/sfxCatalog.ts";
 
 const src = (p: string): string =>
   readFileSync(new URL(`../src/systems/${p}`, import.meta.url), "utf8");
@@ -89,7 +95,10 @@ test("concurrency comes from the engine, not a hand-rolled pool", () => {
   // steals past that (`audio-system.js`, playOverlap) — the pattern every
   // vr_examples case uses, target-practice's SMG at maxInstances: 6 included.
   assert.match(sfx, /maxInstances: spec\.voices/);
-  assert.match(sfx, /spec\.voices > 1 \? PlaybackMode\.Overlap : PlaybackMode\.Restart/);
+  assert.match(sfx, /spec\.voices > 1$/m);
+  assert.match(sfx, /PlaybackMode\.Overlap/);
+  // Loops take Ignore, so a second start does not restart a running bed.
+  assert.match(sfx, /spec\.loop[\s\S]{0,80}PlaybackMode\.Ignore/);
 });
 
 test("a play before init is a no-op, never a throw", () => {
@@ -158,11 +167,13 @@ test("a death sound means a kill, never a cleanup", () => {
     combat,
     /traceEntityDestroyed\(target\.index, kindId, Reason\.Killed\);\s*\n\s*playSfx\("alienDeath"\);/,
   );
-  assert.doesNotMatch(
-    code("wave.ts"),
-    /playSfx/,
-    "discarded prepared aliens must be silent — nothing killed them",
-  );
+  // Scoped to the disposal path, not to wave.ts as a whole — the file also
+  // fires the wave siren, which is legitimate. The rule is that DISCARDING an
+  // alien built for an abandoned wave makes no sound, because nothing killed it.
+  const disposer =
+    /private disposePreparedAliens\(\): void \{[\s\S]*?\n  \}/.exec(code("wave.ts"))?.[0] ?? "";
+  assert.ok(disposer, "disposePreparedAliens not found");
+  assert.doesNotMatch(disposer, /playSfx/);
 });
 
 test("generator clips reset every piece of their own state", () => {
@@ -232,7 +243,185 @@ test("economy cues are mixed under the weapons", () => {
     loudestEconomy <= quietestWeapon,
     `economy cue at ${loudestEconomy} is not below the quietest weapon at ${quietestWeapon}`,
   );
-  // The most frequent cue in the game must be the quietest thing in the bank.
-  const all = Object.values(SFX_CATALOG).map((s) => s.volume);
-  assert.equal(SFX_CATALOG.crystal.volume, Math.min(...all));
+  // The most frequent cue in the game must be the quietest ONE-SHOT. Ambience
+  // is quieter still, but it is a bed rather than an event and is not competing
+  // for the same attention.
+  const oneShots = (Object.entries(SFX_CATALOG) as [SfxId, SfxSpec][])
+    .filter(([, spec]) => !spec.loop)
+    .map(([, spec]) => spec.volume);
+  assert.equal(SFX_CATALOG.crystal.volume, Math.min(...oneShots));
+  for (const id of AMBIENCE_IDS) {
+    assert.ok(
+      SFX_CATALOG[id].volume < SFX_CATALOG.crystal.volume,
+      `${id} must sit under every one-shot`,
+    );
+  }
+});
+
+/** Mean square amplitude of a generated clip, from disk. */
+const rmsOf = (url: string): number => {
+  const buf = readFileSync(new URL(`../public${url}`, import.meta.url));
+  const n = (buf.length - 44) / 2;
+  let sum = 0;
+  for (let i = 0; i < n; i++) {
+    const v = buf.readInt16LE(44 + i * 2) / 32767;
+    sum += v * v;
+  }
+  return Math.sqrt(sum / n);
+};
+/** How loud a clip actually is, which `volume` alone does not say. */
+const effective = (id: SfxId): number =>
+  SFX_CATALOG[id].volume * rmsOf(SFX_CATALOG[id].url);
+
+test("the mix is asserted on measured loudness, not on volume numbers", () => {
+  // Every clip is peak-normalized to 0.89, so `volume` says nothing about how
+  // loud one sounds against another — the bank's rms spans 0.11 to 0.51. The
+  // siren is a dense sawtooth at ~3x a weapon's rms, so its low-looking 0.34
+  // lands ABOVE victory's 0.90. Comparing the raw numbers would have passed a
+  // mix that is audibly wrong.
+  const siren = effective("waveSiren");
+  const victory = effective("victory");
+  const defeat = effective("defeat");
+  const loudestWeapon = Math.max(
+    effective("turretZap"), effective("plasma"), effective("laser"), effective("melee"),
+  );
+  const loudestEconomy = Math.max(
+    effective("crystal"), effective("deposit"), effective("place"),
+    effective("buildDone"), effective("craftReady"), effective("demolish"),
+  );
+
+  // Wave and match cues mark the only moments that change what the player
+  // should be doing, so they sit on top.
+  for (const [name, v] of [["siren", siren], ["victory", victory], ["defeat", defeat]] as const) {
+    assert.ok(v > loudestWeapon, `${name} (${v.toFixed(4)}) must be above the loudest weapon (${loudestWeapon.toFixed(4)})`);
+    assert.ok(v > loudestEconomy, `${name} (${v.toFixed(4)}) must be above the loudest economy cue (${loudestEconomy.toFixed(4)})`);
+  }
+  // Losing a unit must register above the shot that killed it.
+  assert.ok(effective("friendlyDeath") > loudestWeapon);
+  // The most frequent cue in the game stays under the weapons.
+  assert.ok(effective("crystal") < loudestWeapon);
+});
+
+test("wave and match cues are one-shot and transition-gated", () => {
+  // A looping siren would still be wailing through the fight it announced.
+  for (const id of ["waveSiren", "victory", "defeat"] as const) {
+    assert.equal(SFX_CATALOG[id].voices, 1, `${id} must not overlap itself`);
+    assert.ok(SFX_CATALOG[id].cooldownMs >= 1000, `${id} needs a long leash`);
+  }
+  // The siren fires on the edge `advanceWaveClock` returns, not on the stage.
+  assert.match(code("wave.ts"), /if \(activated\) \{\s*playSfx\("waveSiren"\)/);
+  // Victory/defeat fire past the transition guard, and the tutorial dead end
+  // stays silent — nothing was destroyed and the player did nothing wrong.
+  const result = code("matchResult.ts");
+  assert.match(result, /status === this\.lastStatus\) return;[\s\S]*?if \(status === "victory"\) playSfx\("victory"\);/);
+  assert.doesNotMatch(result, /tutorialDeadEnd.*playSfx|playSfx.*tutorialDeadEnd/);
+});
+
+test("the SFX volume knob exists end to end", () => {
+  // A knob is four separate things and any one of them missing makes it inert.
+  const state = readFileSync(new URL("../src/systems/state.ts", import.meta.url), "utf8");
+  assert.match(state, /sfxVolume: \{ type: Types\.Float32, default: 1 \}/, "no component field");
+  assert.match(state, /\| "sfxVolume"/, "not in the settings key union");
+
+  const catalog = readFileSync(new URL("../src/systems/debugSettingsCatalog.ts", import.meta.url), "utf8");
+  assert.match(catalog, /key: "sfxVolume"/, "no catalog row");
+
+  const ui = readFileSync(new URL("../ui/rts-settings.uikitml", import.meta.url), "utf8");
+  for (const part of ["minus", "value", "plus"]) {
+    assert.ok(ui.includes(`setting-sfxVolume-${part}`), `no ${part} control in the settings panel`);
+  }
+
+  // ...and something must actually read it.
+  assert.match(code("sfx.ts"), /DebugSettings,\s*"sfxVolume",/, "nothing consumes the setting");
+});
+
+test("the knob is polled on change, never read per play", () => {
+  const sfx = code("sfx.ts");
+  // `volume` is component data; reading it inside playSfx would put a component
+  // read on a path that runs at combat rates.
+  const play = /export function playSfx[\s\S]*?\n\}/.exec(sfx)?.[0] ?? "";
+  assert.doesNotMatch(play, /DebugSettings|getValue/);
+  // The poll writes only when the number actually moves.
+  assert.match(sfx, /if \(scale === appliedScale\) return;/);
+  // null AND undefined: the reader returns null before the singleton exists,
+  // and Math.min would coerce that to 0 — silencing the bank at boot.
+  assert.match(sfx, /setting === undefined \|\| setting === null/);
+});
+
+test("volume 0 is the off switch — no second control", () => {
+  // A separate enabled flag would be a second way to say the same thing.
+  assert.doesNotMatch(code("sfx.ts"), /setSfxEnabled|sfxEnabled/);
+});
+
+test("ambience is wired as a bed, not as an event", () => {
+  for (const name of ["amb-base-hum.wav", "amb-wind.wav"]) {
+    assert.ok(existsSync(new URL(`../public/audio/${name}`, import.meta.url)), `${name} missing`);
+  }
+  // Declared as loops, and reachable only through the ambience API.
+  for (const id of AMBIENCE_IDS) {
+    assert.equal(SFX_CATALOG[id].loop, true, `${id} must be a loop`);
+    assert.equal(SFX_CATALOG[id].voices, 1, `${id} must not layer on itself`);
+  }
+  const sfx = code("sfx.ts");
+  // A loop started through the one-shot path would never stop, and the cooldown
+  // would make that intermittent rather than obvious.
+  assert.match(sfx, /if \(spec\.loop\) return;/);
+  assert.match(sfx, /export function startAmbience\(\): void/);
+  assert.match(sfx, /export function stopAmbience\(\): void/);
+});
+
+test("the beds are DERIVED from match status, not hand-started", () => {
+  // Regression. They were hooked to `startMatch` and the result transition, and
+  // a Restart goes through neither: `scenarioReset` calls `clearSfx()` (which
+  // stops the beds) then writes `status` directly, so nothing started them
+  // again and the rest of the session ran silent. `startMatch` would not have
+  // helped even if called — it returns early unless status is `awaiting-start`.
+  const sfx = code("sfx.ts");
+  const update = /update\(\): void \{[\s\S]*?\n  \}/.exec(sfx)?.[0] ?? "";
+  assert.ok(update, "SfxSystem.update not found");
+  assert.match(update, /status === "playing"\) startAmbience\(\);/);
+  assert.match(update, /else stopAmbience\(\);/);
+
+  // No hand-wired starts anywhere — that is what could be forgotten.
+  for (const file of ["matchStart.ts", "matchResult.ts", "scenarioReset.ts"]) {
+    assert.doesNotMatch(
+      code(file),
+      /startAmbience|stopAmbience/,
+      `${file} must not drive the beds directly`,
+    );
+  }
+
+  // Called every frame, so both must be cheap and idempotent.
+  assert.match(sfx, /export function startAmbience\(\): void \{\s*if \(ambiencePlaying\) return;/);
+  assert.match(sfx, /export function stopAmbience\(\): void \{\s*if \(!ambiencePlaying\) return;/);
+
+  // A reset clears the latch; update() restarts on the next frame.
+  const clear = /export function clearSfx\(\): void \{[\s\S]*?\n\}/.exec(sfx)?.[0] ?? "";
+  assert.match(clear, /ambiencePlaying = false;/);
+});
+
+test("the ambience loops are seamless, by two different techniques", () => {
+  // A one-shot can end however it likes; a loop that does not arrive back where
+  // it started ticks once per period, forever.
+  const seam = (name: string) => {
+    const buf = readFileSync(new URL(`../public/audio/${name}`, import.meta.url));
+    const n = (buf.length - 44) / 2;
+    const at = (i: number) => buf.readInt16LE(44 + i * 2) / 32767;
+    const w = Math.floor(22050 * 0.05);
+    let head = 0, tail = 0;
+    for (let i = 0; i < w; i++) head += at(i) ** 2;
+    for (let i = n - w; i < n; i++) tail += at(i) ** 2;
+    return Math.sqrt(head / w) / (Math.sqrt(tail / w) || 1e-9);
+  };
+  // Energy either side of the wrap must match, or the loop pumps once a period.
+  // (A one-shot fails this badly — sfx-turret-zap measures ~38x.)
+  for (const name of ["amb-base-hum.wav", "amb-wind.wav"]) {
+    const ratio = seam(name);
+    assert.ok(ratio > 0.8 && ratio < 1.25, `${name} energy across the wrap is ${ratio.toFixed(2)}x`);
+  }
+  // The two use different methods, and the generator must keep both.
+  const gen = readFileSync(new URL("../scripts/generate-audio.mjs", import.meta.url), "utf8");
+  assert.match(gen, /Math\.round\(55 \* 4\.0\) \/ 4\.0/, "tone loop must be made periodic");
+  assert.match(gen, /function crossfade\(samples, fadeCount\)/, "noise loop must be crossfaded");
+  assert.match(gen, /Math\.sin\(x\) \+ samples\[n \+ i\] \* Math\.cos\(x\)/, "crossfade must be equal-power");
 });

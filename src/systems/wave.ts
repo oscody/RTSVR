@@ -85,6 +85,7 @@ import { clearThreat } from "./underAttackVfx.js";
 import { detachAlienAnimation } from "./alienAnimation.js";
 import { disposeEnemyRangeRing } from "./selection.js";
 import { releaseEntity } from "./entityTeardown.js";
+import { playSfx } from "./sfx.js";
 
 interface AlienRoute {
   steps: Int16Array;
@@ -322,6 +323,10 @@ export class WaveSystem extends createSystem({
       this.updateWaveRelease(source, delta);
     }
     if (activated) {
+      // The countdown -> active edge, which `advanceWaveClock` returns true for
+      // exactly once per wave. One-shot: the wave arriving is the event, so a
+      // looping siren would still be wailing through the fight it announced.
+      playSfx("waveSiren");
       source.setValue(
         WaveSource,
         "revision",

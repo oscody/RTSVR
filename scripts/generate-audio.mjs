@@ -403,15 +403,176 @@ const CLIPS = [
       return s;
     },
   },
+  {
+    // Wave incoming. The donor klaxon pitched down into a warning rather than an
+    // alarm, and one-shot rather than looped — the wave arriving IS the event,
+    // so a sustained siren would still be wailing during the fight.
+    //
+    // Two sweeps: one reads as a blip, three as a drill.
+    name: "sfx-wave-siren.wav",
+    dur: 2.0,
+    seed: 5514,
+    setup() {
+      this.phase = 0;
+    },
+    render(t) {
+      // Each sweep runs 300 -> 560 Hz over 0.8s, with a gap between them.
+      const local = t % 1.0;
+      const sweeping = local < 0.8;
+      const f = 300 + (560 - 300) * (sweeping ? local / 0.8 : 1);
+      this.phase += (TAU * f) / SAMPLE_RATE;
+      // Sawtooth body: a siren is not a sine, and the harmonics are what let it
+      // carry over a fight.
+      const saw = (2 * ((this.phase / TAU) % 1) - 1) * 0.4;
+      const body = Math.sin(this.phase) * 0.6 + saw;
+      // Envelope per sweep, so the gap is real silence rather than a duck.
+      const env = sweeping
+        ? Math.min(1, local / 0.05) * Math.min(1, (0.8 - local) / 0.12)
+        : 0;
+      return body * env;
+    },
+  },
+  {
+    // Four-note major arpeggio with overlapping tails, so it lands as a chord
+    // rather than four beeps. The only fully consonant sound in the bank —
+    // nothing else resolves.
+    name: "sfx-victory.wav",
+    dur: 1.6,
+    seed: 5515,
+    setup() {
+      this.notes = [523, 659, 784, 1047];
+    },
+    render(t) {
+      let s = 0;
+      for (let i = 0; i < this.notes.length; i++) {
+        const start = i * 0.16;
+        if (t < start) continue;
+        const d = t - start;
+        // Long tails (rate 3) so all four ring together at the end.
+        s += Math.sin(TAU * this.notes[i] * d) * decay(d, 3) * 0.4;
+        // A quiet fifth above each note, for body without a second melody.
+        s += Math.sin(TAU * this.notes[i] * 1.5 * d) * decay(d, 4) * 0.12;
+      }
+      return s;
+    },
+  },
+  {
+    // Descending detuned pair under a slow noise swell. Slow decay (rate 2), so
+    // it outlasts the moment rather than punctuating it — the opposite gesture
+    // to victory, which resolves upward and stops.
+    name: "sfx-defeat.wav",
+    dur: 1.8,
+    seed: 5516,
+    setup() {
+      this.a = 0;
+      this.b = 0;
+      this.z = 0;
+    },
+    render(t) {
+      const f = 220 + (110 - 220) * Math.min(1, t / 1.4);
+      this.a += (TAU * f) / SAMPLE_RATE;
+      // 3 Hz detune: slow beating, which is what makes it sound wrong.
+      this.b += (TAU * (f + 3)) / SAMPLE_RATE;
+      const tone = (Math.sin(this.a) + Math.sin(this.b)) * 0.35 * decay(t, 2);
+      // Noise swells in and fades, peaking around 0.5s.
+      this.z += 0.05 * (rand() - this.z);
+      const swell = Math.sin(Math.PI * Math.min(1, t / 1.2));
+      return tone + this.z * swell * 0.5;
+    },
+  },
+  // ── Ambience ────────────────────────────────────────────────────────────
+  //
+  // GENERATED BUT NOT WIRED, deliberately. These files exist so the loop
+  // technique can be verified and the clips auditioned; nothing in `src/`
+  // references them and they are absent from `sfxCatalog.ts` and the manifest.
+  // Hooking them up is a separate decision — the plan's open question 2 is
+  // whether a hum under a 20-minute session becomes fatiguing, and that needs a
+  // playtest rather than a build.
+  //
+  // Both are SEAMLESS, which is the whole difficulty. A one-shot can end however
+  // it likes; a loop that does not arrive back where it started ticks once per
+  // period, forever. Two different techniques below, because noise and tone need
+  // different answers.
+  {
+    // Tone: force every partial to a whole number of cycles across the file.
+    // `Math.round(55 * dur) / dur` snaps 55 Hz to the nearest frequency that
+    // completes exactly, and every harmonic is an integer multiple of that, so
+    // the waveform is periodic with the file length by construction.
+    name: "amb-base-hum.wav",
+    dur: 4.0,
+    seed: 5517,
+    setup() {
+      this.dur = 4.0;
+      this.base = Math.round(55 * 4.0) / 4.0;
+    },
+    render(t) {
+      const b = this.base;
+      let s =
+        Math.sin(TAU * b * t) * 0.55 +
+        Math.sin(TAU * b * 2 * t) * 0.28 +
+        Math.sin(TAU * b * 3 * t + 0.5) * 0.12 +
+        Math.sin(TAU * (b * 0.5) * t) * 0.3;
+      // Wobble at exactly 2 cycles per loop, so it also lands where it began.
+      s *= 0.8 + 0.2 * Math.sin(TAU * (2 / this.dur) * t);
+      return s;
+    },
+  },
+  {
+    // Noise cannot be made periodic, so the seam is CROSSFADED instead: render
+    // slightly more than the loop length, then blend the overhang back over the
+    // opening. `renderClip` does the splice — see `crossfade` there.
+    //
+    // The slow swell is still forced to whole cycles (1/6 Hz over 6s), because
+    // a crossfade hides a discontinuity in the noise but not a mismatch in the
+    // envelope riding on top of it.
+    name: "amb-wind.wav",
+    dur: 6.0,
+    seed: 5518,
+    crossfadeSeconds: 0.5,
+    setup() {
+      this.lp1 = 0;
+      this.lp2 = 0;
+    },
+    render(t) {
+      const w = rand();
+      this.lp1 += 0.22 * (w - this.lp1);
+      this.lp2 += 0.06 * (this.lp1 - this.lp2);
+      const band = this.lp1 - this.lp2;
+      const swell = 0.72 + 0.28 * Math.sin(TAU * (1 / 6.0) * t);
+      return band * 2.2 * swell;
+    },
+  },
 ];
+
+/**
+ * Blend the overhang back over the opening so a noise loop has no seam.
+ *
+ * Renders `dur + fade` seconds, then mixes the trailing `fade` over the leading
+ * `fade` with an equal-power curve. Equal-power (`cos`/`sin`) rather than linear:
+ * two uncorrelated noise signals summed at 0.5 each are ~3 dB quieter than
+ * either, so a linear crossfade dips audibly in the middle of the blend.
+ *
+ * Only for noise. A tone should be made periodic instead — see `amb-base-hum`.
+ */
+function crossfade(samples, fadeCount) {
+  const n = samples.length - fadeCount;
+  const out = new Float64Array(n);
+  out.set(samples.subarray(0, n));
+  for (let i = 0; i < fadeCount; i++) {
+    const x = (i / fadeCount) * (Math.PI / 2);
+    out[i] = out[i] * Math.sin(x) + samples[n + i] * Math.cos(x);
+  }
+  return out;
+}
 
 function renderClip(clip) {
   reseed(clip.seed);
   clip.setup?.();
-  const n = seconds(clip.dur);
+  const fade = clip.crossfadeSeconds ?? 0;
+  const n = seconds(clip.dur + fade);
   const out = new Float64Array(n);
   for (let i = 0; i < n; i++) out[i] = clip.render(i / SAMPLE_RATE, i);
-  writeWav(clip.name, out);
+  writeWav(clip.name, fade > 0 ? crossfade(out, seconds(fade)) : out);
 }
 
 const filters = process.argv.slice(2);

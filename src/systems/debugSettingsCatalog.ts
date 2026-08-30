@@ -151,6 +151,14 @@ export const DEBUG_SETTINGS_CATALOG: readonly DebugSettingSpec[] = [
     decimals: 1,
   },
   {
+    key: "sfxVolume",
+    label: "SFX Volume",
+    step: 0.1,
+    min: 0,
+    max: 1,
+    decimals: 1,
+  },
+  {
     key: "underAttackAlertVolume",
     label: "Under Attack Alert Volume",
     step: 0.05,

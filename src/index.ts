@@ -261,6 +261,31 @@ const assets: AssetManifest = {
     type: AssetType.Audio,
     priority: "background",
   },
+  sfxWaveSiren: {
+    url: "/audio/sfx-wave-siren.wav",
+    type: AssetType.Audio,
+    priority: "background",
+  },
+  sfxVictory: {
+    url: "/audio/sfx-victory.wav",
+    type: AssetType.Audio,
+    priority: "background",
+  },
+  sfxDefeat: {
+    url: "/audio/sfx-defeat.wav",
+    type: AssetType.Audio,
+    priority: "background",
+  },
+  ambBaseHum: {
+    url: "/audio/amb-base-hum.wav",
+    type: AssetType.Audio,
+    priority: "background",
+  },
+  ambWind: {
+    url: "/audio/amb-wind.wav",
+    type: AssetType.Audio,
+    priority: "background",
+  },
 };
 
 // BEFORE World.create, not inside its .then(): the overlay has to be driven
