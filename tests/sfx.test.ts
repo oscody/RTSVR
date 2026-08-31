@@ -425,3 +425,55 @@ test("the ambience loops are seamless, by two different techniques", () => {
   assert.match(gen, /function crossfade\(samples, fadeCount\)/, "noise loop must be crossfaded");
   assert.match(gen, /Math\.sin\(x\) \+ samples\[n \+ i\] \* Math\.cos\(x\)/, "crossfade must be equal-power");
 });
+
+test("ambience retries instead of latching into a suspended context", () => {
+  // Measured: `console-logs/2026-08-29-Audio-Plan_phase5_full.log`. The match
+  // started at t+12.2s, the AudioContext was still suspended, `play()` was
+  // accepted and produced nothing, `ambiencePlaying` latched, and the beds were
+  // silent for the whole 853-second session.
+  //
+  // The trigger is the NORMAL headset path: that session entered XR through the
+  // browser's own Enter XR pill, which does not credit a user gesture the way
+  // the landing button does.
+  const sfx = code("sfx.ts");
+  const start = /export function startAmbience\(\): void \{[\s\S]*?\n\}/.exec(sfx)?.[0] ?? "";
+  assert.ok(start, "startAmbience not found");
+
+  // The state check must come BEFORE the latch, or the latch still wins.
+  const checkAt = start.indexOf("audioContextState()");
+  const latchAt = start.indexOf("ambiencePlaying = true;");
+  assert.ok(checkAt >= 0, "startAmbience does not check the context state");
+  assert.ok(latchAt > checkAt, "the latch must not be set before the state check");
+  assert.match(start, /state === "suspended" \|\| state === "none"/);
+
+  // An unexpected state must PROCEED, not block — silencing ambience forever is
+  // the failure being fixed, so the guard names what it rejects, never what it
+  // allows.
+  assert.doesNotMatch(start, /state !== "running"/);
+});
+
+test("nothing that latches may latch into a suspended context", () => {
+  // The rule, not the instance. Anything that starts once and runs until told
+  // to stop must check the context BEFORE recording that it started — a
+  // suspended `AudioContext` accepts `play()` and produces nothing.
+  //
+  // Two places latch: the ambient beds (`sfx.ts`) and the under-attack alarm
+  // (`underAttackAudio.ts`). The beds stayed silent for an entire 853-second
+  // session; the alarm self-heals but still loses one whole alert. One-shots
+  // never latch, so they retry by themselves and are exempt.
+  const cases: Array<[string, RegExp, string]> = [
+    ["sfx.ts", /export function startAmbience\(\): void \{[\s\S]*?\n\}/, "ambiencePlaying = true;"],
+    ["underAttackAudio.ts", /export function holdCommandCenterAlarm\(\): void \{[\s\S]*?\n\}/, "alarmPlaying = true;"],
+  ];
+  for (const [file, fnPattern, latch] of cases) {
+    const body = fnPattern.exec(code(file))?.[0] ?? "";
+    assert.ok(body, `${file}: function not found`);
+    const checkAt = body.indexOf("audioContextState()");
+    const latchAt = body.indexOf(latch);
+    assert.ok(checkAt >= 0, `${file} does not check the context state`);
+    assert.ok(latchAt > checkAt, `${file} latches before checking the context`);
+    // Rejects the known-bad states; anything unexpected proceeds.
+    assert.match(body, /=== "suspended" \|\| \w+ === "none"/, `${file}: wrong guard shape`);
+    assert.doesNotMatch(body, /!== "running"/, `${file}: an unknown state must not block`);
+  }
+});

@@ -1,6 +1,9 @@
 import { AudioSource, AudioUtils, PlaybackMode, createSystem } from "@iwsdk/core";
 import type { Entity } from "@iwsdk/core";
-import { reportAudioContextIfSuspended } from "./audioUnlock.js";
+import {
+  audioContextState,
+  reportAudioContextIfSuspended,
+} from "./audioUnlock.js";
 import { DebugSettings, MatchState, boardState } from "./state.js";
 import {
   AMBIENCE_IDS,
@@ -128,11 +131,36 @@ export function setSfxVolume(scale: number): void {
  */
 export function startAmbience(): void {
   if (ambiencePlaying) return;
+
+  // **Do not latch into a context that will swallow the play.**
+  //
+  // A suspended `AudioContext` accepts `play()` and produces nothing. Latching
+  // anyway made the beds silent for an entire 853-second session
+  // (`console-logs/2026-08-29-Audio-Plan_phase5_full.log`): the match started at
+  // t+12.2s, the context was still suspended, `ambiencePlaying` latched, and
+  // the early return above meant it never tried again.
+  //
+  // One-shots do not have this problem — they never latch, so the next shot
+  // retries by itself. Only the beds need to care.
+  //
+  // The trigger is worth knowing: that session entered XR through the browser's
+  // own Enter XR pill (no `launch requested via=landing-button` in the log),
+  // which does not credit a user gesture the way our button does. So this is
+  // the *normal* path on a headset, not an edge case.
+  //
+  // "none" — no context yet — is treated the same. Any OTHER state proceeds:
+  // an unexpected value must not be able to silence ambience permanently, which
+  // is the failure being fixed.
+  const state = audioContextState();
+  if (state === "suspended" || state === "none") {
+    reportAudioContextIfSuspended("ambience");
+    return;
+  }
+
   ambiencePlaying = true;
   for (const id of AMBIENCE_IDS) {
     const entity = emitters.get(id);
     if (!entity) continue;
-    reportAudioContextIfSuspended(id);
     AudioUtils.play(entity, AMBIENCE_FADE_SECONDS);
   }
 }

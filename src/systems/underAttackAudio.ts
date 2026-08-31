@@ -5,7 +5,10 @@ import {
   createSystem,
   type Entity,
 } from "@iwsdk/core";
-import { reportAudioContextIfSuspended } from "./audioUnlock.js";
+import {
+  audioContextState,
+  reportAudioContextIfSuspended,
+} from "./audioUnlock.js";
 import {
   UNDER_ATTACK_ALARM_SRC,
   UNDER_ATTACK_ALARM_FADE_IN_SECONDS,
@@ -81,15 +84,39 @@ export function playAlertSting(category: AlertCategory): void {
  * sustained assault is one continuous alarm instead of a fade-in per hit.
  */
 export function holdCommandCenterAlarm(): void {
+  // The hold window refreshes even when the audio cannot start, so a sustained
+  // assault still ends the alarm at the right moment once it does.
   alarmHold = UNDER_ATTACK_ALARM_HOLD_SECONDS;
   if (!audioEnabled || !alarm || alarmPlaying) return;
+
+  // Do not latch into a context that will swallow the play.
+  //
+  // A suspended `AudioContext` accepts `play()` and produces nothing, so
+  // setting `alarmPlaying` first loses the alarm. Less damaging here than for
+  // the ambient beds, which latched the same way and stayed silent for an
+  // entire 853-second session (`sfx.ts`, `startAmbience`): this one self-heals,
+  // because `stopAlertAudio` clears the latch when the hold expires and the
+  // next hit tries again. It still costs one whole alarm.
+  //
+  // Worth fixing because the trigger is the ordinary headset path — entering XR
+  // through the browser's own pill does not credit a user gesture the way the
+  // landing button does, so the context is routinely suspended early in a
+  // session, which is exactly when a first attack lands.
+  //
+  // Names what it REJECTS, never what it allows: an unexpected state must
+  // proceed, or the guard re-creates the silence it exists to prevent.
+  const contextState = audioContextState();
+  if (contextState === "suspended" || contextState === "none") {
+    reportAudioContextIfSuspended("under-attack alarm");
+    return;
+  }
+
   alarm.setValue(
     AudioSource,
     "volume",
     scaledAlertVolume(UNDER_ATTACK_ALARM_VOLUME),
   );
   alarmPlaying = true;
-  reportAudioContextIfSuspended("under-attack alarm");
   AudioUtils.play(alarm, UNDER_ATTACK_ALARM_FADE_IN_SECONDS);
 }
 
