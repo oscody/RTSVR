@@ -213,38 +213,25 @@ export const SFX_CATALOG = {
     cooldownMs: 1000,
   },
 
-  // ── Ambience ────────────────────────────────────────────────────────────
-  //
-  // Both loop seamlessly, by two different techniques: the hum forces every
-  // partial to a whole number of cycles across the file, the wind crossfades
-  // its own overhang because noise cannot be made periodic. A loop that does
-  // not arrive back where it started ticks once per period, forever.
-  //
-  // **Deliberately quiet.** A bed under a twenty-minute session becomes
-  // fatiguing long before it becomes noticeable, and the plan's open question
-  // is exactly that. These ship low with the Settings knob available, to be
-  // revisited after one real playtest rather than tuned by guesswork now.
-
-  /** Reactor bed under the base. 4s, periodic by construction. */
-  ambBaseHum: {
-    url: "/audio/amb-base-hum.wav",
-    volume: 0.12,
-    voices: 1,
-    cooldownMs: 0,
-    loop: true,
-  },
-  /** Martian wind. 6s, crossfaded seam. */
-  ambWind: {
-    url: "/audio/amb-wind.wav",
-    volume: 0.1,
-    voices: 1,
-    cooldownMs: 0,
-    loop: true,
-  },
 } as const satisfies Record<string, SfxSpec>;
 
 /** The ids that are sustained beds rather than events. */
-export const AMBIENCE_IDS = ["ambBaseHum", "ambWind"] as const;
+/**
+ * The ids that are sustained beds rather than events.
+ *
+ * **Empty — ambience is disabled, 2026-09-01.** The two generated beds
+ * (`amb-base-hum`, `amb-wind`) were cut: procedural synthesis produces a
+ * passable tone but not convincing wind, and neither was ever confirmed audible
+ * on a headset. Backlog item 21 tracks sourcing real audio.
+ *
+ * **Everything around this still works.** `startAmbience` / `stopAmbience` stay
+ * wired and `SfxSystem` still derives them from match status, so re-enabling is
+ * this array plus a catalog entry plus a manifest entry — no new machinery. The
+ * generator recipes and the WAV files are kept on disk for the same reason, and
+ * `tests/sfx.test.ts` still asserts their loop seams, which is the part that was
+ * genuinely hard to get right.
+ */
+export const AMBIENCE_IDS: readonly SfxId[] = [];
 
 /**
  * One clip's spec, widened to {@link SfxSpec}.

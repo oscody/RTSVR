@@ -130,6 +130,10 @@ export function setSfxVolume(scale: number): void {
  * which is the one thing ambience must not do.
  */
 export function startAmbience(): void {
+  // Ambience is currently disabled (`AMBIENCE_IDS` is empty). Returning here
+  // rather than falling through keeps `audioContextState()` off a path that
+  // runs every frame while there is nothing to start.
+  if (AMBIENCE_IDS.length === 0) return;
   if (ambiencePlaying) return;
 
   // **Do not latch into a context that will swallow the play.**

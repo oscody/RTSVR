@@ -391,8 +391,13 @@ test("the beds are DERIVED from match status, not hand-started", () => {
     );
   }
 
-  // Called every frame, so both must be cheap and idempotent.
-  assert.match(sfx, /export function startAmbience\(\): void \{\s*if \(ambiencePlaying\) return;/);
+  // Called every frame, so both must be cheap and idempotent. The first guard
+  // is the disabled case — with `AMBIENCE_IDS` empty there is nothing to start,
+  // and returning early keeps `audioContextState()` off a per-frame path.
+  assert.match(
+    sfx,
+    /export function startAmbience\(\): void \{[\s\S]{0,320}?if \(AMBIENCE_IDS\.length === 0\) return;\s*if \(ambiencePlaying\) return;/,
+  );
   assert.match(sfx, /export function stopAmbience\(\): void \{\s*if \(!ambiencePlaying\) return;/);
 
   // A reset clears the latch; update() restarts on the next frame.
@@ -476,4 +481,41 @@ test("nothing that latches may latch into a suspended context", () => {
     assert.match(body, /=== "suspended" \|\| \w+ === "none"/, `${file}: wrong guard shape`);
     assert.doesNotMatch(body, /!== "running"/, `${file}: an unknown state must not block`);
   }
+});
+
+test("ambience is disabled, and disabled consistently", () => {
+  // Cut 2026-09-01: synthesis produces a passable tone but not convincing wind,
+  // and neither bed was ever confirmed audible on a headset. Backlog item 21
+  // tracks sourcing real audio.
+  //
+  // "Disabled" has to mean all three, or it is only half off: silent but still
+  // a 430 KB download, or downloadable but unplayable.
+  assert.equal(AMBIENCE_IDS.length, 0, "AMBIENCE_IDS must be empty");
+  assert.doesNotMatch(code("sfxCatalog.ts"), /amb-/, "no ambience entries in the catalog");
+  const index = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(index, /amb-/, "no ambience entries in the manifest — do not ship 430 KB nothing plays");
+
+  // The machinery stays, so re-enabling is data rather than code.
+  const sfx = code("sfx.ts");
+  assert.match(sfx, /export function startAmbience/);
+  assert.match(sfx, /export function stopAmbience/);
+  assert.match(sfx, /status === "playing"\) startAmbience\(\);/);
+  // ...and `SfxSpec.loop` survives even with no loop using it.
+  assert.match(code("sfxCatalog.ts"), /readonly loop\?: boolean;/);
+});
+
+test("the generated beds are kept on disk with their seams intact", () => {
+  // The recipes and files stay because the LOOP TECHNIQUE was the hard part and
+  // is worth not re-deriving: the hum is periodic by construction, the wind is
+  // equal-power crossfaded. Whatever replaces them will need the same treatment
+  // unless it is sourced already-loopable.
+  for (const name of ["amb-base-hum.wav", "amb-wind.wav"]) {
+    assert.ok(
+      existsSync(new URL(`../public/audio/${name}`, import.meta.url)),
+      `${name} should be kept for reference, not deleted`,
+    );
+  }
+  const gen = readFileSync(new URL("../scripts/generate-audio.mjs", import.meta.url), "utf8");
+  assert.match(gen, /function crossfade\(samples, fadeCount\)/);
+  assert.match(gen, /Math\.round\(55 \* 4\.0\) \/ 4\.0/);
 });

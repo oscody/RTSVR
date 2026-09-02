@@ -279,16 +279,6 @@ const assets: AssetManifest = {
     type: AssetType.Audio,
     priority: "background",
   },
-  ambBaseHum: {
-    url: "/audio/amb-base-hum.wav",
-    type: AssetType.Audio,
-    priority: "background",
-  },
-  ambWind: {
-    url: "/audio/amb-wind.wav",
-    type: AssetType.Audio,
-    priority: "background",
-  },
 };
 
 // BEFORE World.create, not inside its .then(): the overlay has to be driven
