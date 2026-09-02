@@ -43,7 +43,10 @@ import { ProgramChurnSystem } from "./systems/programChurn.js";
 import { attachAssetLoadProgress, initialLoad } from "./app/initialLoad.js";
 import { setupLanding } from "./app/landing.js";
 import { ActionKind, logAction } from "./systems/actionLog.js";
-import { anyTraceEnabled } from "./systems/traceFlags.js";
+import {
+  DIAGNOSTICS_ENABLED,
+  anyTraceEnabled,
+} from "./systems/traceFlags.js";
 import { TUTORIAL_ENABLED } from "./systems/tutorialCatalog.js";
 import { setupLoadingScreen, showLoadingFailure } from "./app/loadingScreen.js";
 import { attachMatchStart } from "./systems/matchStart.js";
@@ -336,7 +339,10 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     // Collapse each GLB's kit-bashed parts into one mesh per (rigid group,
     // material) BEFORE any system clones an asset, so every instance inherits it.
     try {
-      optimizeLoadedAssets(Object.keys(assets), true, (done, total) =>
+      // `verbose` was hardcoded `true`, which made it not a switch at all.
+      // Feeding it the build mode is the one change that silences the whole
+      // merge report, instead of four guards inside the module.
+      optimizeLoadedAssets(Object.keys(assets), DIAGNOSTICS_ENABLED, (done, total) =>
         initialLoad.setProgress("mesh-merge", done / total),
       );
     } finally {

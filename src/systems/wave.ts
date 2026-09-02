@@ -86,6 +86,7 @@ import { detachAlienAnimation } from "./alienAnimation.js";
 import { disposeEnemyRangeRing } from "./selection.js";
 import { releaseEntity } from "./entityTeardown.js";
 import { playSfx } from "./sfx.js";
+import { DIAGNOSTICS_ENABLED } from "./traceFlags.js";
 
 interface AlienRoute {
   steps: Int16Array;
@@ -484,9 +485,12 @@ export class WaveSystem extends createSystem({
     const slowestBuild = this.slowestBuildAsset
       ? `; slowest ${this.slowestBuildName} (${this.slowestBuildAsset}) ${this.slowestBuildMs.toFixed(2)}ms`
       : "";
-    console.log(
-      `[WaveBuild] wave ${this.clock.waveNumber}: ${spawns.length} aliens built in ${buildMs.toFixed(2)}ms total across preparation frames (${activationFinishMs.toFixed(2)}ms activation finish, ${perAlien.toFixed(2)}ms/alien${slowestBuild})`,
-    );
+    // A diagnostic, unlike the three `console.warn`s in this file — those report
+    // a wave that failed to build and must survive a quiet build.
+    if (DIAGNOSTICS_ENABLED)
+      console.log(
+        `[WaveBuild] wave ${this.clock.waveNumber}: ${spawns.length} aliens built in ${buildMs.toFixed(2)}ms total across preparation frames (${activationFinishMs.toFixed(2)}ms activation finish, ${perAlien.toFixed(2)}ms/alien${slowestBuild})`,
+      );
     traceStateChange(
       State.RequiredAlienTotal,
       0,

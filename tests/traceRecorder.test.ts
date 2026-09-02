@@ -58,8 +58,10 @@ const enabledRecorderPath = join(BUILD_DIR, "traceRecorder.enabled.js");
 writeFileSync(
   enabledFlagsPath,
   readFileSync(join(BUILD_DIR, "traceFlags.js"), "utf8").replace(
-    /export const ([A-Z_]+) = false;/g,
-    "export const $1 = true;",
+    // Every flag now derives from one switch, so forcing a variant is a
+      // single-token rewrite rather than a sweep over nine declarations.
+      /= DIAGNOSTICS_ENABLED;/g,
+      "= true;",
   ),
 );
 writeFileSync(
@@ -76,8 +78,8 @@ const disabledRecorderPath = join(BUILD_DIR, "traceRecorder.disabled.js");
 writeFileSync(
   disabledFlagsPath,
   readFileSync(join(BUILD_DIR, "traceFlags.js"), "utf8").replace(
-    /export const ([A-Z_]+) = true;/g,
-    "export const $1 = false;",
+    /= DIAGNOSTICS_ENABLED;/g,
+      "= false;",
   ),
 );
 writeFileSync(

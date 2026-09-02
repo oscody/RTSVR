@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 
 import { resolvePerformanceSample } from "../src/systems/performanceRules.ts";
@@ -110,7 +110,8 @@ test("the profiler readout is off the tablet, but still measured and logged", ()
 
   // ...but the measurement itself is untouched, and still goes to the console
   // once per second. That is now the ONLY way to read these numbers.
-  assert.match(frameProfiler, /FRAME_PROFILER_ENABLED = true/);
+  // Follows the build mode with everything else — see traceFlags.
+  assert.match(frameProfiler, /FRAME_PROFILER_ENABLED = DIAGNOSTICS_ENABLED;/);
   assert.match(frameProfiler, /FRAME_PROFILER_LOG = true/);
   assert.match(frameProfiler, /"prepareWaveIncrementally", "WaveSystem\.prepare", "Prep"/);
   assert.match(frameProfiler, /"createPreparedAlien", waveBuildDescriptor/);
@@ -396,4 +397,128 @@ test("decoration is not ray-testable, pick targets still are", () => {
   assert.doesNotMatch(board, /makeNonInteractive\(boardSurface\)/);
   // Same for the tablet's grab handle.
   assert.doesNotMatch(read("src/systems/tablet.ts"), /makeNonInteractive\(handle\)/);
+});
+
+test("the diagnostics switch resolves correctly for every build shape", () => {
+  // Behavioural, not textual: the exact expression from `traceFlags.ts` and
+  // `actionLog.ts`, evaluated against the env shapes each build actually
+  // produces. Vite emits `import.meta.env` as a real object (`PROD:!0` appears
+  // in the bundle), and plain node leaves it undefined.
+  const resolve = (env: Record<string, unknown> | undefined): boolean => {
+    const override = String(env?.VITE_DIAGNOSTICS ?? "").toLowerCase();
+    return override === "on"
+      ? true
+      : override === "off"
+        ? false
+        : (env?.PROD as boolean | undefined) !== true;
+  };
+
+  assert.equal(resolve({ DEV: true, PROD: false }), true, "dev server: on");
+  assert.equal(resolve({ DEV: false, PROD: true }), false, "production build: off");
+  assert.equal(resolve({ PROD: true, VITE_DIAGNOSTICS: "on" }), true, "prod + override on");
+  assert.equal(resolve({ PROD: false, VITE_DIAGNOSTICS: "off" }), false, "dev + override off");
+  assert.equal(resolve({ PROD: true, VITE_DIAGNOSTICS: "ON" }), true, "override is case-insensitive");
+  // Absent env (the strip-types test runner, any plain-node import) must behave
+  // like development. A tool that is not a build should not silently go quiet.
+  assert.equal(resolve(undefined), true, "no env: on");
+  // An unrecognised override falls through to the build default rather than
+  // being treated as "off" — a typo must not silence a playtest build.
+  assert.equal(resolve({ PROD: false, VITE_DIAGNOSTICS: "yes" }), true, "typo falls through");
+
+  // And both files must implement exactly this.
+  const read = (p: string): string =>
+    readFileSync(new URL(`../src/systems/${p}`, import.meta.url), "utf8");
+  for (const file of ["traceFlags.ts", "actionLog.ts"]) {
+    const src = read(file);
+    assert.match(src, /=== "on"\s*\?\s*true/, `${file}: missing the on override`);
+    assert.match(src, /=== "off"\s*\?\s*false/, `${file}: missing the off override`);
+    assert.match(src, /\(buildEnv\?\.PROD as boolean \| undefined\) !== true/, `${file}: wrong default`);
+  }
+});
+
+test("no console.log escapes the diagnostics switch", () => {
+  // The gap this closes: turning logging off gated the 11 named flags and
+  // missed four separate `console.log` sources — `[ProgramChurn]` streaming
+  // every ~600 frames, `[MeshMerge]` at boot, `[GridVisual]`, and `[WaveBuild]`.
+  // A "quiet" build was still writing to the console.
+  //
+  // Grepping by hand is exactly what failed, so it is a test now.
+  //
+  // `console.warn` and `console.error` are deliberately NOT covered: a wave
+  // that fails to build, or an audio context that will swallow playback, must
+  // still report in a quiet build. Silence is for diagnostics, not for faults.
+  const dir = new URL("../src/", import.meta.url);
+  const offenders: string[] = [];
+
+  const walk = (rel: string): void => {
+    for (const entry of readdirSync(new URL(rel, dir), { withFileTypes: true })) {
+      const path = `${rel}${entry.name}`;
+      if (entry.isDirectory()) {
+        walk(`${path}/`);
+        continue;
+      }
+      if (!entry.name.endsWith(".ts")) continue;
+      const src = readFileSync(new URL(path, dir), "utf8");
+      // The trace subsystem is gated by INSTALLATION, not by an inline check:
+      // nothing in `trace*.ts` runs unless `installTraceRecorder()` /
+      // `installTraceDiagnostics()` were called, and those are behind the
+      // switch. Verified empirically — a `VITE_DIAGNOSTICS=off` run emits no
+      // `[Trace]` or `[RuntimeTrace]` line at all.
+      if (entry.name.startsWith("trace")) continue;
+
+      // Modules whose entire output is switch-gated at the top, or that guard
+      // each call inline.
+      const selfGated =
+        /const (ACTION_LOG_ENABLED|FRAME_PROFILER_ENABLED|PROGRAM_CHURN_ENABLED)/.test(src) ||
+        /DIAGNOSTICS_ENABLED/.test(src);
+      if (selfGated) continue;
+      const lines = src.split("\n");
+      lines.forEach((line, i) => {
+        if (!/\bconsole\.log\(/.test(line)) return;
+        offenders.push(`${path}:${i + 1}`);
+      });
+    }
+  };
+  walk("");
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `these console.log calls are not behind the diagnostics switch:\n  ${offenders.join("\n  ")}`,
+  );
+});
+
+test("the log sources that needed hand-wiring are actually wired", () => {
+  // The sweep above is weaker than it looks: it exempts any file that MENTIONS
+  // `DIAGNOSTICS_ENABLED`, so a file that imports the switch and then ignores it
+  // passes. Both of these did exactly that and both reverts went green.
+  //
+  // Asserting a file mentions a guard says nothing about whether the guard is
+  // reached — the same lesson as the missed alien-build site and the losing-only
+  // MatchEnd paths. So these two are pinned specifically.
+  const read = (p: string): string =>
+    readFileSync(new URL(`../src/${p}`, import.meta.url), "utf8");
+
+  // ProgramChurn had its own hardcoded flag and streamed every ~600 frames.
+  assert.match(
+    read("systems/programChurn.ts"),
+    /const PROGRAM_CHURN_ENABLED = DIAGNOSTICS_ENABLED;/,
+    "ProgramChurn must follow the switch, not its own constant",
+  );
+
+  // meshMerge's `verbose` parameter was hardcoded `true` at the only call site,
+  // which made it not a switch at all. Feeding it the build mode is what
+  // silences ~30 lines of boot output.
+  assert.match(
+    read("index.ts"),
+    /optimizeLoadedAssets\(Object\.keys\(assets\), DIAGNOSTICS_ENABLED,/,
+    "mesh-merge verbosity must follow the switch, not be hardcoded true",
+  );
+
+  // The one merge line that is deliberately outside `verbose` still has to be
+  // inside the build switch — "even when verbose is off" is not "always".
+  assert.match(
+    read("systems/meshMerge.ts"),
+    /if \(twoPass\.length > 0 && DIAGNOSTICS_ENABLED\)/,
+  );
 });

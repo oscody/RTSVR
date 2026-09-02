@@ -1,4 +1,5 @@
 import { createSystem, type Material, type Mesh, type Object3D } from "@iwsdk/core";
+import { DIAGNOSTICS_ENABLED } from "./traceFlags.js";
 
 /**
  * Diagnostic for Phase 2a step 1: find out WHY three.js re-derives the shader
@@ -25,7 +26,7 @@ import { createSystem, type Material, type Mesh, type Object3D } from "@iwsdk/co
  * per-object state: `lightsStateVersion` and `envMap`/`outputColorSpace`. Those
  * fall into the `unexplained` bucket, which is itself the answer if it dominates.
  */
-const PROGRAM_CHURN_ENABLED = true;
+const PROGRAM_CHURN_ENABLED = DIAGNOSTICS_ENABLED;
 
 /** Seconds between samples. The walk is O(scene), so not every frame. */
 const SAMPLE_INTERVAL = 5;

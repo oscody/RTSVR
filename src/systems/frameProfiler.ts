@@ -6,7 +6,9 @@ import {
   boardState,
 } from "./state.js";
 import { WaveSystem } from "./wave.js";
-import { SYSTEM_EXECUTION_TRACE_ENABLED } from "./traceFlags.js";
+import { SYSTEM_EXECUTION_TRACE_ENABLED,
+  DIAGNOSTICS_ENABLED,
+} from "./traceFlags.js";
 import { Reason, TraceKind } from "./traceIds.js";
 import {
   beginTraceFrame,
@@ -48,7 +50,7 @@ import { exposeTraceConsoleHandles } from "./traceDiagnosticsSystem.js";
 // PerformanceSystem (performance.ts) calls flushFrameProfile() on its FPS sample
 // tick to refresh the HUD text, which the tablet's Settings tab shows via
 // getFrameProfileHud(). Flip FRAME_PROFILER_ENABLED off to disable.
-const FRAME_PROFILER_ENABLED = true;
+const FRAME_PROFILER_ENABLED = DIAGNOSTICS_ENABLED;
 
 /**
  * Whether the `[Profile]` instrument is on.

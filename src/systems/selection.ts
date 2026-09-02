@@ -35,6 +35,7 @@ import {
   UnitSelection,
   boardState,
 } from "./state.js";
+import { DIAGNOSTICS_ENABLED } from "./traceFlags.js";
 
 function currentTurretRange(): number {
   return (
@@ -151,12 +152,13 @@ export function updateCommandGridVisibility(): void {
       node = node.parent;
       depth += 1;
     }
-    console.log(
-      `[GridVisual] visible=${visible} units=${selectedUnits} ` +
-        `turret=${turretSelected} placement=${placementActive} ` +
-        `attached=${grid.parent !== null} ancestors=${depth}` +
-        (hiddenBy ? ` HIDDEN-BY ${hiddenBy}` : ""),
-    );
+    if (DIAGNOSTICS_ENABLED)
+      console.log(
+        `[GridVisual] visible=${visible} units=${selectedUnits} ` +
+          `turret=${turretSelected} placement=${placementActive} ` +
+          `attached=${grid.parent !== null} ancestors=${depth}` +
+          (hiddenBy ? ` HIDDEN-BY ${hiddenBy}` : ""),
+      );
   }
 }
 

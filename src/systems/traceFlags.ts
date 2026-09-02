@@ -30,6 +30,63 @@
  */
 
 /**
+ * The one switch. Everything diagnostic in the app derives from this.
+ *
+ * ## Why a build mode and not a branch
+ *
+ * Logging touches 28 files. A branch with it stripped conflicts on every merge,
+ * forever, and each hand-resolution can silently ship logging or silently drop
+ * a fix. **A branch should differ by what the code does, never by how it was
+ * built.** So `dev` and `master` stay byte-identical and the difference is a
+ * build command.
+ *
+ * ## What decides it
+ *
+ * | how you run | diagnostics |
+ * | --- | --- |
+ * | `npm run dev` (Vite dev server) | **on** |
+ * | `npm run build` (production) | **off** |
+ * | `VITE_DIAGNOSTICS=on npm run build` | forced on |
+ * | `VITE_DIAGNOSTICS=off npm run dev` | forced off |
+ *
+ * The override matters both ways: a playtest build sometimes needs a trace, and
+ * a like-for-like performance comparison needs the dev server without one. Every
+ * absolute ms/frame figure in the devlog was measured with these ON — roughly
+ * 1.2 ms/frame of overhead — so a clean run is not the same app.
+ *
+ * `import.meta.env` is absent outside Vite (the strip-types test runner, any
+ * plain-node import), hence the optional read and the `true` fallback: a tool
+ * that is not a build should behave like development, not silently go quiet.
+ *
+ * ## Runtime-gated, NOT tree-shaken — and that is the intended trade
+ *
+ * Reading `import.meta.env` through a local alias means Vite cannot statically
+ * replace it, so the trace machinery still **ships** in a production bundle; it
+ * is simply inert. Measured: forced-on and forced-off bundles differ by 2 bytes.
+ *
+ * What that costs is bundle size. What it does not cost is **frame time** —
+ * every flag is checked once at module load and the per-frame work disappears
+ * entirely, which is the ~1.2 ms/frame this exists to remove.
+ *
+ * Compile-time elimination would need `define` in `vite.config.ts` and would
+ * make the production bundle structurally different from the one every
+ * measurement was taken against. That is a real risk for a modest size win on a
+ * 1.9 MB bundle, so it is deliberately not done. Revisit only if bundle size
+ * becomes the constraint.
+ */
+const buildEnv = (import.meta as { env?: Record<string, unknown> }).env;
+const diagnosticsOverride = String(buildEnv?.VITE_DIAGNOSTICS ?? "").toLowerCase();
+
+export const DIAGNOSTICS_ENABLED: boolean =
+  diagnosticsOverride === "on"
+    ? true
+    : diagnosticsOverride === "off"
+      ? false
+      : // Default: on in development, off in a production build.
+        (buildEnv?.PROD as boolean | undefined) !== true;
+
+
+/**
  * Wrap every registered system's `update()` with invoked/completed/threw
  * recording and per-frame execution ordinals.
  *
@@ -37,7 +94,7 @@
  * system per frame — ~40 systems x 90 Hz. This is the most expensive flag and
  * the first one to switch off when comparing against a clean run.
  */
-export const SYSTEM_EXECUTION_TRACE_ENABLED = true;
+export const SYSTEM_EXECUTION_TRACE_ENABLED = DIAGNOSTICS_ENABLED;
 
 /**
  * Record cross-system handoffs: contract reads, decisions, rejections, state
@@ -46,13 +103,13 @@ export const SYSTEM_EXECUTION_TRACE_ENABLED = true;
  * Cost shape: bursty. Nothing per frame; a few events per wave release, per
  * death, per build order.
  */
-export const SYSTEM_INTERACTION_TRACE_ENABLED = true;
+export const SYSTEM_INTERACTION_TRACE_ENABLED = DIAGNOSTICS_ENABLED;
 
 /**
  * Browser and XR evidence around an unexplained `Other` gap: long tasks, XR
  * session and visibility transitions, callback-gap decomposition.
  */
-export const RUNTIME_ATTRIBUTION_TRACE_ENABLED = true;
+export const RUNTIME_ATTRIBUTION_TRACE_ENABLED = DIAGNOSTICS_ENABLED;
 
 /**
  * Observe `compileShader` / `linkProgram` call duration on the live WebGL
@@ -60,7 +117,7 @@ export const RUNTIME_ATTRIBUTION_TRACE_ENABLED = true;
  * is the one probe that touches the GL context, and is therefore the one most
  * worth being able to rule out on its own.
  */
-export const SHADER_TRACE_ENABLED = true;
+export const SHADER_TRACE_ENABLED = DIAGNOSTICS_ENABLED;
 
 /**
  * The once-per-second force census in `PerformanceSystem` (aliens active vs
@@ -70,26 +127,26 @@ export const SHADER_TRACE_ENABLED = true;
  * `[Profile]` line prints the census and must not lose fields — see
  * `performance.ts`.
  */
-export const ENTITY_CENSUS_ENABLED = true;
+export const ENTITY_CENSUS_ENABLED = DIAGNOSTICS_ENABLED;
 
 /**
  * Bounded application-level allocation lifecycle counters — entities,
  * geometries, materials, textures, programs — sampled from data the renderer
  * and the ECS already hold. Never a global constructor patch.
  */
-export const ALLOCATION_TRACE_ENABLED = true;
+export const ALLOCATION_TRACE_ENABLED = DIAGNOSTICS_ENABLED;
 
 /**
  * WebXR session / visibility / refresh-rate / input-source listeners, and the
  * predicted-display-time probe.
  */
-export const XR_RUNTIME_TRACE_ENABLED = true;
+export const XR_RUNTIME_TRACE_ENABLED = DIAGNOSTICS_ENABLED;
 
 /**
  * Follow every observable trigger press from its `Pressed` tag or UIKit click
  * through to a terminal result, with a deadline for the ones that vanish.
  */
-export const INTERACTION_CORRELATION_TRACE_ENABLED = true;
+export const INTERACTION_CORRELATION_TRACE_ENABLED = DIAGNOSTICS_ENABLED;
 
 /**
  * Edge-triggered logging of scene-object visibility decisions — currently the
@@ -106,7 +163,7 @@ export const INTERACTION_CORRELATION_TRACE_ENABLED = true;
  * nothing into the flight recorder and does not need it allocated, so folding
  * it into either aggregator would switch on machinery it never uses.
  */
-export const VISUAL_VISIBILITY_TRACE_ENABLED = true;
+export const VISUAL_VISIBILITY_TRACE_ENABLED = DIAGNOSTICS_ENABLED;
 
 /** True when at least one optional diagnostic is on. */
 export function anyTraceEnabled(): boolean {

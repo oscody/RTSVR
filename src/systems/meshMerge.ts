@@ -31,6 +31,7 @@ import {
   PropertyBinding,
 } from "@iwsdk/core";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { DIAGNOSTICS_ENABLED } from "./traceFlags.js";
 
 export interface MergeStats {
   /** Renderable meshes before merging. */
@@ -276,10 +277,14 @@ export function optimizeLoadedAssets(
   if (verbose) {
     console.log(`[MeshMerge] total: ${before} -> ${after} meshes`);
   }
-  // Always report this one: it halves the draw calls for those objects and
-  // removes two program re-derivations each per frame, so a change in the count
-  // is a change in frame cost worth noticing in a log.
-  if (twoPass.length > 0) {
+  // Reported even when `verbose` is off: it halves the draw calls for those
+  // objects and removes two program re-derivations each per frame, so a change
+  // in the count is a change in frame cost worth noticing in a log.
+  //
+  // "Even when verbose is off" is not "always" — it is still a diagnostic, so
+  // the build switch governs it like everything else. That distinction only
+  // existed because `verbose` predates the switch.
+  if (twoPass.length > 0 && DIAGNOSTICS_ENABLED) {
     console.log(
       `[SinglePass] ${twoPass.length} transparent double-sided materials collapsed to one pass`,
     );

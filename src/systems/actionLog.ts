@@ -81,7 +81,25 @@
  * than the bytes. A diagnostics-off build should keep it — which is precisely
  * why it does not sit with the flags that build turns off.
  */
-const ACTION_LOG_ENABLED = true;
+const buildEnv = (import.meta as { env?: Record<string, unknown> }).env;
+const diagnosticsOverride = String(buildEnv?.VITE_DIAGNOSTICS ?? "").toLowerCase();
+
+/**
+ * Same rule as `traceFlags.DIAGNOSTICS_ENABLED`, duplicated rather than
+ * imported.
+ *
+ * This module imports **nothing** — that is what lets `tablet.ts` and
+ * `tutorial.ts` both call it when they may not import each other, and what lets
+ * the strip-types test runner load it with no harness. Importing the switch
+ * would trade that for four lines of shared code, and the leaf property is
+ * worth more. A test asserts both files compute it the same way.
+ */
+const ACTION_LOG_ENABLED: boolean =
+  diagnosticsOverride === "on"
+    ? true
+    : diagnosticsOverride === "off"
+      ? false
+      : (buildEnv?.PROD as boolean | undefined) !== true;
 
 /**
  * Stable numeric ids for each kind of action.

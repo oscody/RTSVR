@@ -93,11 +93,27 @@ test("id 8 is deliberately absent — the dropped wave-stage event", () => {
   assert.ok(ids.includes(ActionKind.Tab));
 });
 
-test("it ships enabled, and outside the traceFlags family", () => {
-  // It is a session record, not a diagnostic — a diagnostics-off build keeps it.
-  assert.match(src("actionLog.ts"), /const ACTION_LOG_ENABLED = true;/);
-  // The docblock names traceFlags to explain the omission, so strip comments.
-  assert.doesNotMatch(code("actionLog.ts"), /traceFlags/);
+test("it follows the build mode, computed locally so the module stays a leaf", () => {
+  // Was hardcoded `true` on the reasoning that a session record is not a
+  // diagnostic. Turning logging off for playtest builds (backlog item 4) made
+  // that a decision the build should make, not the file.
+  const actionLog = src("actionLog.ts");
+  assert.match(actionLog, /const ACTION_LOG_ENABLED: boolean =/);
+  assert.match(actionLog, /VITE_DIAGNOSTICS/);
+  assert.match(actionLog, /buildEnv\?\.PROD/);
+
+  // Still ZERO imports — the leaf property is what lets tablet.ts and
+  // tutorial.ts both call it when they may not import each other, and what
+  // lets the strip-types runner load it with no harness. That is worth more
+  // than sharing four lines with traceFlags.
+  assert.doesNotMatch(code("actionLog.ts"), /^import /m);
+
+  // ...but it must compute the SAME rule, or a build could be half-quiet.
+  const flags = src("traceFlags.ts");
+  for (const part of ['VITE_DIAGNOSTICS ?? ""', 'buildEnv?.PROD as boolean | undefined) !== true']) {
+    assert.ok(actionLog.includes(part), `actionLog is missing: ${part}`);
+    assert.ok(flags.includes(part), `traceFlags is missing: ${part}`);
+  }
 });
 
 // ── Phase 2/3: the call sites ─────────────────────────────────────────────
