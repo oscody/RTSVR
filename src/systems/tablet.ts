@@ -32,6 +32,8 @@ import {
 } from "./debugStatOverrides.js";
 import { ActionKind, logAction } from "./actionLog.js";
 import { playSfx } from "./sfx.js";
+import { getUnitStats } from "./unitStats.js";
+import { formatUnitStats } from "./unitStatsRules.js";
 import { traceManualDump } from "./trace.js";
 import { DEBUG_SETTINGS_CATALOG } from "./debugSettingsCatalog.js";
 import { fitThumbnail } from "./tabletThumbnails.js";
@@ -1159,6 +1161,38 @@ export class TabletSystem extends createSystem({
         height: fit.height,
       });
     }
+    this.refreshBuildStats();
+  }
+
+  /**
+   * Fill the stat line on every build tile.
+   *
+   * Separate from the thumbnail loop above because it runs on a different
+   * schedule: thumbnails are fixed at bind time, but these numbers move
+   * whenever a Settings knob does — so this is called again from
+   * `applySettingsView`, or a player who halves `turretAttackDamage` would
+   * still read the old figure on the tile they are about to press.
+   */
+  private refreshBuildStats(): void {
+    // The main tablet document, not the settings one.
+    //
+    // `applySettingsView` calls this, and that runs from the **settings panel**
+    // subscription — a different entity that can qualify before the tablet
+    // does. `setText` reaches for `this.document!`, and `element()` has no null
+    // guard, so an unbound tablet would throw and take the frame with it.
+    //
+    // Guarded here rather than at the call site: this has two callers already
+    // and the next one will not remember. Same rule as `claimTutorialLevel`,
+    // which was broken exactly this way by gaining a second caller.
+    if (!this.document) return;
+    const kinds = [
+      ...BUILDING_CATALOG.map((spec) => spec.kind),
+      ASTRONAUT_PRODUCTION_SPEC.kind,
+    ];
+    for (const kind of kinds) {
+      const stats = getUnitStats(kind);
+      this.setText(`build-stats-${kind}`, stats ? formatUnitStats(stats) : "");
+    }
   }
 
   private setView(tablet: Entity, view: string, status: string): void {
@@ -1361,6 +1395,10 @@ export class TabletSystem extends createSystem({
       });
       this.setText(`craft-name-${slot}`, spec.label);
       this.setText(`craft-cost-${slot}`, `${spec.cost} crystals`);
+      // Live values, so a Settings knob (`craftRacerHealth`, `turretAttackDamage`)
+      // is reflected here rather than the tile quietly showing catalog defaults.
+      const stats = getUnitStats(spec.kind);
+      this.setText(`craft-stats-${slot}`, stats ? formatUnitStats(stats) : "");
     }
     this.setText("craft-page-label", `Page ${page + 1} / ${pageCount}`);
     const prevOn = page > 0;
@@ -1492,6 +1530,11 @@ export class TabletSystem extends createSystem({
    * match anything.
    */
   private applySettingsView(): void {
+    // The stat lines read live values through `debugStatOverrides`, so every
+    // knob change can move them. Refreshing here is what stops a tile claiming
+    // 18 damage after the player has just set it to 9 — and the settings view
+    // is the only place those numbers change.
+    this.refreshBuildStats();
     const settings = boardState.debugSettings;
     const document = this.settingsDocument;
     if (!settings || !document) return;

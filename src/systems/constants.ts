@@ -1000,6 +1000,16 @@ export const SETTINGS_PANEL_DROP = 0.48;
 export const TABLET_UNIT_THUMB_WIDTH = 76;
 export const TABLET_UNIT_THUMB_HEIGHT = 70;
 export const TABLET_BUILD_THUMB_WIDTH = 72;
-export const TABLET_BUILD_THUMB_HEIGHT = 42;
+/**
+ * 42px until 2026-09-01, when the stat line was added to build tiles.
+ *
+ * The build card is a fixed 94px with 12px of padding: 82px of content for an
+ * image, a 19px name, a 17px cost and now a 15px stat line. That leaves 31px,
+ * so the thumbnail had to shrink. Growing the card was the alternative and was
+ * rejected — `.card-row` has 4px of slack inside a 274px `.view`, and UIKit
+ * drops overflowing children silently rather than clipping, so pushing on that
+ * budget fails invisibly.
+ */
+export const TABLET_BUILD_THUMB_HEIGHT = 26;
 export const TABLET_CRAFT_THUMB_WIDTH = 78;
 export const TABLET_CRAFT_THUMB_HEIGHT = 70;
