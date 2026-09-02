@@ -59,6 +59,7 @@ import { observePlacedSite } from "./phase2Trace.js";
 import { traceDecision, traceEntityDestroyed } from "./trace.js";
 import { EntityKind, Reason } from "./traceIds.js";
 import { playSfx } from "./sfx.js";
+import { faceEntity } from "./unitFacing.js";
 
 const siteProxyMaterial = new MeshBasicMaterial({
   colorWrite: false,
@@ -454,6 +455,10 @@ export class ConstructionSystem extends createSystem({
         (this.attachedBySite.get(site.index) ?? 0) + 1,
       );
       if (current !== "building") continue;
+      // Face the work. Movement only sets heading while travelling, so on
+      // arrival a builder kept whatever direction its last step left it with —
+      // an astronaut could raise a turret with its back to it.
+      faceEntity(astronaut, site);
       this.arrivedBySite.set(
         site.index,
         (this.arrivedBySite.get(site.index) ?? 0) + 1,

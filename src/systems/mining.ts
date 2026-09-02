@@ -33,6 +33,7 @@ import { newCorrelationId, traceDecision, traceStateChange, traceWrite } from ".
 import { trackMiningDeposit } from "./phase2Trace.js";
 import { Reason, State } from "./traceIds.js";
 import { playSfx } from "./sfx.js";
+import { faceEntity } from "./unitFacing.js";
 
 export class MiningSystem extends createSystem({
   miners: { required: [Unit, MinerState] },
@@ -76,6 +77,17 @@ export class MiningSystem extends createSystem({
         this.stopMining(miner, true);
         continue;
       }
+
+      // Face the work, once the miner has arrived and is standing still.
+      //
+      // Movement only sets heading while travelling, so a miner that reached
+      // its crystal kept whatever direction the last step left it with. The two
+      // stationary stages face opposite ends of the same round trip:
+      // `gathering` at the node it is emptying, `deposit` at the base it is
+      // filling. The travelling stages are left alone — movement is already
+      // pointing them the right way, and overriding it would fight the turn.
+      if (stage === "gathering") faceEntity(miner, node);
+      else if (stage === "deposit") faceEntity(miner, boardState.commandCenter);
 
       this.cycle.stage = stage;
       this.cycle.timer = miner.getValue(MinerState, "timer") ?? 0;
