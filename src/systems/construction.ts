@@ -60,10 +60,19 @@ import { traceDecision, traceEntityDestroyed } from "./trace.js";
 import { EntityKind, Reason } from "./traceIds.js";
 import { playSfx } from "./sfx.js";
 import { faceEntity } from "./unitFacing.js";
+import { trackResource } from "./resourceLifetime.js";
 
 const siteProxyMaterial = new MeshBasicMaterial({
   colorWrite: false,
   depthWrite: false,
+});
+// One material shared by every construction site's interaction proxy, so this
+// must stay at exactly 1 for the session. A count that tracks site creation
+// would mean the proxy stopped being shared.
+trackResource(siteProxyMaterial, {
+  kind: "material",
+  scope: "session",
+  label: "construction-site-proxy",
 });
 
 export function createConstructionSite(
@@ -94,7 +103,13 @@ export function createConstructionSite(
       depthWrite: false,
     }),
   );
-  makeNonInteractive(markOwnedResources(foundation));
+  makeNonInteractive(
+    markOwnedResources(foundation, {
+      scope: "scenario",
+      label: "construction-foundation",
+      owner: `site:${anchorX},${anchorY}`,
+    }),
+  );
   foundation.name = "ConstructionFoundation";
   holder.add(foundation);
 
@@ -103,7 +118,13 @@ export function createConstructionSite(
     new MeshBasicMaterial({ color: PROGRESS_BACKGROUND_COLOR }),
   );
 
-  makeNonInteractive(markOwnedResources(progressBackground));
+  makeNonInteractive(
+    markOwnedResources(progressBackground, {
+      scope: "scenario",
+      label: "construction-progress-background",
+      owner: `site:${anchorX},${anchorY}`,
+    }),
+  );
   progressBackground.name = "ConstructionProgressBackground";
   progressBackground.position.set(0, TILE_SIZE * 0.8, 0);
   // A pending site has no progress to show. The bar appears the moment the
@@ -114,7 +135,13 @@ export function createConstructionSite(
     new BoxGeometry(footprintSize, 0.032, 0.04),
     new MeshBasicMaterial({ color: PROGRESS_FILL_COLOR }),
   );
-  makeNonInteractive(markOwnedResources(progressFill));
+  makeNonInteractive(
+    markOwnedResources(progressFill, {
+      scope: "scenario",
+      label: "construction-progress-fill",
+      owner: `site:${anchorX},${anchorY}`,
+    }),
+  );
   progressFill.name = "ConstructionProgressFill";
   progressFill.position.set(-footprintSize / 2, TILE_SIZE * 0.8, 0.001);
   progressFill.scale.x = 0.001;

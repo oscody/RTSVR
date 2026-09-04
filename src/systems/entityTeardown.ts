@@ -5,6 +5,11 @@ import {
   type Object3D,
   RayInteractable,
 } from "@iwsdk/core";
+import {
+  trackResource,
+  type ResourceScope,
+  type TrackableResource,
+} from "./resourceLifetime.js";
 
 /**
  * Tear an entity down without destroying anything it shares.
@@ -54,8 +59,58 @@ export function releaseEntity(entity: Entity): void {
  * with. One of those is recoverable at the next restart and the other is the bug
  * this module was written to fix.
  */
-export function markOwnedResources<T extends Object3D>(object: T): T {
+export interface OwnedResourceMetadata {
+  scope: ResourceScope;
+  /** What this mesh is, e.g. `health-bar-fill`. */
+  label: string;
+  /** Who owns it, e.g. `entity:133`. The fastest route from a leak to a fix. */
+  owner?: string;
+}
+
+/**
+ * Mark a mesh as owning its private geometry and material — and, optionally,
+ * register them with the lifetime tracker.
+ *
+ * The two concerns are deliberately one call. This function is already the
+ * single point where the codebase says "these resources are mine to dispose",
+ * so it is also the only place that can say "count them". Tracking anywhere
+ * else would drift from disposal, and a tracker that disagrees with the
+ * disposer is worse than none.
+ *
+ * **Metadata is optional and the disposal behaviour is unchanged without it**,
+ * so existing callers keep working while sites are converted. An untracked
+ * mesh is invisible to the report rather than wrong in it.
+ *
+ * Textures are NOT registered here. A mesh's map may be a GLTF texture, a UIKit
+ * atlas or a shared canvas — none of them owned — so guessing would classify
+ * external resources as ours. They stay explicit at their construction site.
+ */
+export function markOwnedResources<T extends Object3D>(
+  object: T,
+  metadata?: OwnedResourceMetadata,
+): T {
   object.userData.ownsResources = true;
+  if (metadata) {
+    const mesh = object as unknown as Mesh;
+    trackResource(mesh.geometry as unknown as TrackableResource, {
+      kind: "geometry",
+      scope: metadata.scope,
+      label: metadata.label,
+      owner: metadata.owner,
+    });
+    const material = mesh.material as Material | Material[] | undefined;
+    // An array material is one mesh with several slots; each is disposed
+    // separately by `disposeOwnedResources`, so each is counted separately.
+    const materials = Array.isArray(material) ? material : material ? [material] : [];
+    for (const entry of materials) {
+      trackResource(entry as unknown as TrackableResource, {
+        kind: "material",
+        scope: metadata.scope,
+        label: metadata.label,
+        owner: metadata.owner,
+      });
+    }
+  }
   return object;
 }
 

@@ -18,6 +18,7 @@ import {
 } from "./constants.ts";
 import { makeNonInteractive } from "./sharedGeometry.js";
 import { boardState } from "./state.js";
+import { trackResource, tracked } from "./resourceLifetime.js";
 import {
   attachTutorialVisualPool,
   createTutorialVisualPool,
@@ -86,6 +87,8 @@ function ensureRing(): boolean {
     // bright Martian ground, which would cost the ring its tutorial hue.
     toneMapped: false,
   });
+  // One per session; the ring is repositioned, not recreated.
+trackResource(ringMaterial, { kind: "material", scope: "session", label: "tutorial-ring" });
 
   const step = (Math.PI * 2) / TUTORIAL_RING_WEDGES;
   // Built at UNIT radius and scaled to fit its subject.
@@ -97,14 +100,14 @@ function ensureRing(): boolean {
   // the stroke with it so a small subject does not get a ring that is mostly
   // stroke.
   for (let index = 0; index < TUTORIAL_RING_WEDGES; index += 1) {
-    const geometry = new RingGeometry(
+    const geometry = tracked(new RingGeometry(
       1 - TUTORIAL_RING_THICKNESS_RATIO,
       1,
       4,
       1,
       index * step,
       step * (1 - TUTORIAL_RING_WEDGE_GAP),
-    );
+    ), "geometry", "session", "tutorial-ring");
     ringGeometries.push(geometry);
     const wedge = new Mesh(geometry, ringMaterial);
     makeNonInteractive(wedge);
@@ -198,3 +201,4 @@ export function disposeTutorialRing(): void {
   shownWedges = -1;
   builtRadius = -1;
 }
+

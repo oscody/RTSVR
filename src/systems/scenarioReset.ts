@@ -10,7 +10,17 @@ import { STARTING_CRYSTALS } from "./economyConstants.js";
 import { clearMeteors } from "./meteorSystem.js";
 import { clearSfx } from "./sfx.js";
 import { clearMinerAnimations } from "./minerAnimation.js";
-import { gpuWarmupActive, setGpuWarmupPaused } from "./gpuWarmup.js";
+import { beginHeapCycle } from "./frameProfiler.js";
+import { resetWaveTransitionLog } from "./waveTransitionLog.js";
+import {
+  beginResourceCycle,
+  emitResourceSnapshot,
+} from "./resourceCycle.js";
+import {
+  clearGpuWarmupQueue,
+  gpuWarmupActive,
+  setGpuWarmupPaused,
+} from "./gpuWarmup.js";
 import { clearUnitSelections, updateCommandGridVisibility } from "./selection.js";
 import { clearTurretAnimations } from "./turretAnimation.js";
 import { resetTutorial } from "./tutorial.js";
@@ -105,6 +115,15 @@ export class ScenarioResetSystem extends createSystem({
     // works because `ScenarioResetSystem` is registered BEFORE
     // `GpuWarmupSystem` (index.ts), so no new target can start this frame.
     setGpuWarmupPaused(true);
+    // Drop queued targets before anything is disposed. They point at objects
+    // this reset is about to destroy, so leaving them queued both retains those
+    // objects past their owner's death and hands a post-rebuild frame a target
+    // whose resources are gone. The in-flight one cannot be cancelled — Three's
+    // readiness timer is not ours to un-schedule — so it is waited out below.
+    const dropped = clearGpuWarmupQueue("scenario-reset");
+    if (dropped > 0) {
+      logAction(ActionKind.Restart, `dropped ${dropped} queued GPU warm-up target(s)`);
+    }
     if (gpuWarmupActive()) {
       this.warmupWaitFrames += 1;
       if (this.warmupWaitFrames <= RESET_WARMUP_WAIT_FRAMES) {
@@ -123,6 +142,16 @@ export class ScenarioResetSystem extends createSystem({
     // `finally`, not a plain call after: a reset that throws must still hand
     // warm-up back. Leaving it paused would disable first-use compilation for
     // the rest of the session on top of whatever the original failure was.
+    // A new cycle starts here so the next cycle's minimum is measured against a
+    // freshly rebuilt scenario, not against whatever the previous one settled
+    // at. Without a boundary the minimum is session-wide and cannot climb.
+    beginHeapCycle();
+    // Emits `pre-reset` and opens the new cycle. Before the teardown, so the
+    // line describes what the OLD cycle grew to.
+    beginResourceCycle();
+    // A restart replays the ladder, so wave 1 of the new run must be timed from
+    // the rebuild rather than from the previous run's last transition.
+    resetWaveTransitionLog();
     try {
       this.resetScenario(source);
     } finally {
@@ -208,6 +237,12 @@ export class ScenarioResetSystem extends createSystem({
     resetBoardTerrain();
     this.hideBoardMarkers();
     this.resetSingletons(source);
+    // The one moment `scenario` and `temporary` are SUPPOSED to be zero:
+    // everything the old cycle owned is released, and nothing has been rebuilt
+    // yet. A leak seen here belongs to teardown; a leak seen only at
+    // `post-settled` belongs to the rebuild. Emitting after the rebuild would
+    // merge the two and make neither diagnosable.
+    emitResourceSnapshot("post-teardown");
     // Always bare, for the same reason as the boot build: `resetTutorial()`
     // above cleared the claim latch, so TutorialSystem re-decides on its next
     // update and puts the astronaut back itself if it is not going to run.

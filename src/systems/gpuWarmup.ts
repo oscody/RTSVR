@@ -11,12 +11,22 @@ import { createSystem, type Object3D, type Texture, type World } from "@iwsdk/co
  */
 
 interface WarmupRenderer {
+  /**
+   * The synchronous half, and the one that does the actual work.
+   *
+   * `compileAsync` is literally `compile()` plus a readiness poll — see
+   * {@link advanceGpuWarmup} — so on a device without
+   * `KHR_parallel_shader_compile` this is the whole benefit with none of the
+   * risk. Returns the Set of materials it touched; unused here.
+   */
+  compile?: (object: Object3D, camera: unknown, targetScene: unknown) => unknown;
   compileAsync?: (
     object: Object3D,
     camera: unknown,
     targetScene: unknown,
   ) => Promise<unknown>;
   initTexture?: (texture: Texture) => void;
+  extensions?: { get?: (name: string) => unknown };
 }
 
 interface WarmupTargets {
@@ -48,8 +58,44 @@ let warmedCount = 0;
 let failedCount = 0;
 let activeLabel = "";
 let paused = false;
+let cancelledCount = 0;
 
-function mark(phase: "queued" | "start" | "complete" | "failed", label: string): void {
+/**
+ * Whether this device can report shader-compile status without blocking.
+ *
+ * Resolved once per attach, because it cannot change for a live context and
+ * `extensions.get` warns on repeat misses.
+ *
+ * **This decides whether the async path is worth its risk.** Read Three.js's
+ * own implementation:
+ *
+ * ```js
+ * this.compileAsync = function ( scene, camera, targetScene ) {
+ *   const materials = this.compile( scene, camera, targetScene );  // all the work
+ *   return new Promise( ( resolve ) => { ...poll material.isReady()... } );
+ * };
+ * ```
+ *
+ * Every shader is compiled by that first synchronous line. The promise only
+ * *confirms* readiness afterwards — and without this extension Three.js cannot
+ * ask, so it falls back to `setTimeout(check, 10)` and guesses. On Quest that
+ * buys nothing and costs a live reference to every material for 10ms+, which is
+ * precisely the window a scenario reset disposed into:
+ *
+ * ```
+ * Uncaught TypeError: Cannot read properties of undefined (reading 'isReady')
+ *     at checkMaterialsReady   <- three.js, inside its own setTimeout
+ * ```
+ *
+ * So: extension present, use `compileAsync` and get real overlap. Absent, use
+ * `compile()` and finish in the same tick, where no reset can interleave.
+ */
+let parallelCompileAvailable = false;
+
+function mark(
+  phase: "queued" | "start" | "complete" | "failed" | "cancelled",
+  label: string,
+): void {
   // Custom trace events make a later Quest capture answer which application
   // resource was being prepared without turning every frame into a console log.
   if (typeof performance.mark === "function") {
@@ -66,7 +112,19 @@ export function attachGpuWarmup(world: World): void {
   active = false;
   warmedCount = 0;
   failedCount = 0;
+  cancelledCount = 0;
   activeLabel = "";
+  let parallel: unknown = null;
+  try {
+    parallel = targets.renderer?.extensions?.get?.(
+      "KHR_parallel_shader_compile",
+    );
+  } catch {
+    // A renderer without an extensions registry is not a reason to fail attach;
+    // the synchronous path is the safe default anyway.
+    parallel = null;
+  }
+  parallelCompileAvailable = parallel !== null && parallel !== undefined;
   // Every other field is cleared here, so this one must be too. A re-attach
   // that inherited `paused` from a previous world would leave warm-up silently
   // switched off for the whole session — no error, just first-use hitches
@@ -106,6 +164,49 @@ function finish(label: string, success: boolean): void {
     failedCount += 1;
     mark("failed", label);
   }
+}
+
+/**
+ * Drop every queued target, releasing the object and texture references it held.
+ *
+ * A scenario reset is about to dispose the things this queue points at. Keeping
+ * them queued would both retain them past their owner's death and hand a later
+ * frame a target whose resources are gone.
+ *
+ * **Does not touch an in-flight target.** Cancelling cannot un-schedule
+ * Three.js's own readiness timer, so the only safe move for the active one is
+ * to let it settle — which is what the reset waits for. The synchronous path
+ * has no in-flight window at all.
+ *
+ * @returns how many queued targets were dropped.
+ */
+export function clearGpuWarmupQueue(reason: string): number {
+  const dropped = queue.length;
+  if (dropped === 0) return 0;
+  queue = [];
+  // Fresh sets: the old ones still name the dropped objects, which would make a
+  // legitimate re-queue after the rebuild look like a duplicate and be ignored.
+  pendingObjects = new WeakSet<Object3D>();
+  pendingTextures = new WeakSet<Texture>();
+  cancelledCount += dropped;
+  mark("cancelled", `${reason}:${dropped}`);
+  return dropped;
+}
+
+/**
+ * One compact line for the periodic profile, so a stuck queue is visible.
+ *
+ * `active` staying 1 across samples is the signature of the readiness-poll
+ * failure this module now avoids; `q` never draining means work is queued that
+ * nothing is advancing.
+ */
+export function gpuWarmupLine(): string {
+  return (
+    `Warm q=${queue.length} active=${active ? 1 : 0} done=${warmedCount} ` +
+    `failed=${failedCount} cancelled=${cancelledCount} ` +
+    `label=${activeLabel === "" ? "-" : activeLabel}` +
+    `${paused ? " PAUSED" : ""}${parallelCompileAvailable ? " parallel" : " sync"}`
+  );
 }
 
 /**
@@ -173,7 +274,8 @@ export function advanceGpuWarmup(): void {
       return;
     }
 
-    if (!renderer?.compileAsync || !scene || !camera) {
+    // Either entry point is enough; which one is used is decided below.
+    if ((!renderer?.compile && !renderer?.compileAsync) || !scene || !camera) {
       finish(target.label, false);
       return;
     }
@@ -187,6 +289,18 @@ export function advanceGpuWarmup(): void {
       child.visible = true;
     });
     target.object.updateMatrixWorld(true);
+    // Synchronous unless the device can actually report compile status. See
+    // `parallelCompileAvailable` for why the async path is the risky one.
+    if (!parallelCompileAvailable || !renderer.compileAsync) {
+      try {
+        renderer.compile?.(target.object, camera, scene);
+        finish(target.label, true);
+      } finally {
+        for (const [child, wasVisible] of visibility) child.visible = wasVisible;
+      }
+      return;
+    }
+
     let compilation: Promise<unknown>;
     try {
       compilation = renderer.compileAsync(target.object, camera, scene);

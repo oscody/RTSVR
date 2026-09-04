@@ -145,6 +145,7 @@ import {
 } from "./traceInteraction.js";
 import { traceRead } from "./trace.js";
 import { InteractionStage, Reason, State, Terminal } from "./traceIds.js";
+import { trackResource, tracked } from "./resourceLifetime.js";
 
 
 /**
@@ -637,12 +638,12 @@ export class TabletSystem extends createSystem({
     const frame = new Group();
     frame.name = "RTSVRTablet";
     const backing = new Mesh(
-      new BoxGeometry(...TABLET_FRAME_SIZE),
-      new MeshStandardMaterial({
+      tracked(new BoxGeometry(...TABLET_FRAME_SIZE), "geometry", "session", "tablet-frame"),
+      tracked(new MeshStandardMaterial({
         color: TABLET_FRAME_COLOR,
         roughness: TABLET_FRAME_ROUGHNESS,
         metalness: TABLET_FRAME_METALNESS,
-      }),
+      }), "material", "session", "tablet-frame"),
     );
     backing.name = "RTSVRTabletFrame";
     backing.position.z = TABLET_FRAME_Z_OFFSET;
@@ -651,12 +652,12 @@ export class TabletSystem extends createSystem({
     backing.raycast = () => {};
     frame.add(backing);
     const handle = new Mesh(
-      new BoxGeometry(...TABLET_HANDLE_SIZE),
-      new MeshStandardMaterial({
+      tracked(new BoxGeometry(...TABLET_HANDLE_SIZE), "geometry", "session", "tablet-handle"),
+      tracked(new MeshStandardMaterial({
         color: TABLET_HANDLE_COLOR,
         roughness: TABLET_HANDLE_ROUGHNESS,
         metalness: TABLET_HANDLE_METALNESS,
-      }),
+      }), "material", "session", "tablet-handle"),
     );
     handle.name = "RTSVRTabletGrabHandle";
     handle.position.set(TABLET_HANDLE_X_OFFSET, 0, 0);

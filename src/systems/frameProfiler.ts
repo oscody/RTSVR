@@ -1,11 +1,20 @@
 import { type World } from "@iwsdk/core";
 import {
   GameStats,
+  MatchState,
   RuntimePerformance,
   WaveSource,
   boardState,
 } from "./state.js";
 import { WaveSystem } from "./wave.js";
+import { gpuWarmupLine } from "./gpuWarmup.js";
+import {
+  beginResourceInterval,
+  renderTargetLine,
+  resourceLifetimeLine,
+} from "./resourceLifetime.js";
+import { readEntityLifecycleTotals } from "./trace.js";
+import { advanceSettledSnapshot } from "./resourceCycle.js";
 import { SYSTEM_EXECUTION_TRACE_ENABLED,
   DIAGNOSTICS_ENABLED,
 } from "./traceFlags.js";
@@ -118,6 +127,18 @@ let liveGeometries = 0;
 let liveTextures = 0;
 let livePrograms = 0;
 let sceneObjectCount = 0;
+/**
+ * Frames since `renderer.info` was last read.
+ *
+ * The totals above are refreshed inside the render wrapper, so anything that
+ * reads them from `world.update` — a scenario reset, for instance — is looking
+ * at the PREVIOUS frame. At a post-teardown snapshot that matters enormously:
+ * the geometry count still includes everything the teardown just disposed, and
+ * a reader who does not know that will conclude nothing was released.
+ *
+ * Reported as `rendererSampleAgeFrames` so the number carries its own caveat.
+ */
+let rendererSampleAgeFrames = 0;
 let sceneMeshCount = 0;
 // Minimal Object3D shape for the once-per-flush category walk.
 interface WalkNode {
@@ -221,6 +242,8 @@ function sampleXrRefreshRate(): void {
 // inside the Performance row that calls flush. Per-frame wrapping overhead (the
 // perf.now() pairs) is negligible and already folded into `Update`.
 let lastFlushMs = 0;
+/** Wall clock of the previous flush, for the settled snapshot's own timer. */
+let lastSettledTickMs = 0;
 
 interface ProfSlot {
   label: string;
@@ -509,7 +532,11 @@ export function flushFrameProfile(): void {
       `Objs ${sceneObjectCount} | Mesh ${sceneMeshCount} | ` +
       `Ents ${liveEntities}${entityDelta} | ` +
       (heapMb > 0
-        ? `Heap ${heapMb.toFixed(0)}mb floor ${heapFloorMb.toFixed(0)} | `
+        ? `Heap ${heapMb.toFixed(0)}mb min ${heapCycleMinMb.toFixed(0)}` +
+          (heapPreviousCycleMinMb > 0
+            ? `/prev ${heapPreviousCycleMinMb.toFixed(0)}`
+            : "") +
+          " | "
         : "") +
       `Geom ${liveGeometries} | Prog ${livePrograms} | ` +
       `Prof ${lastFlushMs.toFixed(2)}`
@@ -617,6 +644,23 @@ export function flushFrameProfile(): void {
     hudLines = [...header, ...lines];
     hudLine = hudLines.join("\n");
   }
+  // Close the resource delta window here, after the rows above have been built
+  // from it. Resetting earlier would zero the numbers this flush is reporting.
+  beginResourceInterval();
+
+  // The deferred `post-settled` snapshot. Driven from the flush rather than a
+  // system because it must be the LAST thing in the frame that reads the
+  // counters — a system would have to be ordered against every other one, and
+  // this is already the once-per-second tick everything else reports on.
+  const nowMs = performance.now();
+  const settledDelta =
+    lastSettledTickMs === 0 ? 0 : (nowMs - lastSettledTickMs) / 1000;
+  lastSettledTickMs = nowMs;
+  const status = boardState.waveSource?.getValue(MatchState, "status") ?? "";
+  // Anything but `restarting` is a scenario that exists. `awaiting-start` is
+  // deliberately included: a rebuilt board sitting at the gate is settled, and
+  // requiring `playing` would defer the snapshot until the player moved.
+  advanceSettledSnapshot(settledDelta, status !== "restarting");
 
   // Mirror the HUD to the console so it can be read over `chrome://inspect`
   // remote debugging instead of transcribed from a video frame. One grouped
@@ -679,6 +723,9 @@ function wrapWorldUpdate(world: any): void {
   const original = world.update.bind(world);
   world.update = (delta: number, time: number) => {
     const start = performance.now();
+    // Ages BEFORE systems run, so anything reading the totals during this
+    // update sees an age of at least 1 — which is the truth.
+    rendererSampleAgeFrames += 1;
     beginTraceFrame();
     if (lastUpdateStart !== 0) {
       const period = start - lastUpdateStart;
@@ -744,9 +791,11 @@ let lastFlushEntities = -1;
  * JS heap, and the lowest value seen — the post-GC floor.
  *
  * The current figure sawtooths with collection and says almost nothing on its
- * own. **The floor is the leak detector**: garbage that can be collected pulls
- * the heap back down to roughly where it started, so a floor that climbs across
- * a session is memory that cannot be reclaimed.
+ * own. **The per-cycle minimum is the leak detector**: garbage that can be
+ * collected pulls the heap back down to roughly where the cycle started, so a
+ * minimum that climbs from one reset cycle to the next is memory that cannot be
+ * reclaimed. Compared across cycles, not across the session — see
+ * {@link beginHeapCycle} for why a session-wide floor could never show this.
  *
  * This is the counterpart to `Ents` for the *other* invisible failure — not
  * "objects nobody freed" but "allocation in a per-frame path". A `Box3` rebuilt
@@ -757,13 +806,42 @@ let lastFlushEntities = -1;
  * faked, because a fabricated memory number is worse than none.
  */
 let heapMb = 0;
-let heapFloorMb = 0;
+let heapCycleMinMb = 0;
+let heapPreviousCycleMinMb = 0;
 
 function sampleHeap(): void {
   const memory = (performance as { memory?: { usedJSHeapSize: number } }).memory;
   if (!memory) return;
   heapMb = memory.usedJSHeapSize / (1024 * 1024);
-  heapFloorMb = heapFloorMb === 0 ? heapMb : Math.min(heapFloorMb, heapMb);
+  heapCycleMinMb =
+    heapCycleMinMb === 0 ? heapMb : Math.min(heapCycleMinMb, heapMb);
+}
+
+/**
+ * Close the current heap cycle and start a new one. Called on scenario reset.
+ *
+ * ## Why the old "floor" could not do this
+ *
+ * It was one running `Math.min` over the whole session:
+ *
+ * ```js
+ * heapFloorMb = heapFloorMb === 0 ? heapMb : Math.min(heapFloorMb, heapMb);
+ * ```
+ *
+ * A running minimum is monotonically non-increasing, so it **could never
+ * climb** — while the comment above it claimed a climbing floor was the leak
+ * signal. The stated detector could not fire, and a 2026-09-03 capture was read
+ * as "heap 61 -> 98mb but the floor held at 61, so nothing leaked". That
+ * conclusion was unfounded: the floor holding was arithmetic, not evidence.
+ *
+ * Per-cycle minima can climb, because each cycle starts its own minimum. Two
+ * identical scenarios whose post-GC floors differ is the signal that was being
+ * looked for. It needs a cycle boundary to exist at all, which is why this is
+ * called rather than derived.
+ */
+export function beginHeapCycle(): void {
+  if (heapCycleMinMb > 0) heapPreviousCycleMinMb = heapCycleMinMb;
+  heapCycleMinMb = 0;
 }
 
 /**
@@ -845,18 +923,76 @@ function kindParts(counts: Map<string, number>): string {
   return parts.join(" ");
 }
 
+let lastEntityCreated = 0;
+let lastEntityDestroyed = 0;
+
+/** `EntityLife created=11 destroyed=46 net=-35 live=153` — per flush. */
+function entityLifeLine(): string {
+  const totals = readEntityLifecycleTotals();
+  const created = totals.created - lastEntityCreated;
+  const destroyed = totals.destroyed - lastEntityDestroyed;
+  lastEntityCreated = totals.created;
+  lastEntityDestroyed = totals.destroyed;
+  return (
+    `EntityLife created=${created} destroyed=${destroyed} ` +
+    `net=${created - destroyed >= 0 ? "+" : ""}${created - destroyed} ` +
+    `live=${liveEntities} [traced gameplay entities, not every SDK entity]`
+  );
+}
+
 function buildForceLines(): string[] {
   const c = forceCensus;
   if (!c) return [];
+  // Filtered, because two of these return "" when diagnostics are off and an
+  // empty string in this array becomes a blank line in the HUD and the console
+  // capture. The profiler and diagnostics flags move together today, so this is
+  // a guard against them being separated rather than a live bug.
   return [
     `Force alien ${c.aliensActive} act ${c.aliensWaiting} wait | ` +
       `unit ${c.units} | bldg ${c.buildings}`,
+    // Warm-up state, so a queue that never drains or an `active` that never
+    // clears is visible in the periodic line instead of only in a crash.
+    gpuWarmupLine(),
+    // One row per scope that has anything, omitted entirely while nothing is
+    // instrumented — so this costs no log space until Phase 2 lands.
+    ...resourceLifetimeLine(),
+    // Always printed, unlike the scope rows: `rt(external)=unavailable` is the
+    // whole point, and a row that vanished when the app owns no render targets
+    // would read as "there are none" rather than "we cannot see them".
+    renderTargetLine(),
+    // Gameplay entities created and destroyed since the previous flush, with
+    // the live count beside them. `Ents` alone is a NET figure: a second that
+    // creates eleven and destroys eleven looks identical to a second where
+    // nothing happened, which is exactly the churn/leak distinction the
+    // resource rows exist to make for GPU memory.
+    entityLifeLine(),
     `Roster ${kindParts(c.aliensByKind)} | ${kindParts(c.unitsByKind)} | ` +
       kindParts(c.buildingsByKind) +
       (c.crystals < 0
         ? ""
         : ` | crystals ${c.crystals} mined ${c.crystalsMined}`),
-  ];
+  ].filter((line) => line !== "");
+}
+
+/**
+ * Renderer totals as last sampled, with how stale they are.
+ *
+ * Net live counts, not create/dispose events — five created and five disposed
+ * leaves this unchanged. That is why the app-side tracker exists; this is the
+ * external cross-check, useful for spotting resources the app never registered.
+ */
+export function rendererTotals(): Readonly<{
+  geometries: number;
+  textures: number;
+  programs: number;
+  sampleAgeFrames: number;
+}> {
+  return {
+    geometries: liveGeometries,
+    textures: liveTextures,
+    programs: livePrograms,
+    sampleAgeFrames: rendererSampleAgeFrames,
+  };
 }
 
 /** Called once per flush by PerformanceSystem, which owns the query. */
@@ -898,6 +1034,7 @@ function wrapRender(world: any): void {
       liveGeometries = info.memory?.geometries ?? liveGeometries;
       liveTextures = info.memory?.textures ?? liveTextures;
       livePrograms = info.programs?.length ?? livePrograms;
+      rendererSampleAgeFrames = 0;
     }
   };
 }

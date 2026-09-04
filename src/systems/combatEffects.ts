@@ -1,4 +1,5 @@
 import {
+  type Material,
   Mesh,
   MeshBasicMaterial,
   SphereGeometry,
@@ -39,7 +40,8 @@ import {
   COMBAT_VFX_TURRET_MUZZLE_COLOR,
   RACER_CANNON_MUZZLE_NODES,
 } from "./constants.ts";
-import { warmObjectForRender } from "./gpuWarmup.js";
+import { gpuWarmupStatus, warmObjectForRender } from "./gpuWarmup.js";
+import { trackResource } from "./resourceLifetime.js";
 import { Building, Enemy, Unit, boardState } from "./state.js";
 import { makeNonInteractive } from "./sharedGeometry.js";
 
@@ -138,6 +140,26 @@ const flashSlots: FlashSlot[] = [];
 let pooledRoot: Object3D | null = null;
 let effectsWorld: World | null = null;
 let combatWarmupQueued = false;
+/**
+ * The warm-up meshes, held only until the real pool exists.
+ *
+ * These duplicate the pool's geometry and material so the shader compiles
+ * before the first shot — the pool itself cannot be used, because it is built
+ * lazily by `ensurePool()` on that very first shot, which is exactly too late.
+ *
+ * They used to be dropped on the floor here and leaked for the whole session:
+ * the 2026-09-03 Quest capture reported `temporaryOutstanding=4` after every
+ * teardown, the same four ids each time.
+ *
+ * **They cannot simply be disposed after warming.** Three.js refcounts
+ * programs (`releaseProgram` destroys at `usedTimes === 0`), so releasing the
+ * only material holding the compiled program destroys it, and the real pool
+ * would recompile — undoing the warm-up entirely. They are therefore released
+ * at the one safe moment: once the pool has acquired the same program and the
+ * refcount is 2.
+ */
+let warmupMeshes: Mesh[] = [];
+let warmupReleased = false;
 
 // Scratch — reused across emit/update, never allocated per frame.
 const tmpMuzzle = new Vector3();
@@ -158,12 +180,27 @@ function ensurePool(): boolean {
 
   // Unit sphere; each bolt scales it (uniform for plasma, stretched for laser).
   const boltGeometry = new SphereGeometry(1, 8, 8);
+  // One geometry shared by every bolt in the pool, so it is registered once.
+  // `pool` scope: this legitimately survives a reset and must PLATEAU, not
+  // reach zero. Growth across identical cycles is the warning.
+  trackResource(boltGeometry, {
+    kind: "geometry",
+    scope: "pool",
+    label: "combat-bolt",
+  });
   for (let index = 0; index < COMBAT_VFX_BOLT_POOL_SIZE; index += 1) {
     // Solid + toneMapped:false so the hue renders true. Additive blending over
     // the bright board washed every bolt to white, so bolts are NOT additive.
     const material = new MeshBasicMaterial({
       color: COMBAT_VFX_BOLT_COLOR,
       toneMapped: false,
+    });
+    // Per slot, not shared: each bolt animates its own opacity.
+    trackResource(material, {
+      kind: "material",
+      scope: "pool",
+      label: "combat-bolt",
+      owner: `slot:${index}`,
     });
     const mesh = new Mesh(boltGeometry, material);
     makeNonInteractive(mesh);
@@ -185,6 +222,11 @@ function ensurePool(): boolean {
   }
 
   const flashGeometry = new SphereGeometry(COMBAT_VFX_FLASH_RADIUS, 8, 8);
+  trackResource(flashGeometry, {
+    kind: "geometry",
+    scope: "pool",
+    label: "combat-flash",
+  });
   for (let index = 0; index < COMBAT_VFX_FLASH_POOL_SIZE; index += 1) {
     // Normal blending (not additive) so colored bursts keep their hue over the
     // bright board; transparent for the opacity fade. toneMapped:false = vivid.
@@ -194,6 +236,12 @@ function ensurePool(): boolean {
       opacity: 0,
       depthWrite: false,
       toneMapped: false,
+    });
+    trackResource(material, {
+      kind: "material",
+      scope: "pool",
+      label: "combat-flash",
+      owner: `slot:${index}`,
     });
     const mesh = new Mesh(flashGeometry, material);
     makeNonInteractive(mesh);
@@ -212,6 +260,23 @@ function ensurePool(): boolean {
     });
   }
 
+  // Hand the program to the pool BEFORE the duplicates are released.
+  //
+  // This is the correction to a fix that was wrong on 2026-09-04. Three.js does
+  // not acquire a program when a material is constructed — `getProgram` is
+  // reached only from `prepareMaterial` (i.e. `compile()`) or from `setProgram`
+  // during a real render, and these pool meshes are built `visible = false`. So
+  // at this moment the pool materials hold NOTHING, `usedTimes` on the warmed
+  // program is 1, and disposing the duplicates here would take it to 0 and
+  // destroy it — the first shot would compile after all, which is the entire
+  // thing the warm-up exists to prevent.
+  //
+  // Warming one slot is cheap: `acquireProgram` scans by `cacheKey` and finds
+  // the program the duplicates already compiled, so this increments `usedTimes`
+  // rather than compiling. The other fifteen slots share that cacheKey and hit
+  // the same cache the first time they render.
+  warmObjectForRender(boltSlots[0]?.mesh, "combat-bolt-pool");
+  warmObjectForRender(flashSlots[0]?.mesh, "combat-flash-pool");
   pooledRoot = rootObject;
   return true;
 }
@@ -225,25 +290,86 @@ function queueCombatWarmup(): void {
   if (combatWarmupQueued) return;
   combatWarmupQueued = true;
 
-  const bolt = new Mesh(
-    new SphereGeometry(1, 8, 8),
-    new MeshBasicMaterial({
-      color: COMBAT_VFX_BOLT_COLOR,
-      toneMapped: false,
-    }),
-  );
-  const flash = new Mesh(
-    new SphereGeometry(COMBAT_VFX_FLASH_RADIUS, 8, 8),
-    new MeshBasicMaterial({
-      color: COMBAT_VFX_MUZZLE_COLOR,
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-      toneMapped: false,
-    }),
-  );
+  // DUPLICATES of the real pool resources, created only so the shader compiles
+  // before the first shot. `temporary` is the honest scope — and it will show as
+  // outstanding forever, because nothing disposes these. That is the point:
+  // Section D of the plan asks for warm-up resources to have an explicit
+  // lifetime, and making the current one visible is the first step to fixing it.
+  const warmBoltGeometry = new SphereGeometry(1, 8, 8);
+  const warmBoltMaterial = new MeshBasicMaterial({
+    color: COMBAT_VFX_BOLT_COLOR,
+    toneMapped: false,
+  });
+  trackResource(warmBoltGeometry, {
+    kind: "geometry",
+    scope: "temporary",
+    label: "combat-bolt-warmup",
+  });
+  trackResource(warmBoltMaterial, {
+    kind: "material",
+    scope: "temporary",
+    label: "combat-bolt-warmup",
+  });
+  const bolt = new Mesh(warmBoltGeometry, warmBoltMaterial);
+  warmupMeshes.push(bolt);
+  const warmFlashGeometry = new SphereGeometry(COMBAT_VFX_FLASH_RADIUS, 8, 8);
+  const warmFlashMaterial = new MeshBasicMaterial({
+    color: COMBAT_VFX_MUZZLE_COLOR,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  trackResource(warmFlashGeometry, {
+    kind: "geometry",
+    scope: "temporary",
+    label: "combat-flash-warmup",
+  });
+  trackResource(warmFlashMaterial, {
+    kind: "material",
+    scope: "temporary",
+    label: "combat-flash-warmup",
+  });
+  const flash = new Mesh(warmFlashGeometry, warmFlashMaterial);
+  warmupMeshes.push(flash);
   warmObjectForRender(bolt, "combat-bolt");
   warmObjectForRender(flash, "combat-flash");
+}
+
+/**
+ * Dispose the warm-up duplicates, once doing so is free.
+ *
+ * Two conditions, and both are load-bearing:
+ *
+ * 1. **The real pool exists.** It holds the same program, so `usedTimes` is 2
+ *    and dropping to 1 keeps the compiled shader. Releasing earlier would take
+ *    it to 0 and destroy it, so the first shot would compile after all.
+ * 2. **The warm-up queue has drained.** A target still queued would be handed
+ *    a disposed material to compile — the same class of use-after-dispose that
+ *    produced the `isReady` crash on reset.
+ *
+ * Retried from `emitAttackVfx` rather than done once, because neither
+ * condition is guaranteed at the moment the pool is built. If a session never
+ * fires a shot the duplicates survive it — but so does the unbuilt pool, so
+ * nothing has been warmed for nothing.
+ */
+function releaseCombatWarmupResources(): void {
+  if (warmupReleased || warmupMeshes.length === 0) return;
+  if (boltSlots.length === 0 || flashSlots.length === 0) return;
+  // The queue being empty is what proves the two pool warm-ups queued by
+  // `ensurePool` have RUN — which is what actually transfers the program. A
+  // pool that merely exists has not acquired anything.
+  const warmup = gpuWarmupStatus();
+  if (warmup.active || warmup.queued > 0) return;
+
+  for (const mesh of warmupMeshes) {
+    mesh.geometry.dispose();
+    const material = mesh.material as Material | Material[];
+    if (Array.isArray(material)) for (const entry of material) entry.dispose();
+    else material.dispose();
+  }
+  warmupMeshes = [];
+  warmupReleased = true;
 }
 
 function toRootLocal(worldPoint: Vector3): void {
@@ -482,6 +608,11 @@ export class CombatEffectsSystem extends createSystem({}) {
 
   update(delta: number): void {
     if (boltSlots.length === 0) return;
+    // Retried every frame once the pool exists, not on the next shot. A player
+    // who fires once and never again would otherwise keep the duplicates for
+    // the rest of the session — the queue is still draining at the moment that
+    // single shot is fired.
+    releaseCombatWarmupResources();
     const frameDelta = Math.max(0, delta);
 
     for (const slot of boltSlots) {

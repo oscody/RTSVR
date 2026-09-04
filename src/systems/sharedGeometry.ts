@@ -1,4 +1,5 @@
 import { BoxGeometry, type Object3D } from "@iwsdk/core";
+import { trackResource } from "./resourceLifetime.js";
 
 /**
  * Mark decoration as never hit-testable.
@@ -26,3 +27,11 @@ export function makeNonInteractive<T extends Object3D>(object: T): T {
  * alien, craft, and building.
  */
 export const UNIT_BOX_GEOMETRY = new BoxGeometry(1, 1, 1);
+// The single cube behind every interaction proxy in the game. Exactly 1 for
+// the whole session — a count above that means something stopped sharing it,
+// which is a draw-call regression as much as a memory one.
+trackResource(UNIT_BOX_GEOMETRY, {
+  kind: "geometry",
+  scope: "session",
+  label: "unit-box-proxy",
+});

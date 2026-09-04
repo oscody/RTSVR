@@ -32,6 +32,7 @@ import {
 } from "@iwsdk/core";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { DIAGNOSTICS_ENABLED } from "./traceFlags.js";
+import { trackResource } from "./resourceLifetime.js";
 
 export interface MergeStats {
   /** Renderable meshes before merging. */
@@ -194,6 +195,20 @@ export function mergeRigidGroups(
 
       const merged = mergeGeometries(geometries, false);
       if (!merged) continue;
+      // Merged geometry is app-created and app-owned, unlike the GLTF geometry
+      // it replaces. It was outside the resource inventory entirely, because
+      // the coverage scan looks for `new XGeometry(` and this is produced by a
+      // utility — a real blind spot the 2026-09-04 review found.
+      //
+      // `session`: merging runs once per asset before any system clones it, and
+      // the result lives as long as the model does. Exactly one per merged
+      // group, so a count that tracks scene rebuilds would mean merging is
+      // running more than once.
+      trackResource(merged, {
+        kind: "geometry",
+        scope: "session",
+        label: `merged:${rigidRoot.name || "unnamed"}`,
+      });
       // Validate before swapping anything in: a bad merge (mismatched or
       // degenerate source geometry) must leave the model exactly as it was
       // rather than replace it with NaN vertices.
@@ -216,6 +231,11 @@ export function mergeRigidGroups(
         }
         rigidRoot.add(combined);
       }
+      // The clones fed to `mergeGeometries` are intermediates. They are never
+      // rendered, so they never reach `WebGLGeometries` and hold no GPU memory
+      // — disposing them is a formality, but it keeps the tracker's picture
+      // honest and costs nothing.
+      for (const geometry of geometries) geometry.dispose();
       for (const mesh of sources) mesh.removeFromParent();
     }
   }

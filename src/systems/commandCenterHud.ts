@@ -31,6 +31,7 @@ import {
   boardState,
 } from "./state.js";
 import { TUTORIAL_WAVE_NUMBER, waveTotalEnemyCount } from "./waveCatalog.js";
+import { trackResource, tracked } from "./resourceLifetime.js";
 
 /**
  * The always-on readout over the command center: which level you are on, how
@@ -83,15 +84,27 @@ function ensureHud(world: {
   hudContext = context;
 
   hudTexture = new CanvasTexture(canvas);
+  // One per session: the HUD strip redraws into the same canvas rather than
+  // making a new texture, so this must stay at exactly 1 across every cycle.
+  trackResource(hudTexture, {
+    kind: "texture",
+    scope: "session",
+    label: "command-center-hud",
+  });
   hudTexture.anisotropy = 4;
-  hudMaterial = new MeshBasicMaterial({
+  hudMaterial = tracked(new MeshBasicMaterial({
     map: hudTexture,
     transparent: true,
     depthWrite: false,
     toneMapped: false,
-  });
+  }), "material", "session", "command-center-hud");
   hudMesh = new Mesh(
-    new PlaneGeometry(COMMAND_CENTER_HUD_WIDTH, COMMAND_CENTER_HUD_HEIGHT),
+    tracked(
+      new PlaneGeometry(COMMAND_CENTER_HUD_WIDTH, COMMAND_CENTER_HUD_HEIGHT),
+      "geometry",
+      "session",
+      "command-center-hud",
+    ),
     hudMaterial,
   );
   makeNonInteractive(hudMesh);
@@ -310,3 +323,4 @@ export class CommandCenterHudSystem extends createSystem({
     mesh.visible = true;
   }
 }
+

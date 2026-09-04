@@ -172,6 +172,7 @@ import {
 import { traceStateChange } from "./trace.js";
 import { State } from "./traceIds.js";
 import { createTutorialOmittedStructures } from "./structures.js";
+import { trackResource } from "./resourceLifetime.js";
 
 /**
  * Tutorial runtime — the world-facing half. All decisions live in
@@ -2040,6 +2041,14 @@ export class TutorialSystem extends createSystem({
     cardContext = context;
 
     cardTexture = new CanvasTexture(canvas);
+    // One per session. The card redraws into its canvas for every drill, so a
+    // count above 1 here would mean the card is being rebuilt rather than
+    // repainted — which is worth knowing, and invisible without this.
+    trackResource(cardTexture, {
+      kind: "texture",
+      scope: "session",
+      label: "tutorial-card",
+    });
     cardTexture.anisotropy = 4;
     cardMaterial = new MeshBasicMaterial({
       map: cardTexture,
@@ -2047,10 +2056,24 @@ export class TutorialSystem extends createSystem({
       depthWrite: false,
       toneMapped: false,
     });
-    cardMesh = new Mesh(
-      new PlaneGeometry(TUTORIAL_CARD_WIDTH, TUTORIAL_CARD_HEIGHT),
-      cardMaterial,
+    const cardGeometry = new PlaneGeometry(
+      TUTORIAL_CARD_WIDTH,
+      TUTORIAL_CARD_HEIGHT,
     );
+    // The card's own quad and material, alongside the canvas texture already
+    // registered above. One each per session — the card is repainted for every
+    // drill, never rebuilt.
+    trackResource(cardGeometry, {
+      kind: "geometry",
+      scope: "session",
+      label: "tutorial-card",
+    });
+    trackResource(cardMaterial, {
+      kind: "material",
+      scope: "session",
+      label: "tutorial-card",
+    });
+    cardMesh = new Mesh(cardGeometry, cardMaterial);
     makeNonInteractive(cardMesh);
     // Draw over the scene rather than competing with it. `depthWrite: false`
     // alone still leaves depth TESTING on, so the command center and the

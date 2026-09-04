@@ -25,6 +25,7 @@ import {
 } from "./constants.ts";
 import { toggleSelectionMembership } from "./selectionRules.js";
 import { markOwnedResources, releaseEntity } from "./entityTeardown.js";
+import { trackResource } from "./resourceLifetime.js";
 import {
   BoardMarker,
   DebugSettings,
@@ -295,7 +296,11 @@ function showEnemyRangeRing(world: World, enemy: Entity): void {
     );
     makeNonInteractive(ring);
     ring.name = `EnemyRangeRing_${enemy.index}`;
-    markOwnedResources(ring);
+    markOwnedResources(ring, {
+      scope: "scenario",
+      label: "enemy-range-ring",
+      owner: `entity:${enemy.index}`,
+    });
     ring.rotateX(-Math.PI / 2);
     ring.position.y = ATTACK_RANGE_RING_Y_OFFSET;
     ringEntity = world
@@ -376,7 +381,11 @@ function showTurretRangeRing(world: World, turret: Entity): void {
     ring.position.y = ATTACK_RANGE_RING_Y_OFFSET;
     const object = turret.object3D;
     if (object) ring.position.set(object.position.x, ring.position.y, object.position.z);
-    markOwnedResources(ring);
+    markOwnedResources(ring, {
+      scope: "scenario",
+      label: "turret-range-ring",
+      owner: `entity:${turret.index}`,
+    });
     ringEntity = world
       .createTransformEntity(ring, { parent: root })
       .addComponent(BoardMarker, { kind: "turret-range" });
@@ -396,11 +405,21 @@ export function refreshTurretRangeRingGeometry(): void {
   if (!mesh) return;
   const range = currentTurretRange();
   mesh.geometry.dispose();
+  // The replacement needs registering too. The original was tracked by
+  // `markOwnedResources` and its disposal above is counted; without this the
+  // tracker would show the disposal with no matching creation and report zero
+  // outstanding while a live geometry existed.
   mesh.geometry = new RingGeometry(
     range - ATTACK_RANGE_RING_THICKNESS,
     range,
     ATTACK_RANGE_RING_SEGMENTS,
   );
+  trackResource(mesh.geometry, {
+    kind: "geometry",
+    scope: "scenario",
+    label: "turret-range-ring",
+    owner: `entity:${turret.index}`,
+  });
 }
 
 export function refreshUnitAttackRangeRingGeometry(): void {
@@ -417,6 +436,12 @@ export function refreshUnitAttackRangeRingGeometry(): void {
       range,
       ATTACK_RANGE_RING_SEGMENTS,
     );
+    trackResource(mesh.geometry, {
+      kind: "geometry",
+      scope: "scenario",
+      label: "unit-attack-range-ring",
+      owner: `entity:${unit.index}`,
+    });
   }
 }
 
@@ -453,7 +478,11 @@ function setUnitAttackRangeRingVisible(
     ring.name = `UnitAttackRangeRing_${unit.index}`;
     ring.rotateX(-Math.PI / 2);
     ring.position.y = ATTACK_RANGE_RING_Y_OFFSET;
-    markOwnedResources(ring);
+    markOwnedResources(ring, {
+      scope: "scenario",
+      label: "unit-attack-range-ring",
+      owner: `entity:${unit.index}`,
+    });
     ringEntity = world
       .createTransformEntity(ring, { parent: root })
       .addComponent(BoardMarker, { kind: "unit-attack-range" });
@@ -482,7 +511,11 @@ function setRingVisible(world: World, unit: Entity, visible: boolean): void {
     ring.name = `UnitSelectionRing_${unit.index}`;
     ring.rotateX(-Math.PI / 2);
     ring.position.y = 0.026;
-    markOwnedResources(ring);
+    markOwnedResources(ring, {
+      scope: "scenario",
+      label: "unit-selection-ring",
+      owner: `entity:${unit.index}`,
+    });
     ringEntity = world
       .createTransformEntity(ring, { parent: root })
       .addComponent(BoardMarker, { kind: "unit-selection" });

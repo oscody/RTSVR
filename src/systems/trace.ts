@@ -199,6 +199,7 @@ export function traceEntityCreated(
     at,
   );
   entitiesCreated += 1;
+  entitiesCreatedTotal += 1;
   meters.record.add(performance.now() - at);
 }
 
@@ -286,6 +287,7 @@ export function traceEntityDestroyed(
     at,
   );
   entitiesDestroyed += 1;
+  entitiesDestroyedTotal += 1;
   meters.record.add(performance.now() - at);
 }
 
@@ -477,12 +479,36 @@ export function traceManualDump(note = "manual"): boolean {
  */
 let entitiesCreated = 0;
 let entitiesDestroyed = 0;
+/**
+ * Monotonic totals, never reset.
+ *
+ * The pair above is an *interval* counter owned by the allocation trace, which
+ * reads and zeroes it on its own schedule. A second consumer sharing it would
+ * race: whichever read first would zero the other's window. These totals let
+ * the profiler compute its own per-flush delta without touching that.
+ */
+let entitiesCreatedTotal = 0;
+let entitiesDestroyedTotal = 0;
 
 export function readEntityLifecycleCounters(): {
   created: number;
   destroyed: number;
 } {
   return { created: entitiesCreated, destroyed: entitiesDestroyed };
+}
+
+/**
+ * Session totals for entity creation and destruction.
+ *
+ * Read-only and never reset, so any number of consumers can diff them against
+ * their own previous reading. {@link readEntityLifecycleCounters} is the
+ * allocation trace's interval view and is destructive; this is not.
+ */
+export function readEntityLifecycleTotals(): {
+  created: number;
+  destroyed: number;
+} {
+  return { created: entitiesCreatedTotal, destroyed: entitiesDestroyedTotal };
 }
 
 /** Reset the interval counters. Called once per allocation sample. */

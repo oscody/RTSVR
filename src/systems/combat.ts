@@ -12,6 +12,7 @@ import {
   type DamageTargetType,
 } from "./combatRules.js";
 import { ActionKind, logAction } from "./actionLog.js";
+import { logWaveTransition } from "./waveTransitionLog.js";
 import { worldToGrid } from "./board.js";
 import { footprintCells } from "./constructionRules.js";
 import {
@@ -529,6 +530,7 @@ export class CombatSystem extends createSystem({
     waveNumber: number,
     tablet: Entity | null,
   ): void {
+    logWaveTransition(source.getValue(WaveSource, "waveNumber") ?? 0, waveNumber);
     source.setValue(WaveSource, "waveNumber", waveNumber);
     source.setValue(
       WaveSource,

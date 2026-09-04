@@ -122,6 +122,18 @@ export const ActionKind = {
   Cancel: 12,
   Dump: 13,
   Blocked: 14,
+  /**
+   * A wave ending and the next beginning.
+   *
+   * The one consequential thing that happens without the player doing
+   * anything, and it was the only such thing this log did not record. Until
+   * 2026-09-03 a wave transition existed *only* as the `Lvl N` prefix changing
+   * between two once-a-second profile blocks — so it was known to ±1s, carried
+   * no reason, and vanished entirely when diagnostics were off. Every balance
+   * question is asked along this axis ("how long did wave 4 take", "when did
+   * the losses start"), so it belongs in the narrative, not in a reconstruction.
+   */
+  Wave: 15,
 } as const;
 
 export type ActionKindId = (typeof ActionKind)[keyof typeof ActionKind];
@@ -140,6 +152,7 @@ const LABEL: Readonly<Record<number, string>> = {
   [ActionKind.Cancel]: "cancel",
   [ActionKind.Dump]: "dump",
   [ActionKind.Blocked]: "blocked",
+  [ActionKind.Wave]: "wave",
 };
 
 /**

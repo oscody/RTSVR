@@ -14,6 +14,7 @@ import {
   QUEUE_BADGE_Y_OFFSET,
 } from "./constants.ts";
 import { makeNonInteractive } from "./sharedGeometry.js";
+import { trackResource, tracked } from "./resourceLifetime.js";
 
 export const QUEUE_BADGE_NAME = "QueueBadge";
 
@@ -24,6 +25,11 @@ const badgeGeometry = new PlaneGeometry(
   TILE_SIZE * QUEUE_BADGE_SIZE,
   TILE_SIZE * QUEUE_BADGE_SIZE,
 );
+trackResource(badgeGeometry, {
+  kind: "geometry",
+  scope: "session",
+  label: "queue-badge",
+});
 const materialByLabel = new Map<string, MeshBasicMaterial>();
 
 function badgeLabel(position: number): string {
@@ -54,15 +60,29 @@ function badgeMaterial(label: string): MeshBasicMaterial {
   ctx.fillText(label, size / 2, size / 2 + size * 0.02);
 
   const texture = new CanvasTexture(canvas);
+  // `session`, because this is a CACHE and caches plateau — they do not zero.
+  // `badgeLabel()` returns "1".."9" or "9+", so it is bounded at ten textures
+  // and ten materials for the whole session, reached the first time the player
+  // queues ten deep. The 2026-09-03 Quest capture reported
+  // `GROWTH rendererTex 28 -> 29 -> 33` across three cycles, which was this
+  // filling up — correct as a verdict on three cycles, benign as a cause.
+  // Registering it lets a later report say "session cache, bounded" instead of
+  // "unexplained renderer growth".
+  trackResource(texture, {
+    kind: "texture",
+    scope: "session",
+    label: "queue-badge",
+    owner: `label:${label}`,
+  });
   texture.anisotropy = 4;
-  const material = new MeshBasicMaterial({
+  const material = tracked(new MeshBasicMaterial({
     map: texture,
     transparent: true,
     depthWrite: false,
     // Additive-free and untone-mapped, or the badge washes out to white over
     // the bright board the way the early combat VFX did.
     toneMapped: false,
-  });
+  }), "material", "session", "queue-badge", `label:${label}`);
   materialByLabel.set(label, material);
   return material;
 }
@@ -110,3 +130,4 @@ export function faceQueueBadge(
   if (!badge?.visible) return;
   badge.lookAt(cameraPosition);
 }
+

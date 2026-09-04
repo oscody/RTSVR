@@ -605,3 +605,189 @@ test("a scenario reset waits for an in-flight GPU compile", () => {
       "pause lands a frame too late and a compile can still start during teardown",
   );
 });
+
+test("GPU warm-up compiles synchronously when the device cannot report readiness", () => {
+  // Section E of the disposal-tracking plan. Three.js's compileAsync is:
+  //     const materials = this.compile(scene, camera, targetScene);  // all the work
+  //     return new Promise(resolve => { ...poll material.isReady()... });
+  // Every shader is compiled by that first SYNCHRONOUS line. The promise only
+  // confirms readiness — and without KHR_parallel_shader_compile (Quest) Three
+  // cannot ask, so it falls back to setTimeout(check, 10) and guesses. That
+  // window is what a scenario reset disposed into, producing:
+  //     Uncaught TypeError: Cannot read properties of undefined (reading 'isReady')
+  // Taking the synchronous path removes the window rather than narrowing it.
+  const warmup = source("src/systems/gpuWarmup.ts");
+
+  assert.match(warmup, /KHR_parallel_shader_compile/, "the extension must be probed");
+  assert.match(
+    warmup,
+    /if \(!parallelCompileAvailable \|\| !renderer\.compileAsync\)/,
+    "absent extension must take the synchronous branch",
+  );
+  assert.match(warmup, /renderer\.compile\?\.\(target\.object, camera, scene\)/);
+
+  // Probed once at attach: it cannot change for a live context, and repeat
+  // misses on extensions.get() warn.
+  const attach = warmup.slice(warmup.indexOf("export function attachGpuWarmup"));
+  assert.match(
+    attach.slice(0, attach.indexOf("\n}")),
+    /parallelCompileAvailable = /,
+    "the probe belongs in attach, not in the per-target path",
+  );
+});
+
+test("a scenario reset drops queued warm-up targets before disposing anything", () => {
+  const warmup = source("src/systems/gpuWarmup.ts");
+  const reset = source("src/systems/scenarioReset.ts");
+
+  assert.match(warmup, /export function clearGpuWarmupQueue/);
+  // Stale membership would make a legitimate re-queue after the rebuild look
+  // like a duplicate and be silently ignored.
+  const clear = warmup.slice(warmup.indexOf("export function clearGpuWarmupQueue"));
+  const body = clear.slice(0, clear.indexOf("\n}"));
+  assert.match(body, /pendingObjects = new WeakSet/, "membership sets must be rebuilt");
+  assert.match(body, /pendingTextures = new WeakSet/);
+
+  // Order matters: clearing after disposal would have already retained the
+  // dead objects for a frame.
+  const clearAt = reset.indexOf("clearGpuWarmupQueue(");
+  const disposeAt = reset.indexOf("this.resetScenario(source)");
+  assert.ok(clearAt > 0 && disposeAt > 0);
+  assert.ok(clearAt < disposeAt, "the queue must be cleared before teardown");
+});
+
+test("the heap leak signal can actually rise", () => {
+  // The old field was one running Math.min over the whole session, so it was
+  // monotonically non-increasing — it COULD NOT CLIMB — while the comment above
+  // it called a climbing floor the leak signal. A 2026-09-03 capture was read as
+  // "heap 61 -> 98mb, floor held at 61, nothing leaked". That was arithmetic,
+  // not evidence.
+  const profiler = source("src/systems/frameProfiler.ts");
+
+  // Checked against CODE, not the file: the doc comment deliberately quotes the
+  // old line to explain why it was wrong, and that explanation should survive.
+  const code = profiler.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.doesNotMatch(
+    code,
+    /heapFloorMb/,
+    "the session-wide floor must be gone from live code, not merely renamed around",
+  );
+  assert.match(profiler, /export function beginHeapCycle/);
+
+  // Scoped to the function body: `/heapCycleMinMb = 0;/` also matches the
+  // top-level `let heapCycleMinMb = 0`, so a boundary that never resets the
+  // minimum would still have passed — the exact regression this guards.
+  const begin = profiler.slice(profiler.indexOf("export function beginHeapCycle"));
+  const body = begin.slice(0, begin.indexOf("\n}"));
+  assert.match(body, /heapPreviousCycleMinMb = heapCycleMinMb/, "carry the old minimum");
+  assert.match(body, /heapCycleMinMb = 0/, "and restart the new one");
+
+  // A boundary that nothing calls leaves the minimum session-wide again.
+  const reset = source("src/systems/scenarioReset.ts");
+  assert.match(reset, /beginHeapCycle\(\)/, "the reset must open a new heap cycle");
+});
+
+test("combat warm-up duplicates are released, but only once that is free", () => {
+  // The 2026-09-03 Quest capture reported `temporaryOutstanding=4` after every
+  // teardown — two geometries and two materials built by `queueCombatWarmup()`
+  // to compile the shader before the first shot, and never disposed.
+  //
+  // They cannot be disposed right after warming. Three.js refcounts programs
+  // (`releaseProgram` destroys at `usedTimes === 0`), so releasing the only
+  // material holding the compiled program destroys it and the real pool
+  // recompiles — the warm-up would have bought nothing.
+  const effects = source("src/systems/combatEffects.ts");
+
+  assert.match(effects, /function releaseCombatWarmupResources/);
+  const release = effects.slice(effects.indexOf("function releaseCombatWarmupResources"));
+  const body = release.slice(0, release.indexOf("\n}"));
+
+  // Condition 1: the pool must hold the same program first.
+  assert.match(
+    body,
+    /boltSlots\.length === 0 \|\| flashSlots\.length === 0/,
+    "must wait for the real pool, or the program refcount hits zero",
+  );
+  // Condition 2: nothing may still be queued to compile these.
+  assert.match(
+    body,
+    /warmup\.active \|\| warmup\.queued > 0/,
+    "a queued target would be handed a disposed material",
+  );
+  assert.match(body, /geometry\.dispose\(\)/);
+  assert.match(body, /material.*dispose\(\)|entry\.dispose\(\)/);
+
+  // The condition that was WRONG on 2026-09-04 and is the point of this test:
+  // a pool that merely exists has acquired nothing. Three.js reaches
+  // `getProgram` only from `compile()` or a real render, and pool meshes are
+  // built `visible = false` — so the program had to be handed over explicitly
+  // before the duplicates could be released, or the first shot recompiled.
+  const ensure = effects.slice(effects.indexOf("function ensurePool"));
+  const ensureBody = ensure.slice(0, ensure.indexOf("\n}"));
+  assert.match(
+    ensureBody,
+    /warmObjectForRender\(boltSlots\[0\]\?\.mesh/,
+    "the pool must be warmed so it acquires the program",
+  );
+  assert.match(ensureBody, /warmObjectForRender\(flashSlots\[0\]\?\.mesh/);
+  // Queued before `pooledRoot` is set, so the very first release attempt sees a
+  // non-empty queue and waits.
+  assert.ok(
+    ensureBody.indexOf("warmObjectForRender(boltSlots[0]") <
+      ensureBody.indexOf("pooledRoot = rootObject"),
+    "the pool warm-up must be queued before the pool is marked ready",
+  );
+
+  // Retried every frame, not on the next shot. A player who fires once and
+  // never again would otherwise keep the duplicates for the whole session,
+  // because the queue is still draining at the moment of that single shot.
+  const update = effects.slice(effects.indexOf("  update(delta: number): void {"));
+  const updateBody = update.slice(0, update.indexOf("\n  }"));
+  assert.match(
+    updateBody,
+    /releaseCombatWarmupResources\(\)/,
+    "release must be driven from update(), not from the shot path",
+  );
+});
+
+test("the render-target and entity-life rows are actually emitted", () => {
+  // Both existed with no runtime caller — the 2026-09-04 review found
+  // `renderTargetLine()` reachable only from its own test, and the entity
+  // lifecycle counters recorded but never printed in readable form.
+  const profiler = source("src/systems/frameProfiler.ts");
+  assert.match(profiler, /renderTargetLine\(\),/, "must be in the profile rows");
+  assert.match(profiler, /entityLifeLine\(\),/);
+
+  // Unlike the scope rows, the render-target row must NOT be omitted when the
+  // app owns none: "0" reads as "there are none", and the point of the line is
+  // that external ones are unavailable rather than absent.
+  const build = profiler.slice(profiler.indexOf("function buildForceLines"));
+  assert.doesNotMatch(
+    build.slice(0, build.indexOf("\n}")),
+    /renderTargetLine\(\)[^,]*\?/,
+    "the render-target row must be unconditional",
+  );
+});
+
+test("entity life is a per-flush delta, taken without disturbing the trace", () => {
+  const trace = source("src/systems/trace.ts");
+  // The interval counters belong to the allocation trace, which zeroes them on
+  // its own schedule. A second consumer sharing them would race — whichever
+  // read first would empty the other's window.
+  assert.match(trace, /export function readEntityLifecycleTotals/);
+  const totals = trace.slice(trace.indexOf("export function readEntityLifecycleTotals"));
+  assert.doesNotMatch(
+    totals.slice(0, totals.indexOf("\n}")),
+    /=\s*0/,
+    "the totals reader must not reset anything",
+  );
+
+  const profiler = source("src/systems/frameProfiler.ts");
+  const line = profiler.slice(profiler.indexOf("function entityLifeLine"));
+  const body = line.slice(0, line.indexOf("\n}"));
+  assert.match(body, /totals\.created - lastEntityCreated/, "a delta, not a total");
+  assert.match(body, /lastEntityCreated = totals\.created/, "and the window advances");
+  // `Ents` is a NET count: eleven created and eleven destroyed looks identical
+  // to nothing happening. That distinction is the reason this row exists.
+  assert.match(body, /traced gameplay entities/, "must state what it counts");
+});

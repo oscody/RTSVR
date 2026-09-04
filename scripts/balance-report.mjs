@@ -157,9 +157,19 @@ const reportMatch = (path, text) => {
     if (active.length === 0) continue;
     const first = active[0];
     const last = active[active.length - 1];
-    const clear = last.time !== null && first.time !== null
-      ? `${(last.time - first.time).toFixed(0)}s`
-      : "?";
+    // Prefer the exact figure the game reports over sampling the `Lvl N`
+    // prefix. The profile-derived version is bounded by the one-second sample
+    // rate at both ends, so it can be ~2s out; the action line is measured at
+    // the transition itself. It also survives a diagnostics-off build, where
+    // the profile blocks do not exist at all.
+    const reported = actions.find((a) =>
+      new RegExp(`^wave ${n} -> \\d+ cleared in (\\d+)s`).test(a.text),
+    );
+    const clear = reported
+      ? `${/cleared in (\d+)s/.exec(reported.text)[1]}s`
+      : last.time !== null && first.time !== null
+        ? `${(last.time - first.time).toFixed(0)}s`
+        : "?";
 
     const killedAtEnd = num(last, /Enemies \d+ alive \/ (\d+) killed/) ?? 0;
     const killedAtStart = num(first, /Enemies \d+ alive \/ (\d+) killed/) ?? 0;

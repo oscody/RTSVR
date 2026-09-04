@@ -28,6 +28,7 @@ import {
   detachTutorialVisualPool,
 } from "./tutorialVisualPool.js";
 import type { PathStyle } from "./tutorialCatalog.ts";
+import { tracked } from "./resourceLifetime.js";
 
 /**
  * The Living Path: chevrons flowing along the ground from a unit to where it is
@@ -112,7 +113,12 @@ function makeChevronGeometry(): BufferGeometry {
   const E: [number, number] = [0, notch];
   const F: [number, number] = [w - t, -d];
   const v = (p: [number, number]): number[] => [p[0], 0, p[1]];
-  const geometry = new BufferGeometry();
+  const geometry = tracked(
+    new BufferGeometry(),
+    "geometry",
+    "pool",
+    "tutorial-path-chevron",
+  );
   geometry.setAttribute(
     "position",
     new Float32BufferAttribute(
@@ -139,7 +145,8 @@ function ensurePath(): boolean {
   for (const style of ["friendly", "hostile"] as PathStyle[]) {
     const pool = pools[style];
     pool.chevrons.length = 0;
-    pool.material = new MeshBasicMaterial({
+    pool.material = tracked(
+      new MeshBasicMaterial({
       color:
         style === "hostile"
           ? TUTORIAL_PATH_HOSTILE_COLOR
@@ -152,7 +159,11 @@ function ensurePath(): boolean {
       depthTest: false,
       // NormalBlending + toneMapped:false, per the additive-washout rule.
       toneMapped: false,
-    });
+      }),
+      "material",
+      "pool",
+      "tutorial-path-chevron",
+    );
     for (let index = 0; index < TUTORIAL_PATH_POOL; index += 1) {
       const mesh = new Mesh(pathGeometry, pool.material);
       makeNonInteractive(mesh);

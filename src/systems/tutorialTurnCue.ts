@@ -19,6 +19,7 @@ import {
   TUTORIAL_TURN_CUE_SIZE,
 } from "./constants.ts";
 import { makeNonInteractive } from "./sharedGeometry.js";
+import { trackResource } from "./resourceLifetime.js";
 import {
   attachTutorialVisualPool,
   createTutorialVisualPool,
@@ -67,6 +68,11 @@ function makeCueGeometry(): BufferGeometry {
     new Float32BufferAttribute([-s * 0.6, s, 0, -s * 0.6, -s, 0, s, 0, 0], 3),
   );
   geometry.computeVertexNormals();
+  trackResource(geometry, {
+    kind: "geometry",
+    scope: "session",
+    label: "tutorial-turn-cue",
+  });
   return geometry;
 }
 
@@ -102,6 +108,8 @@ function ensureCue(): boolean {
     // on transparent double-sided materials (three.cjs:76518).
     forceSinglePass: true,
   });
+  // One per session.
+trackResource(cueMaterial, { kind: "material", scope: "session", label: "tutorial-turn-cue" });
   cueMesh = new Mesh(cueGeometry, cueMaterial);
   makeNonInteractive(cueMesh);
   cueMesh.name = "TutorialTurnCue";

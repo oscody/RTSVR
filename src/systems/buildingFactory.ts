@@ -18,6 +18,7 @@ import { attachHealthBar } from "./healthBar.js";
 import { UNIT_BOX_GEOMETRY } from "./sharedGeometry.js";
 import { disableModelRaycast } from "./structures.js";
 import { attachTurretAnimation } from "./turretAnimation.js";
+import { trackResource } from "./resourceLifetime.js";
 import {
   Building,
   CombatCapability,
@@ -31,6 +32,12 @@ import {
 const interactionProxyMaterial = new MeshBasicMaterial({
   colorWrite: false,
   depthWrite: false,
+});
+// One per session, shared by every proxy of this kind.
+trackResource(interactionProxyMaterial, {
+  kind: "material",
+  scope: "session",
+  label: "building-interaction-proxy",
 });
 
 export function stampBuildingFootprint(

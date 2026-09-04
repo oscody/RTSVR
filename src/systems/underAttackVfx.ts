@@ -33,6 +33,7 @@ import {
   type AlertCategory,
 } from "./underAttackAlertRules.ts";
 import { boardState } from "./state.js";
+import { trackResource, tracked } from "./resourceLifetime.js";
 
 /**
  * The visual under-attack cues, built the way `combatEffects.ts` builds its
@@ -118,6 +119,14 @@ function createBadgeTexture(glyph: string, ring: string): Texture | null {
   context.fillStyle = "#ffe4e4";
   context.fillText(glyph, size * 0.5, size * 0.54);
   const texture = new Texture(canvas);
+  // Canvas textures are app-created and app-owned, unlike a GLTF or UIKit map,
+  // so they are registered explicitly at the construction site — the rule
+  // `markOwnedResources` deliberately does not guess at.
+  trackResource(texture, {
+    kind: "texture",
+    scope: "pool",
+    label: `under-attack-badge-${glyph}`,
+  });
   texture.needsUpdate = true;
   return texture;
 }
@@ -138,15 +147,20 @@ function ensurePool(): boolean {
     UNDER_ATTACK_BADGE_SIZE,
     UNDER_ATTACK_BADGE_SIZE,
   );
+  trackResource(badgeGeometry, {
+    kind: "geometry",
+    scope: "pool",
+    label: "under-attack-badge",
+  });
   for (let index = 0; index < UNDER_ATTACK_BADGE_POOL_SIZE; index += 1) {
-    const material = new MeshBasicMaterial({
+    const material = tracked(new MeshBasicMaterial({
       map: lockedTexture,
       color: 0xffffff,
       transparent: true,
       opacity: 0,
       depthWrite: false,
       toneMapped: false,
-    });
+    }), "material", "pool", "under-attack-badge", `slot:${index}`);
     const mesh = new Mesh(badgeGeometry, material);
     makeNonInteractive(mesh);
     mesh.name = `UnderAttackBadge_${index}`;
@@ -425,3 +439,4 @@ export class UnderAttackVfxSystem extends createSystem({}) {
   }
 
 }
+

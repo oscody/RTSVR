@@ -37,7 +37,13 @@ export function attachHealthBar(holder: Object3D): void {
     new MeshBasicMaterial({ color: HEALTH_BAR_BACKGROUND_COLOR, depthWrite: false }),
   );
 
-  makeNonInteractive(markOwnedResources(background));
+  makeNonInteractive(
+    markOwnedResources(background, {
+      scope: "scenario",
+      label: "health-bar-background",
+      owner: holder.name || "unnamed-holder",
+    }),
+  );
   background.name = "HealthBarBackground";
   bar.add(background);
 
@@ -46,7 +52,13 @@ export function attachHealthBar(holder: Object3D): void {
     new MeshBasicMaterial({ color: HEALTH_BAR_HEALTHY_COLOR, depthWrite: false }),
   );
 
-  makeNonInteractive(markOwnedResources(fill));
+  makeNonInteractive(
+    markOwnedResources(fill, {
+      scope: "scenario",
+      label: "health-bar-fill",
+      owner: holder.name || "unnamed-holder",
+    }),
+  );
   fill.name = HEALTH_BAR_FILL_NAME;
   fill.position.y = 0.009;
   bar.add(fill);

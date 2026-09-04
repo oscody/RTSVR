@@ -37,6 +37,7 @@ import {
 import { warmObjectForRender } from "./gpuWarmup.js";
 import { MatchState, WaveSource, boardState, getTerrainAt } from "./state.js";
 import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
+import { trackResource, tracked } from "./resourceLifetime.js";
 
 // One synchronized batch: the rocks float, fall together, rest, then vanish and
 // the cycle restarts. "idle" is the gap between cycles.
@@ -107,16 +108,25 @@ function ensurePool(): boolean {
     const spinner = new Group();
     spinner.add(model);
 
+    // Per slot, unlike the combat pool: each meteor's trail is built inside the
+    // loop, so geometry and material are both per-slot here.
+    const trailGeometry = new SphereGeometry(1, 8, 8);
+    trackResource(trailGeometry, {
+      kind: "geometry",
+      scope: "pool",
+      label: "meteor-trail",
+      owner: `slot:${index}`,
+    });
     const trail = new Mesh(
-      new SphereGeometry(1, 8, 8),
-      new MeshBasicMaterial({
+      trailGeometry,
+      tracked(new MeshBasicMaterial({
         color: METEOR_TRAIL_COLOR,
         transparent: true,
         opacity: 0.9,
         blending: AdditiveBlending,
         depthWrite: false,
         toneMapped: false,
-      }),
+      }), "material", "pool", "meteor-trail", `slot:${index}`),
     );
 
     makeNonInteractive(trail);
@@ -157,6 +167,11 @@ function ensurePool(): boolean {
   }
 
   const flashGeometry = new SphereGeometry(METEOR_IMPACT_FLASH_RADIUS, 10, 10);
+  trackResource(flashGeometry, {
+    kind: "geometry",
+    scope: "pool",
+    label: "meteor-impact-flash",
+  });
   for (let index = 0; index < METEOR_POOL_SIZE; index += 1) {
     const material = new MeshBasicMaterial({
       color: METEOR_IMPACT_COLOR,
@@ -165,6 +180,12 @@ function ensurePool(): boolean {
       blending: AdditiveBlending,
       depthWrite: false,
       toneMapped: false,
+    });
+    trackResource(material, {
+      kind: "material",
+      scope: "pool",
+      label: "meteor-impact-flash",
+      owner: `slot:${index}`,
     });
     const mesh = new Mesh(flashGeometry, material);
     makeNonInteractive(mesh);
@@ -394,3 +415,4 @@ export class MeteorSystem extends createSystem({}) {
     }
   }
 }
+

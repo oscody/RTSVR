@@ -16,6 +16,7 @@ import {
 } from "@iwsdk/core";
 import { Object3D, RingGeometry } from "@iwsdk/core";
 import { makeNonInteractive } from "./sharedGeometry.js";
+import { tracked } from "./resourceLifetime.js";
 import {
   BoardMarker,
   BoardSurface,
@@ -157,13 +158,13 @@ export function setBoardDim(factor: number): void {
 
 function makeMarker(color: number): Mesh {
   const marker = new Mesh(
-    new PlaneGeometry(TILE_SIZE * MARKER_TILE_SCALE, TILE_SIZE * MARKER_TILE_SCALE),
-    new MeshBasicMaterial({
+    tracked(new PlaneGeometry(TILE_SIZE * MARKER_TILE_SCALE, TILE_SIZE * MARKER_TILE_SCALE), "geometry", "session", "board-marker"),
+    tracked(new MeshBasicMaterial({
       color,
       transparent: true,
       opacity: MARKER_OPACITY,
       depthWrite: false,
-    }),
+    }), "material", "session", "board-marker"),
   );
   makeNonInteractive(marker);
   marker.rotateX(-Math.PI / 2);
@@ -185,7 +186,7 @@ function createTerrainTopGeometry(
     indices.push(0, next, current);
   }
 
-  const geometry = new BufferGeometry();
+  const geometry = tracked(new BufferGeometry(), "geometry", "session", "terrain-top");
   geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
@@ -228,7 +229,7 @@ function createTerrainRimGeometry(
     indices.push(bottomCenterIndex, current * 2 + 1, next * 2 + 1);
   }
 
-  const geometry = new BufferGeometry();
+  const geometry = tracked(new BufferGeometry(), "geometry", "session", "terrain-rim");
   geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
@@ -258,7 +259,7 @@ function createDustPatchGeometry(
     }
   }
 
-  const geometry = new BufferGeometry();
+  const geometry = tracked(new BufferGeometry(), "geometry", "session", "dust-patch");
   geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
@@ -294,10 +295,10 @@ export class BoardSystem extends createSystem({}) {
         MARS_GROUND_Y_OFFSET,
         MARS_GROUND_Y_OFFSET - rimThickness,
       ),
-      new MeshBasicMaterial({
+      tracked(new MeshBasicMaterial({
         color: MARS_RIM_COLOR,
         side: DoubleSide,
-      }),
+      }), "material", "session", "terrain-rim"),
     );
     makeNonInteractive(rim);
     rim.name = "BoardRim";
@@ -307,10 +308,10 @@ export class BoardSystem extends createSystem({}) {
     // One irregular dark Martian surface surrounds the square 24x24 play area.
     const ground = new Mesh(
       createTerrainTopGeometry(terrainOutline, MARS_GROUND_Y_OFFSET),
-      new MeshBasicMaterial({
+      tracked(new MeshBasicMaterial({
         color: MARS_GROUND_COLOR,
         side: DoubleSide,
-      }),
+      }), "material", "session", "terrain-top"),
     );
     makeNonInteractive(ground);
     ground.name = "BoardGround";
@@ -325,7 +326,7 @@ export class BoardSystem extends createSystem({}) {
         MARS_DUST_Y_OFFSET,
         MARS_DUST_SEGMENTS,
       ),
-      new MeshBasicMaterial({
+      tracked(new MeshBasicMaterial({
         color: MARS_DUST_COLOR,
         transparent: true,
         opacity: MARS_DUST_OPACITY,
@@ -337,7 +338,7 @@ export class BoardSystem extends createSystem({}) {
         // (three.cjs:76518). Measured as the last churning material on Quest
         // 2026-08-22, at 2.0 re-derives/frame, once the GLB materials were done.
         forceSinglePass: true,
-      }),
+      }), "material", "session", "dust-patch"),
     );
     makeNonInteractive(dustPatches);
     dustPatches.name = "BoardDustPatches";
@@ -367,19 +368,19 @@ export class BoardSystem extends createSystem({}) {
       gridVertices.push(-half, 0, pos, half, 0, pos); // line along X
       gridVertices.push(pos, 0, -half, pos, 0, half); // line along Z
     }
-    const gridGeometry = new BufferGeometry();
+    const gridGeometry = tracked(new BufferGeometry(), "geometry", "session", "grid-overlay");
     gridGeometry.setAttribute(
       "position",
       new Float32BufferAttribute(gridVertices, 3),
     );
     const gridOverlay = new LineSegments(
       gridGeometry,
-      new LineBasicMaterial({
+      tracked(new LineBasicMaterial({
         color: GRID_OVERLAY_COLOR,
         transparent: true,
         opacity: GRID_OVERLAY_OPACITY,
         depthWrite: false,
-      }),
+      }), "material", "session", "grid-overlay"),
     );
     gridOverlay.name = "BoardCommandGrid";
     gridOverlay.position.y = GRID_OVERLAY_Y_OFFSET;
@@ -391,15 +392,15 @@ export class BoardSystem extends createSystem({}) {
 
     // One invisible board-wide volume replaces 576 per-tile ray targets.
     const boardSurface = new Mesh(
-      new BoxGeometry(
+      tracked(new BoxGeometry(
         GRID_SIZE * TILE_SIZE,
         TILE_PROXY_HEIGHT,
         GRID_SIZE * TILE_SIZE,
-      ),
-      new MeshBasicMaterial({
+      ), "geometry", "session", "board-surface"),
+      tracked(new MeshBasicMaterial({
         colorWrite: false,
         depthWrite: false,
-      }),
+      }), "material", "session", "board-surface"),
     );
     boardSurface.name = "BoardInteractionSurface";
     boardSurface.position.y = TILE_PROXY_Y_OFFSET;
@@ -441,17 +442,17 @@ export class BoardSystem extends createSystem({}) {
 
     // Order marker — an orange ring at an accepted move destination.
     const orderMesh = new Mesh(
-      new RingGeometry(
+      tracked(new RingGeometry(
         TILE_SIZE * ORDER_MARKER_INNER_SCALE,
         TILE_SIZE * ORDER_MARKER_OUTER_SCALE,
         32,
-      ),
-      new MeshBasicMaterial({
+      ), "geometry", "session", "order-ring"),
+      tracked(new MeshBasicMaterial({
         color: ORDER_MARKER_COLOR,
         transparent: true,
         opacity: ORDER_MARKER_OPACITY,
         depthWrite: false,
-      }),
+      }), "material", "session", "order-ring"),
     );
     makeNonInteractive(orderMesh);
     orderMesh.name = "BoardOrderMarker";

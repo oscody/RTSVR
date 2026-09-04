@@ -1,6 +1,7 @@
 import { VisibilityState, type World } from "@iwsdk/core";
 import { ActionKind, logAction } from "./actionLog.js";
 import { MatchState, boardState } from "./state.js";
+import { resetWaveTransitionLog } from "./waveTransitionLog.js";
 
 /**
  * The one place the match is released from `awaiting-start`.
@@ -34,6 +35,9 @@ export function startMatch(via = "unknown"): boolean {
   const status = source.getValue(MatchState, "status") ?? "awaiting-start";
   if (status !== "awaiting-start") return false;
   logAction(ActionKind.MatchStart, `awaiting-start -> playing via=${via}`);
+  // Wave 1 is timed from here, not from page load. Without this the first
+  // transition would report however long the player spent on the landing page.
+  resetWaveTransitionLog();
   source.setValue(MatchState, "status", "playing");
   source.setValue(
     MatchState,

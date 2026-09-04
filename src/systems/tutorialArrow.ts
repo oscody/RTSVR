@@ -20,6 +20,7 @@ import {
 } from "./constants.ts";
 import { makeNonInteractive } from "./sharedGeometry.js";
 import { boardState } from "./state.js";
+import { trackResource } from "./resourceLifetime.js";
 import {
   attachTutorialVisualPool,
   createTutorialVisualPool,
@@ -85,6 +86,11 @@ function ensureArrows(): boolean {
   // above the target.
   arrowGeometry.rotateX(Math.PI);
   arrowGeometry.translate(0, TUTORIAL_ARROW_HEIGHT / 2, 0);
+  trackResource(arrowGeometry, {
+    kind: "geometry",
+    scope: "session",
+    label: "tutorial-arrow",
+  });
 
   arrowMaterial = new MeshBasicMaterial({
     color: TUTORIAL_ARROW_COLOR,
@@ -96,6 +102,9 @@ function ensureArrows(): boolean {
     opacity: 0.92,
     depthWrite: false,
   });
+  // Built once and reused by every drill's arrow, so a count above 1 means
+  // the cue is being rebuilt rather than repointed.
+trackResource(arrowMaterial, { kind: "material", scope: "session", label: "tutorial-arrow" });
 
   for (let index = 0; index < TUTORIAL_ARROW_POOL; index += 1) {
     const mesh = new Mesh(arrowGeometry, arrowMaterial);

@@ -40,10 +40,17 @@ import { observePlacedSite } from "./phase2Trace.js";
 import { traceEntityDestroyed } from "./trace.js";
 import { EntityKind, Reason } from "./traceIds.js";
 import { playSfx } from "./sfx.js";
+import { trackResource } from "./resourceLifetime.js";
 
 const craftSiteProxyMaterial = new MeshBasicMaterial({
   colorWrite: false,
   depthWrite: false,
+});
+// Shared by every craft site's proxy. See `construction.ts` — same invariant.
+trackResource(craftSiteProxyMaterial, {
+  kind: "material",
+  scope: "session",
+  label: "craft-site-proxy",
 });
 
 export function createCraftProductionSite(
@@ -73,7 +80,13 @@ export function createCraftProductionSite(
     }),
   );
 
-  makeNonInteractive(markOwnedResources(foundation));
+  makeNonInteractive(
+    markOwnedResources(foundation, {
+      scope: "scenario",
+      label: "craft-foundation",
+      owner: `site:${x},${y}`,
+    }),
+  );
   foundation.name = "CraftProductionFoundation";
   holder.add(foundation);
 
@@ -82,14 +95,26 @@ export function createCraftProductionSite(
     new MeshBasicMaterial({ color: PROGRESS_BACKGROUND_COLOR }),
   );
 
-  makeNonInteractive(markOwnedResources(progressBackground));
+  makeNonInteractive(
+    markOwnedResources(progressBackground, {
+      scope: "scenario",
+      label: "craft-progress-background",
+      owner: `site:${x},${y}`,
+    }),
+  );
   progressBackground.position.set(0, TILE_SIZE * 0.8, 0);
   holder.add(progressBackground);
   const progressFill = new Mesh(
     new BoxGeometry(size, 0.032, 0.04),
     new MeshBasicMaterial({ color: PROGRESS_FILL_COLOR }),
   );
-  makeNonInteractive(markOwnedResources(progressFill));
+  makeNonInteractive(
+    markOwnedResources(progressFill, {
+      scope: "scenario",
+      label: "craft-progress-fill",
+      owner: `site:${x},${y}`,
+    }),
+  );
   progressFill.name = "CraftProductionProgressFill";
   progressFill.position.set(-size / 2, TILE_SIZE * 0.8, 0.001);
   progressFill.scale.x = 0.001;

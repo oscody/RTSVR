@@ -38,6 +38,7 @@ import { attachTurretAnimation } from "./turretAnimation.js";
 import { initialLoad } from "../app/initialLoad.js";
 import { registerDimmableObject } from "./board.js";
 import { attachUnitAnimation } from "./unitAnimation.js";
+import { trackResource } from "./resourceLifetime.js";
 import {
   type BoardTerrain,
   Building,
@@ -197,6 +198,12 @@ function isHoverCraftAsset(asset: string): boolean {
 const interactionProxyMaterial = new MeshBasicMaterial({
   colorWrite: false,
   depthWrite: false,
+});
+// One per session, shared by every proxy of this kind.
+trackResource(interactionProxyMaterial, {
+  kind: "material",
+  scope: "session",
+  label: "structure-interaction-proxy",
 });
 
 function addInteractionProxy(

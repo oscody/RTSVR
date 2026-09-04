@@ -154,3 +154,105 @@ test("the restart log latch survives a multi-frame reset", () => {
   const afterReset = update.slice(update.indexOf("this.resetScenario(source);"));
   assert.doesNotMatch(afterReset, /this\.loggedRestart = false;/);
 });
+
+// ── Resource cycle snapshots (disposal-tracking plan, section F) ────────────
+
+const resetSource = (): string =>
+  readFileSync(
+    new URL("../src/systems/scenarioReset.ts", import.meta.url),
+    "utf8",
+  );
+
+test("the pre-reset snapshot is taken before anything is torn down", () => {
+  // It describes what the OLD cycle grew to. Taken after teardown it would
+  // describe the teardown instead, and the cycle-over-cycle comparison would
+  // have no "before".
+  const source = resetSource();
+  const preReset = source.indexOf("beginResourceCycle()");
+  const teardown = source.indexOf("this.resetScenario(source)");
+  assert.ok(preReset > 0 && teardown > 0);
+  assert.ok(preReset < teardown, "beginResourceCycle must precede the teardown");
+});
+
+test("the post-teardown snapshot is taken before the rebuild", () => {
+  // This is the ONLY moment `scenario` and `temporary` outstanding are supposed
+  // to be zero. Emitted after `createInitialScenario` it would include the
+  // rebuild, merging a teardown leak with a rebuild leak so neither is
+  // diagnosable.
+  const source = resetSource();
+  const snapshot = source.indexOf('emitResourceSnapshot("post-teardown")');
+  const rebuild = source.indexOf("createInitialScenario(this.world");
+  assert.ok(snapshot > 0, "no post-teardown snapshot");
+  assert.ok(rebuild > 0);
+  assert.ok(snapshot < rebuild, "the snapshot must precede createInitialScenario");
+});
+
+test("the settled snapshot is deferred, not taken at the reset", () => {
+  const source = resetSource();
+  // A snapshot at reset time would measure a half-built scenario.
+  assert.doesNotMatch(
+    source,
+    /emitResourceSnapshot\("post-settled"\)/,
+    "the settled snapshot must not be emitted from the reset",
+  );
+
+  const cycle = readFileSync(
+    new URL("../src/systems/resourceCycle.ts", import.meta.url),
+    "utf8",
+  );
+  const advance = cycle.slice(cycle.indexOf("export function advanceSettledSnapshot"));
+  const body = advance.slice(0, advance.indexOf("\n}"));
+
+  // Each of the four gates exists for a distinct wrong reading.
+  assert.match(body, /if \(!matchReady\) return/, "a restarting match is half-built");
+  assert.match(body, /warmup\.active \|\| warmup\.queued > 0/, "pools still filling");
+  assert.match(
+    body,
+    /sampleAgeFrames > 1/,
+    "renderer totals from before the teardown would contradict the app counters",
+  );
+  assert.match(body, /settledWaitSeconds < SETTLED_DELAY_SECONDS/, "pools refill lazily");
+});
+
+test("the allocation baseline is marked only from the settled snapshot", () => {
+  // `markAllocationResetBaseline()` had NO caller at all until now. Marking it
+  // at the reset would date the baseline to a half-built scenario, so every
+  // `since-reset` delta afterwards would count the rebuild as growth.
+  const cycle = readFileSync(
+    new URL("../src/systems/resourceCycle.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(cycle, /markAllocationResetBaseline\(\)/);
+
+  const advance = cycle.slice(cycle.indexOf("export function advanceSettledSnapshot"));
+  const body = advance.slice(0, advance.indexOf("\n}"));
+  assert.match(body, /markAllocationResetBaseline\(\)/, "must be inside the settled path");
+  // After the snapshot, so the baseline and the line it is compared against
+  // describe the same instant.
+  assert.ok(
+    body.indexOf('emitResourceSnapshot("post-settled")') <
+      body.indexOf("markAllocationResetBaseline()"),
+  );
+
+  assert.doesNotMatch(
+    resetSource(),
+    /markAllocationResetBaseline/,
+    "the reset must not mark the baseline itself",
+  );
+});
+
+test("outstanding detail is printed only where zero is the expectation", () => {
+  const cycle = readFileSync(
+    new URL("../src/systems/resourceCycle.ts", import.meta.url),
+    "utf8",
+  );
+  // A live scenario legitimately holds hundreds of resources, so per-record
+  // detail at `pre-reset` would bury the one snapshot that matters.
+  assert.match(cycle, /if \(phase !== "post-teardown"\) return;/);
+  assert.match(cycle, /MUST_BE_ZERO/);
+  const mustBeZero = cycle.slice(cycle.indexOf("const MUST_BE_ZERO"));
+  const decl = mustBeZero.slice(0, mustBeZero.indexOf(";"));
+  assert.match(decl, /"scenario"/);
+  assert.match(decl, /"temporary"/);
+  assert.doesNotMatch(decl, /"pool"|"session"/, "those plateau, they do not zero");
+});

@@ -173,3 +173,23 @@ test("the report shows crystals when the capture has them, and says so when it d
   assert.match(without, /\?\s+\?\s/, `expected unknown columns:\n${without}`);
   assert.match(without, /crystals banked at wave start/);
 });
+
+test("clear time prefers the game's own figure over the sampled one", () => {
+  // The profile-derived version is bounded by the one-second sample rate at
+  // BOTH ends, so it can be ~2s out — and it does not exist at all in a
+  // diagnostics-off build. The action line is measured at the transition.
+  const rows = fixture([
+    { t: 10, alive: 5, killed: 0, turret: 1 },
+    { t: 20, alive: 0, killed: 5, turret: 1 },
+  ]);
+  const sampled = run(rows);
+  assert.match(sampled, /\s10s\s/, "without the action line it falls back to sampling");
+
+  const reported = run(
+    rows +
+      "\nactionLog.ts:159 [Action] wave 1 -> 2 cleared in 67s " +
+      "scenarioLive=63 created=+30 disposed=+2",
+  );
+  assert.match(reported, /\s67s\s/, "the reported figure wins");
+  assert.doesNotMatch(reported, /\s10s\s/);
+});

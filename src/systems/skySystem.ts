@@ -9,6 +9,7 @@ import {
   PointsMaterial,
   createSystem,
 } from "@iwsdk/core";
+import { trackResource, tracked } from "./resourceLifetime.js";
 import {
   SKY_DOME_EQUATOR,
   SKY_DOME_GROUND,
@@ -137,16 +138,22 @@ export class SkySystem extends createSystem({}) {
       positions[i * 3 + 2] = Math.sin(angle) * ring * STARFIELD_RADIUS;
     }
     const geometry = new BufferGeometry();
+    // The starfield: one geometry and one material for the whole session.
+    trackResource(geometry, {
+      kind: "geometry",
+      scope: "session",
+      label: "starfield",
+    });
     geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
     const stars = new Points(
       geometry,
-      new PointsMaterial({
+      tracked(new PointsMaterial({
         color: STARFIELD_COLOR,
         size: STARFIELD_SIZE,
         sizeAttenuation: false,
         toneMapped: false,
         depthWrite: false,
-      }),
+      }), "material", "session", "starfield"),
     );
     stars.name = "Starfield";
     stars.userData.drawCat = "sky"; // draw-call profiler category
@@ -155,3 +162,4 @@ export class SkySystem extends createSystem({}) {
     this.world.createTransformEntity(stars, { persistent: true });
   }
 }
+
