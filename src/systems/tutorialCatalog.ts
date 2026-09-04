@@ -114,7 +114,19 @@ export interface TutorialDrill {
   keepAlive?: readonly string[];
   /** What releases this drill's opponent. Timers are a last resort. */
   trigger:
-    | { kind: "minerTrips"; count: number }
+    /**
+     * Wait for this many completed mining trips.
+     *
+     * **Omit `count` to derive it** from the price of the unit the next
+     * creating drill teaches, floored at a minimum lesson length — the same
+     * rule as `crystalsAtLeast`, for the same reason. This was the literal `4`
+     * and the last hardcoded number left in the tutorial.
+     *
+     * Still a TRIP count rather than a crystal count: this drill is about
+     * commanding the miner, so what it measures is trips completed. Only the
+     * target is derived from price.
+     */
+    | { kind: "minerTrips"; count?: number }
     /**
      * Wait until the player has banked this many crystals.
      *
@@ -250,11 +262,10 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     create: null,
     placement: null,
     keepAlive: ["miner"],
-    // Four trips = 40 crystals, comfortably above the astronaut the next drill
-    // teaches. Deliberately a TRIP count and not a crystal count: this drill is
-    // about commanding the miner, so it must not move when a unit is repriced.
-    // Completing this releases the first alien.
-    trigger: { kind: "minerTrips", count: 4 },
+    // Derived: exactly enough trips to afford the astronaut the next drill
+    // teaches — `ceil(price / CRYSTALS_PER_TRIP)`, with no floor. Two trips at
+    // today's price of 20. Completing this releases the first alien.
+    trigger: { kind: "minerTrips" },
     meet: null,
     // The miner cannot attack, so this drill must have no opponent.
     opponent: null,

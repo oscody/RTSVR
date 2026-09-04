@@ -40,6 +40,7 @@ export const ASTRONAUT_COST = getProductionSpec("astronaut")?.cost ?? 0;
 /** Crystals per completed mining trip. */
 export const CRYSTALS_PER_TRIP = DEFAULT_RESOURCE_AMOUNT_PER_TRIP;
 
+
 /**
  * Everything the rules need, sampled from the world by TutorialSystem.
  * Plain numbers and booleans so tests can construct one by hand.
@@ -275,6 +276,38 @@ export function drillCost(drill: TutorialDrill): number {
 export function drillCrystalGate(drill: TutorialDrill): number {
   if (drill.trigger.kind !== "crystalsAtLeast") return 0;
   return drill.trigger.amount ?? drillCost(drill);
+}
+
+/**
+ * Mining trips a `minerTrips` drill waits for.
+ *
+ * Derived from the price of whatever the NEXT creating drill teaches, so the
+ * mining lesson ends with the player able to afford it. Repricing a unit now
+ * moves this too — it was the literal `4` and was the last hardcoded number in
+ * the tutorial after the 2026-09-03 gates were derived.
+ *
+ * ## Exactly enough, and no floor
+ *
+ * `ceil(price / CRYSTALS_PER_TRIP)` — the drill ends the instant the next unit
+ * is affordable, with nothing left over. At the astronaut's 20 that is two
+ * trips; at 55 it would be six.
+ *
+ * An earlier version floored this at four trips on the argument that two is a
+ * short first lesson. That floor is gone: it was a second, hidden number that
+ * did not follow the catalog, which is exactly what deriving the target was
+ * meant to eliminate. If the lesson proves too short in play, the answer is to
+ * change what the drill teaches — not to smuggle a constant back in here.
+ */
+export function drillMinerTrips(
+  drill: TutorialDrill,
+  drills: readonly TutorialDrill[] = TUTORIAL_DRILLS,
+): number {
+  if (drill.trigger.kind !== "minerTrips") return 0;
+  if (drill.trigger.count !== undefined) return drill.trigger.count;
+  const index = drills.indexOf(drill);
+  const goal = savingTowardFor(index < 0 ? 0 : index + 1, drills);
+  const affordable = goal ? Math.ceil(goal.cost / CRYSTALS_PER_TRIP) : 0;
+  return affordable;
 }
 
 /** Can the unit a drill teaches actually kill things? Turrets are buildings. */
@@ -558,7 +591,7 @@ function triggerMet(drill: TutorialDrill, snapshot: TutorialSnapshot): boolean {
     case "immediate":
       return true;
     case "minerTrips":
-      return snapshot.crystalsMined >= drill.trigger.count * CRYSTALS_PER_TRIP;
+      return snapshot.crystalsMined >= drillMinerTrips(drill) * CRYSTALS_PER_TRIP;
     case "crystalsAtLeast":
       return snapshot.crystals >= drillCrystalGate(drill);
     case "lookedAt":

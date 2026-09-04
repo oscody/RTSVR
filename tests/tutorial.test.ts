@@ -32,6 +32,7 @@ import {
   canResolveArrow,
   drillCost,
   drillCrystalGate,
+  drillMinerTrips,
   validateTutorialPricing,
   drillUnitCanFight,
   edgeStep,
@@ -295,6 +296,46 @@ test("every combat drill's counter is affordable when its enemy is released", ()
   }
 });
 
+test("the mining lesson's length follows the price it saves toward", () => {
+  // The literal `4` was the last hardcoded number in the tutorial after the
+  // crystal gates were derived. It must now track the astronaut's price, or a
+  // repricing leaves the player unable to afford what the next drill teaches.
+  const mine = drillById("mine");
+  assert.equal(mine.trigger.kind, "minerTrips");
+  assert.equal(
+    mine.trigger.count,
+    undefined,
+    "omit `count` so the target follows the next unit's price",
+  );
+
+  const astronaut = drillCost(drillById("astronaut"));
+  const trips = drillMinerTrips(mine);
+  assert.ok(
+    trips * CRYSTALS_PER_TRIP >= astronaut,
+    `${trips} trips yields ${trips * CRYSTALS_PER_TRIP}, short of ${astronaut}`,
+  );
+});
+
+test("the mining lesson is exactly as long as the next unit costs", () => {
+  // No floor, by decision on 2026-09-04: a floor is a second number that does
+  // not follow the catalog, which is what deriving the target was meant to
+  // remove. The lesson ends the instant the next unit is affordable.
+  const mine = drillById("mine");
+  const astronaut = drillCost(drillById("astronaut"));
+  assert.equal(drillMinerTrips(mine), Math.ceil(astronaut / CRYSTALS_PER_TRIP));
+
+  // …and it shortens when the unit is cheaper, rather than clamping.
+  const cheapLadder = [
+    mine,
+    { ...drillById("astronaut"), create: { via: "produce", kind: "miner" } },
+  ] as TutorialDrill[];
+  const minerCost = MINER_COST;
+  assert.equal(
+    drillMinerTrips(mine, cheapLadder),
+    Math.ceil(minerCost / CRYSTALS_PER_TRIP),
+  );
+});
+
 test("no tutorial drill hardcodes a crystal gate", () => {
   // The gate and the price were separate numbers until 2026-09-03 and drifted
   // the moment the catalog was repriced. Omitting `amount` is what keeps them
@@ -427,23 +468,30 @@ test("a resolvable arrow reports nothing", () => {
 
 // ── Release gating (plan tests 13, 21, 32) ──────────────────────────────────
 
-test("four mining trips releases the first alien", () => {
+test("completing the mining lesson releases the first alien", () => {
+  // Named for the behaviour, not the number: the trip count is derived from
+  // the astronaut's price now, so "four" was true only for one price list.
   const mine = drillById("mine");
   const astronaut = drillById("astronaut");
-  // Three trips is not enough.
+  const trips = drillMinerTrips(mine);
+
+  // One trip short is not enough…
   assert.equal(
-    isDrillComplete(mine, snapshot({ crystalsMined: 3 * CRYSTALS_PER_TRIP }), 0),
+    isDrillComplete(mine, snapshot({ crystalsMined: (trips - 1) * CRYSTALS_PER_TRIP }), 0),
     false,
   );
+  // …and the full lesson completes it.
   assert.equal(
-    isDrillComplete(mine, snapshot({ crystalsMined: 4 * CRYSTALS_PER_TRIP }), 0),
+    isDrillComplete(mine, snapshot({ crystalsMined: trips * CRYSTALS_PER_TRIP }), 0),
     true,
   );
-  // 40 mined leaves 40 in hand, which covers the 35 astronaut.
-  assert.equal(
-    shouldReleaseOpponent(astronaut, snapshot({ crystals: 40 })),
-    true,
-  );
+
+  // The point of the derivation: whatever the astronaut costs, finishing the
+  // mining lesson leaves enough in hand to afford it, so the next drill never
+  // opens on a unit the player cannot buy.
+  const mined = trips * CRYSTALS_PER_TRIP;
+  assert.ok(mined >= drillCost(astronaut));
+  assert.equal(shouldReleaseOpponent(astronaut, snapshot({ crystals: mined })), true);
 });
 
 test("no enemy is released before its counter is affordable", () => {
