@@ -400,7 +400,7 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
       title: "Meet the flyer",
       intro: "Something is flying in.",
       meet: "A drake is in the air. Follow the red marker — it is going straight for your command center.",
-      doing: "Racing craft are fast. Produce one and send it at the flyer.",
+      doing: "Fighter craft are fast. Produce one and send it at the flyer.",
       cleared: "Different enemies want different answers.",
     },
   },
