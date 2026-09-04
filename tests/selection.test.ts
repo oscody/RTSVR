@@ -13,7 +13,7 @@ const roster = [
   { index: 2, kind: "astronaut", category: "command-center" },
   { index: 3, kind: "astronaut", category: "command-center" },
   { index: 4, kind: "cargo", category: "hangar" },
-  { index: 5, kind: "racer", category: "hangar" },
+  { index: 5, kind: "fighter", category: "hangar" },
   { index: 6, kind: "miner", category: "factory" },
 ];
 
@@ -27,7 +27,7 @@ test("live roster filtering and pagination use building categories", () => {
   assert.equal(allSecondPage.entries.length, 2);
   assert.deepEqual(
     hangar.entries.map(({ kind }) => kind),
-    ["cargo", "racer"],
+    ["cargo", "fighter"],
   );
   assert.equal(countRosterKinds(roster).get("astronaut"), 2);
 });

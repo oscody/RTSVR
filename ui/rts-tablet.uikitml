@@ -824,7 +824,7 @@
       <button id="craft-card-1" class="craft-card"><img id="craft-image-1" class="craft-image" src="/images/craft_miner.png"></img><div class="craft-copy"><span id="craft-name-1" class="craft-name">Mining Craft</span><span id="craft-cost-1" class="craft-cost">- crystals</span><span id="craft-stats-1" class="card-stats">Build: -  Attack: -  Hp: -</span></div></button>
     </div>
     <div class="craft-row">
-      <button id="craft-card-2" class="craft-card"><img id="craft-image-2" class="craft-image" src="/images/craft_racer.png"></img><div class="craft-copy"><span id="craft-name-2" class="craft-name">Racing Craft</span><span id="craft-cost-2" class="craft-cost">- crystals</span><span id="craft-stats-2" class="card-stats">Build: -  Attack: -  Hp: -</span></div></button>
+      <button id="craft-card-2" class="craft-card"><img id="craft-image-2" class="craft-image" src="/images/craft_racer.png"></img><div class="craft-copy"><span id="craft-name-2" class="craft-name">Fighter Craft</span><span id="craft-cost-2" class="craft-cost">- crystals</span><span id="craft-stats-2" class="card-stats">Build: -  Attack: -  Hp: -</span></div></button>
       <button id="craft-card-3" class="craft-card"><img id="craft-image-3" class="craft-image" src="/images/rover.png"></img><div class="craft-copy"><span id="craft-name-3" class="craft-name">Rover</span><span id="craft-cost-3" class="craft-cost">- crystals</span><span id="craft-stats-3" class="card-stats">Build: -  Attack: -  Hp: -</span></div></button>
     </div>
     <div class="craft-action-row">

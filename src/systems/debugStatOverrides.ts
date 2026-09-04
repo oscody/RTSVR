@@ -16,8 +16,8 @@ export function currentUnitMaxHealth(kind: string): number {
   if (kind === "astronaut") {
     return Math.round(settingNumber("astronautHealth", getUnitMaxHealth(kind)));
   }
-  if (kind === "racer") {
-    return Math.round(settingNumber("craftRacerHealth", getUnitMaxHealth(kind)));
+  if (kind === "fighter") {
+    return Math.round(settingNumber("craftFighterHealth", getUnitMaxHealth(kind)));
   }
   if (kind === "miner") {
     return Math.round(settingNumber("craftMinerHealth", getUnitMaxHealth(kind)));
@@ -45,11 +45,11 @@ export function currentUnitAttackSpec(kind: string): AttackSpec | undefined {
       range: settingNumber("astronautAttackRange", spec.range),
     };
   }
-  if (kind === "racer") {
+  if (kind === "fighter") {
     return {
       ...spec,
-      damage: settingNumber("craftRacerAttackDamage", spec.damage),
-      range: settingNumber("craftRacerAttackRange", spec.range),
+      damage: settingNumber("craftFighterAttackDamage", spec.damage),
+      range: settingNumber("craftFighterAttackRange", spec.range),
     };
   }
   return spec;

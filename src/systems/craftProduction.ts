@@ -125,7 +125,7 @@ export function createCraftProductionSite(
   //
   // **This replaced the single most expensive thing on screen.** Construction
   // used to instantiate the full source model (`craftMinerConstruction` 78
-  // meshes, `craftRacerConstruction` 53) purely so its baked one-shot spawn
+  // meshes, `craftFighterConstruction` 53) purely so its baked one-shot spawn
   // effect would play, and `AssetManager.getGLTF` returns a *clone*, so every
   // concurrent site paid again. Measured over two Quest sessions on 2026-08-24,
   // the `construction` draw bucket ran 53/78/106/131/156/159 — exactly the sums
@@ -139,7 +139,7 @@ export function createCraftProductionSite(
   // The models merged badly because every animated FX node is its own rigid
   // group (93 -> 78 and 69 -> 53), so mesh merging could not touch them. The
   // astronaut never appeared in that bucket for one reason: it has no
-  // construction model at all. Miner and racer now match it.
+  // construction model at all. Miner and fighter now match it.
   //
   // Restoring the effect means reinstating `craftProductionAnimation.ts` and
   // the two `*Construction` manifest entries, both removed in the same change.

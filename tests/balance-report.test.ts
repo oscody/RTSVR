@@ -17,7 +17,7 @@ const fixture = (
         `frameProfiler.ts:629 [Profile] t+${r.t}s | mono 0 frame 0 seq 0 src Profile\n` +
         `Lvl 1 active | FPS 90 | Avg 11.1 | Worst 12.0 | Enemies ${r.alive} alive / ${r.killed} killed | Moving 0\n` +
         `Force alien 0 act 0 wait | unit 1 | bldg 1\n` +
-        `Roster walker 0 drake 0 mech 0 | miner 1 racer 0 astronaut 1 | turret ${r.turret} command-center 1 hangar 0 factory 0` +
+        `Roster walker 0 drake 0 mech 0 | miner 1 fighter 0 astronaut 1 | turret ${r.turret} command-center 1 hangar 0 factory 0` +
           (r.crystals === undefined ? "" : ` | crystals ${r.crystals} mined ${r.mined}`),
     )
     .join("\n");

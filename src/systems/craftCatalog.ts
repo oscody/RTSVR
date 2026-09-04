@@ -31,9 +31,9 @@ export const CRAFT_CATALOG: readonly CraftSpec[] = [
     locked: false,
   },
   {
-    kind: "racer",
-    label: "Racing Craft",
-    asset: "craftRacer",
+    kind: "fighter",
+    label: "Fighter Craft",
+    asset: "craftFighter",
     glb: "/gltf/craft/craft_racerA.glb",
     image: "/images/craft_racer.png",
     cost: 50,

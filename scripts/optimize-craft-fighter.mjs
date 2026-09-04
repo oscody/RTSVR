@@ -33,7 +33,7 @@ const MUZZLE_NAMES = [
 ];
 
 function fail(message) {
-  throw new Error(`[craft-racer-optimize] ${message}`);
+  throw new Error(`[craft-fighter-optimize] ${message}`);
 }
 
 function align4(value) {
@@ -183,7 +183,7 @@ function optimize(inputPath, outputPath) {
   }
 
   const root = findNodeIndex(sourceNodes, "tmpParent");
-  const hull = findNodeIndex(sourceNodes, "craft_racer");
+  const hull = findNodeIndex(sourceNodes, "craft_fighter");
   const exhaust = findNodeIndex(sourceNodes, "Move_Exhaust_FX");
   const fireRoot = findNodeIndex(sourceNodes, "StrafeFire_FX");
   const engineChildren = sourceNodes[exhaust].children ?? [];
@@ -329,7 +329,7 @@ function optimize(inputPath, outputPath) {
   };
   writeGlb(outputPath, json, state.binary);
   console.log(
-    `[craft-racer-optimize] ${basename(inputPath)} -> ${basename(outputPath)}: ` +
+    `[craft-fighter-optimize] ${basename(inputPath)} -> ${basename(outputPath)}: ` +
       `${reachablePrimitiveCount(json)} reachable primitives, ` +
       `${json.nodes.length} nodes, ${json.animations.length} clips`,
   );

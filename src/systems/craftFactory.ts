@@ -111,7 +111,7 @@ export function createCraftEntity(
   if (spec.kind === "astronaut") {
     entity.addComponent(ConstructionState);
   }
-  if (spec.asset === "astronautAAnimated" || spec.asset === "craftRacer") {
+  if (spec.asset === "astronautAAnimated" || spec.asset === "craftFighter") {
     attachUnitAnimation(entity, model, gltf.animations);
   }
   attachHealthBar(holder);
@@ -127,7 +127,7 @@ export function resetCraftSerial(): void {
 }
 
 function craftVisualElevation(spec: CraftSpec): number {
-  return spec.kind === "cargo" || spec.kind === "racer"
+  return spec.kind === "cargo" || spec.kind === "fighter"
     ? CRAFT_VISUAL_ELEVATION
     : 0;
 }

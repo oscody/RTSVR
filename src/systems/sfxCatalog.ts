@@ -87,7 +87,7 @@ export const SFX_CATALOG = {
     voices: 2,
     cooldownMs: 120,
   },
-  /** Racer's paired cannons. Fatter than the turret so a mixed volley reads as two weapons. */
+  /** Fighter's paired cannons. Fatter than the turret so a mixed volley reads as two weapons. */
   plasma: {
     url: "/audio/sfx-plasma.wav",
     volume: 0.45,

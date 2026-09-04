@@ -166,7 +166,7 @@ function article(label: string): string {
  * nothing affordable behind it teaches the player to ignore the highlight.
  *
  * Derived from `create.via` rather than declared per drill, so the astronaut,
- * racer and turret behave identically without three chances to get it wrong.
+ * fighter and turret behave identically without three chances to get it wrong.
  */
 export function tabHintFor(
   drill: TutorialDrill,
@@ -329,13 +329,13 @@ export function validateDrills(
       );
     }
 
-    // 4. Racer production and turret construction both need a builder, so the
+    // 4. Fighter production and turret construction both need a builder, so the
     //    astronaut drill has to come first. Astronaut production is the one
     //    builder-exempt path, which is what makes a bare start survivable.
     const needsBuilder =
       drill.create !== null &&
       drill.create.kind !== "astronaut" &&
-      (drill.create.via === "build" || drill.create.kind === "racer");
+      (drill.create.via === "build" || drill.create.kind === "fighter");
     if (needsBuilder && (astronautIndex < 0 || astronautIndex > index)) {
       problems.push(
         `drill "${drill.id}" needs a builder but no astronaut drill precedes it`,

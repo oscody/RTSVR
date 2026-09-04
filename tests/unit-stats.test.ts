@@ -51,7 +51,7 @@ test("the stat line fits the box it cannot overflow", () => {
 
 test("stats come from the live values, never the raw catalogs", () => {
   // Settings has knobs for `turretAttackDamage`, `astronautHealth`,
-  // `craftRacerHealth` and more. Reading the catalog constants would make the
+  // `craftFighterHealth` and more. Reading the catalog constants would make the
   // tile lie the moment one is tuned — which is exactly when a playtester is
   // most likely to be reading it.
   const stats = code("unitStats.ts");
@@ -70,7 +70,7 @@ test("stats come from the live values, never the raw catalogs", () => {
 test("a turret's health comes from the BUILDING table, not the unit one", () => {
   // The trap this module exists to prevent: a turret is a building, so its
   // health and attack live in different tables from every craft. Getting that
-  // wrong shows a turret with a racer's 90 hp instead of 250.
+  // wrong shows a turret with a fighter's 90 hp instead of 250.
   const stats = code("unitStats.ts");
   const turretBranch = /if \(kind === "turret"\)[\s\S]*?\n  \}/.exec(stats)?.[0] ?? "";
   assert.ok(turretBranch, "turret branch not found");

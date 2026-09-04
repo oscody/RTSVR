@@ -43,7 +43,7 @@ const ALIEN_KIND_LABELS: ReadonlyMap<string, string> = new Map([
   ["alienDrake", "drake"],
   ["strongAlienMech", "mech"],
 ]);
-const UNIT_KIND_ORDER = ["miner", "racer", "astronaut"] as const;
+const UNIT_KIND_ORDER = ["miner", "fighter", "astronaut"] as const;
 const BUILDING_KIND_ORDER = [
   "turret",
   "command-center",

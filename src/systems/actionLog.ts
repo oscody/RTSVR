@@ -37,7 +37,7 @@
  * Measured, `console-logs/2026-08-27-Action-Timeline-Options_after_B_level2.log`:
  * the roster went `turret 0` -> `turret 5`, every one player-built, and the log
  * carried **three** `produce build turret` lines. Two production clicks were
- * gone. Miners (3 built, 3 logged) and racers (2, 2) survived only because
+ * gone. Miners (3 built, 3 logged) and fighters (2, 2) survived only because
  * those were never clicked twice *in a row*.
  *
  * **The guard confused two different things.** Edge-triggering is right for a

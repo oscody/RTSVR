@@ -20,7 +20,7 @@ import type { UnitStats } from "./unitStatsRules.js";
  * astronaut spec in `constants`, `combatRules`, and the Settings overrides that
  * scale several of them. A tile that reads them itself would need to know which
  * of those apply to which kind, and would get it subtly wrong: a turret's health
- * comes from `BUILDING_MAX_HEALTH`, a racer's from `UNIT_MAX_HEALTH`, and both
+ * comes from `BUILDING_MAX_HEALTH`, a fighter's from `UNIT_MAX_HEALTH`, and both
  * are scaled by different Settings knobs.
  *
  * ## Live values, not catalog constants

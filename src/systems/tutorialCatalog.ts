@@ -204,11 +204,11 @@ export interface TutorialDrill {
 }
 
 /**
- * The default script: miner → astronaut → racer → turret.
+ * The default script: miner → astronaut → fighter → turret.
  *
  * The order is forced, not chosen. STARTING_CRYSTALS is 0, so mining is the only
  * action available at t=0; and astronaut production is the one path exempt from
- * requiring a builder, so it must precede the racer and the turret, which both
+ * requiring a builder, so it must precede the fighter and the turret, which both
  * need one. Each drill is what unlocks the next.
  */
 export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
@@ -359,10 +359,10 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     },
   },
   {
-    id: "racer",
-    create: { via: "produce", kind: "racer" },
+    id: "fighter",
+    create: { via: "produce", kind: "fighter" },
     placement: "anywhere",
-    // Racer production requires a BUILDER, so this drill depends on the
+    // Fighter production requires a BUILDER, so this drill depends on the
     // astronaut the previous one taught.
     keepAlive: ["miner", "astronaut"],
     trigger: { kind: "crystalsAtLeast" },
@@ -385,7 +385,7 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
         },
         {
           style: "friendly",
-          from: { kind: "nearestUnit", unit: "racer" },
+          from: { kind: "nearestUnit", unit: "fighter" },
           to: { kind: "nearestEnemy" },
         },
       ],

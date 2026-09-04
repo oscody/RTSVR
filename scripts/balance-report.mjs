@@ -62,7 +62,7 @@ const roster = (block) => {
 };
 
 /** Player-side things that can be lost. Aliens are counted separately. */
-const FRIENDLY = ["miner", "racer", "astronaut", "turret", "command-center"];
+const FRIENDLY = ["miner", "fighter", "astronaut", "turret", "command-center"];
 
 /**
  * Split a capture into one segment per match played.
@@ -255,7 +255,7 @@ const reportMatch = (path, text) => {
   }
 
   const finalRoster = previousRoster ?? {};
-  const combatUnits = (finalRoster.racer ?? 0) + (finalRoster.astronaut ?? 0);
+  const combatUnits = (finalRoster.fighter ?? 0) + (finalRoster.astronaut ?? 0);
   console.log(
     `    ended with ${finalRoster.turret ?? 0} turret(s) vs ${combatUnits} combat unit(s)`,
   );

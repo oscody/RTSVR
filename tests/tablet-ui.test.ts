@@ -390,7 +390,7 @@ test("the settings panel states no stat value of its own", () => {
 
   // Every one of these is written from DEBUG_SETTINGS_CATALOG at render time,
   // so a number in the markup is a copy that nothing keeps true. Two of them
-  // (astronautAttackRange, craftRacerAttackRange) still read 0.29 on
+  // (astronautAttackRange, craftFighterAttackRange) still read 0.29 on
   // 2026-09-03, months after the ranges moved — harmless only because the
   // write happens quickly. A placeholder must not be mistakable for a value.
   const rows = [

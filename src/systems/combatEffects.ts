@@ -38,7 +38,7 @@ import {
   COMBAT_VFX_TARGET_BODY_Y,
   COMBAT_VFX_TURRET_BOLT_COLOR,
   COMBAT_VFX_TURRET_MUZZLE_COLOR,
-  RACER_CANNON_MUZZLE_NODES,
+  FIGHTER_CANNON_MUZZLE_NODES,
 } from "./constants.ts";
 import { gpuWarmupStatus, warmObjectForRender } from "./gpuWarmup.js";
 import { trackResource } from "./resourceLifetime.js";
@@ -57,12 +57,12 @@ interface ShotProfile {
   emitter: EmitterMode;
 }
 
-// Friendly ranged shots + alien melee bursts. Racer = round blue plasma from
+// Friendly ranged shots + alien melee bursts. Fighter = round blue plasma from
 // its two cannon nodes; AstronautA = one thin green laser; turret = twin
 // orange lasers. Aliens use "melee": a strike flash on the attacker + an impact
 // burst on the target, colored per kind (no traveling bolt).
 const SHOT_PROFILES: Record<string, ShotProfile> = {
-  racer: {
+  fighter: {
     boltColor: COMBAT_VFX_BOLT_COLOR,
     muzzleColor: COMBAT_VFX_MUZZLE_COLOR,
     impactColor: COMBAT_VFX_IMPACT_COLOR,
@@ -418,8 +418,8 @@ export function shotProfileKey(attacker: Entity): keyof typeof SHOT_PROFILES {
     const kind = attacker.getValue(Unit, "kind");
     if (kind === "astronaut") return "astronaut";
   }
-  // Racer and any other friendly attacker default to plasma.
-  return "racer";
+  // Fighter and any other friendly attacker default to plasma.
+  return "fighter";
 }
 
 function shotProfile(attacker: Entity): ShotProfile {
@@ -496,7 +496,7 @@ function fireBolt(
 
 /**
  * Emit muzzle flash + bolt(s) for a real attack event. Visual only — damage is
- * resolved by CombatSystem. Each attacker type has a distinct shot: racer =
+ * resolved by CombatSystem. Each attacker type has a distinct shot: fighter =
  * paired blue plasma from its cannons, astronaut = single green laser, turret =
  * twin orange lasers. Bolts terminate at the target body, never bypassing it.
  */
@@ -536,10 +536,10 @@ export function emitAttackVfx(attacker: Entity, target: Entity): void {
     return;
   }
 
-  // Racer: fire from each named cannon node (paired plasma).
+  // Fighter: fire from each named cannon node (paired plasma).
   if (profile.emitter === "nodes") {
     let fired = false;
-    for (const nodeName of RACER_CANNON_MUZZLE_NODES) {
+    for (const nodeName of FIGHTER_CANNON_MUZZLE_NODES) {
       const node = holder.getObjectByName(nodeName);
       if (!node) continue;
       fired = true;

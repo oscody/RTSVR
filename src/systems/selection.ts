@@ -56,11 +56,11 @@ function currentUnitAttackRange(kind: string): number | null {
       ) ?? spec.range
     );
   }
-  if (kind === "racer") {
+  if (kind === "fighter") {
     return (
       boardState.debugSettings?.getValue(
         DebugSettings,
-        "craftRacerAttackRange",
+        "craftFighterAttackRange",
       ) ?? spec.range
     );
   }

@@ -176,7 +176,7 @@ const CLIPS = [
     },
   },
   {
-    // The racer's paired cannons: two detuned saws through a falling lowpass.
+    // The fighter's paired cannons: two detuned saws through a falling lowpass.
     // Deliberately fatter and duller than the turret so a mixed volley reads as
     // two weapons rather than one stuttering.
     name: "sfx-plasma.wav",

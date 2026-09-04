@@ -267,13 +267,13 @@ export const COMBAT_VFX_TARGET_BODY_Y = TILE_SIZE * 0.6;
 // Fallback muzzle for attackers with no named cannon node (turret, astronaut).
 export const COMBAT_VFX_MUZZLE_UP = TILE_SIZE * 0.7;
 export const COMBAT_VFX_MUZZLE_FORWARD = TILE_SIZE * 0.45;
-// Named cannon-tip nodes inside the CraftRacer GLB (paired plasma cannons).
-export const RACER_CANNON_MUZZLE_NODES = [
+// Named cannon-tip nodes inside the CraftFighter GLB (paired plasma cannons).
+export const FIGHTER_CANNON_MUZZLE_NODES = [
   "StrafeFire_MuzzleFlash_L",
   "StrafeFire_MuzzleFlash_R",
 ] as const;
 
-// Per-attacker shot styles. Racer = round blue plasma (paired cannons);
+// Per-attacker shot styles. Fighter = round blue plasma (paired cannons);
 // AstronautA = single thin green laser; turret = twin parallel orange lasers.
 // Lasers are a stretched+oriented bolt and travel faster than plasma.
 export const COMBAT_VFX_LASER_SPEED = 3.4; // world units / second

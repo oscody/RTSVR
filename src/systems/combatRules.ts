@@ -10,7 +10,7 @@ export interface AttackSpec {
 export const UNIT_ATTACK_SPECS: Readonly<Record<string, AttackSpec>> = {
   astronaut: { damage: 8, cadence: 1.1, range: 0.45 },
   rover: { damage: 15, cadence: 0.9, range: 0.29 },
-  racer: { damage: 12, cadence: 0.7, range: 0.54 },
+  fighter: { damage: 12, cadence: 0.7, range: 0.54 },
 };
 
 export const TURRET_ATTACK_SPEC: Readonly<AttackSpec> = {
@@ -24,7 +24,7 @@ export const UNIT_MAX_HEALTH: Readonly<Record<string, number>> = {
   rover: 120,
   miner: 100,
   cargo: 140,
-  racer: 90,
+  fighter: 90,
 };
 
 export const BUILDING_MAX_HEALTH: Readonly<Record<string, number>> = {

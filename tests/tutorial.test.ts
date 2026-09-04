@@ -173,7 +173,7 @@ test("the default drill list is valid", () => {
 test("the tutorial opens by naming the base and closes by signing off", () => {
   assert.deepEqual(
     TUTORIAL_DRILLS.map((drill) => drill.id),
-    ["orient", "mine", "astronaut", "racer", "turret", "done"],
+    ["orient", "mine", "astronaut", "fighter", "turret", "done"],
   );
   // The first thing a player is ever told is which thing is theirs.
   assert.match(TUTORIAL_DRILLS[0].cards.title, /command center/i);
@@ -258,19 +258,19 @@ test("a miner drill given an opponent is rejected, not shipped", () => {
 
 test("a drill released before its unit is affordable is rejected", () => {
   const bad: TutorialDrill = {
-    ...drillById("racer"),
-    // Deliberately below the racer's price, whatever that price is — this is
+    ...drillById("fighter"),
+    // Deliberately below the fighter's price, whatever that price is — this is
     // the one place an explicit amount survives, because the test needs a gate
     // that is wrong on purpose.
     trigger: { kind: "crystalsAtLeast", amount: 10 },
   };
-  const racerCost = drillCost(drillById("racer"));
+  const fighterCost = drillCost(drillById("fighter"));
   const problems = validateDrills([drillById("astronaut"), bad]);
   // Assert the one under test, not the count — same reason as the drill above:
   // adding an invariant must not break a test that is about a different one.
   assert.ok(
     problems.some((problem) =>
-      new RegExp(`releases at 10 crystals but its unit costs ${racerCost}`).test(
+      new RegExp(`releases at 10 crystals but its unit costs ${fighterCost}`).test(
         problem,
       ),
     ),
@@ -279,7 +279,7 @@ test("a drill released before its unit is affordable is rejected", () => {
 });
 
 test("a builder-requiring drill before the astronaut drill is rejected", () => {
-  // Racer production and turret construction both need a builder.
+  // Fighter production and turret construction both need a builder.
   const problems = validateDrills([drillById("turret"), drillById("astronaut")]);
   assert.ok(problems.some((p) => /needs a builder/.test(p)));
 });
@@ -326,8 +326,8 @@ test("the tutorial's unit costs are the catalog's, not copies of it", () => {
 test("drill costs match the live catalogs", () => {
   assert.equal(drillCost(drillById("astronaut")), ASTRONAUT_COST);
   // Not a tautology: this is what proves `via` routes to the RIGHT catalog —
-  // the racer through production, the turret through buildings.
-  assert.equal(drillCost(drillById("racer")), getProductionSpec("racer")?.cost);
+  // the fighter through production, the turret through buildings.
+  assert.equal(drillCost(drillById("fighter")), getProductionSpec("fighter")?.cost);
   assert.equal(drillCost(drillById("turret")), getBuildingSpec("turret")?.cost);
   assert.equal(drillCost(drillById("mine")), 0);
 });
@@ -447,10 +447,10 @@ test("four mining trips releases the first alien", () => {
 });
 
 test("no enemy is released before its counter is affordable", () => {
-  const racer = drillById("racer");
-  const gate = drillCrystalGate(racer);
-  assert.equal(shouldReleaseOpponent(racer, snapshot({ crystals: gate - 1 })), false);
-  assert.equal(shouldReleaseOpponent(racer, snapshot({ crystals: gate })), true);
+  const fighter = drillById("fighter");
+  const gate = drillCrystalGate(fighter);
+  assert.equal(shouldReleaseOpponent(fighter, snapshot({ crystals: gate - 1 })), false);
+  assert.equal(shouldReleaseOpponent(fighter, snapshot({ crystals: gate })), true);
 });
 
 test("a player who never mines is never attacked", () => {
@@ -499,10 +499,10 @@ test("a combat drill completes when its opponent dies", () => {
 });
 
 test("kills banked in an earlier drill do not complete the next one", () => {
-  const racer = drillById("racer");
+  const fighter = drillById("fighter");
   // Two kills already on the board when this drill starts.
-  assert.equal(isDrillComplete(racer, snapshot({ enemiesKilled: 2 }), 2), false);
-  assert.equal(isDrillComplete(racer, snapshot({ enemiesKilled: 3 }), 2), true);
+  assert.equal(isDrillComplete(fighter, snapshot({ enemiesKilled: 2 }), 2), false);
+  assert.equal(isDrillComplete(fighter, snapshot({ enemiesKilled: 3 }), 2), true);
 });
 
 test("completing the last drill ends the tutorial", () => {
@@ -555,10 +555,10 @@ test("losing the miner with crystals prompts a replacement", () => {
 });
 
 test("losing the astronaut with a live miner waits, it does not end the run", () => {
-  // Checked against the RACER drill, not the astronaut one: a drill cannot
+  // Checked against the FIGHTER drill, not the astronaut one: a drill cannot
   // depend on the unit it teaches, so astronaut recovery belongs to the first
   // drill that inherits an astronaut rather than creating one.
-  const drill = drillById("racer");
+  const drill = drillById("fighter");
   const poor = snapshot({ astronautCount: 0, crystals: 0, minerCount: 1 });
   assert.deepEqual(resolveRecovery(drill, poor), {
     unit: "astronaut",
@@ -566,14 +566,14 @@ test("losing the astronaut with a live miner waits, it does not end the run", ()
   });
   // Crucially: not a dead end. Income is still coming.
   assert.equal(isDeadEnd(poor), false);
-  const progress = advanceTutorial(indexOf("racer"), poor, 0);
+  const progress = advanceTutorial(indexOf("fighter"), poor, 0);
   assert.equal(progress.deadEnd, false);
   assert.equal(progress.recovery?.unit, "astronaut");
 });
 
 test("losing the astronaut with crystals prompts a replacement", () => {
   const recovery = resolveRecovery(
-    drillById("racer"),
+    drillById("fighter"),
     snapshot({ astronautCount: 0, crystals: ASTRONAUT_COST }),
   );
   assert.deepEqual(recovery, { unit: "astronaut", affordable: true });
@@ -748,12 +748,12 @@ test("the latch does not start a drill that has not begun", () => {
 });
 
 test("the arrow follows the phase, not the live read", () => {
-  // Checked on the racer drill, whose three phases genuinely differ — the mine
+  // Checked on the fighter drill, whose three phases genuinely differ — the mine
   // drill points at both ends throughout, so it could not catch a regression.
-  const drill = TUTORIAL_DRILLS[indexOf("racer")]!;
+  const drill = TUTORIAL_DRILLS[indexOf("fighter")]!;
   const idle = snapshot({ crystals: 0 });
   // Intro points at the miner you already have: the step is "you can afford a
-  // racer now". The TAB is highlighted by the derived pulse, not by a cone.
+  // fighter now". The TAB is highlighted by the derived pulse, not by a cone.
   assert.deepEqual(arrowTargetsFor(drill, idle, "intro")[0], {
     kind: "nearestUnit",
     unit: "miner",
@@ -838,7 +838,7 @@ test("only drills that SEND a unit draw a blue route", () => {
   // A blue trail is a journey. The turret is built where you place it and never
   // travels, so a route from the base to the tile would be drawing a walk that
   // never happens — the cone already says where to put it.
-  const sends = new Set(["mine", "astronaut", "racer"]);
+  const sends = new Set(["mine", "astronaut", "fighter"]);
   for (const drill of TUTORIAL_DRILLS) {
     const blue = (["intro", "meet", "doing"] as const).some((phase) =>
       pathsFor(drill, phase).some((p) => p.style === "friendly"),
@@ -868,11 +868,11 @@ test("a drill's own opponent is released only once its trigger fires", () => {
 });
 
 test("the budget accumulates, so an earlier alien still walking is not recalled", () => {
-  // Reaching the racer drill means the astronaut's alien was already released.
+  // Reaching the fighter drill means the astronaut's alien was already released.
   // Dropping back to 1 here would make the wave system consider it un-released
   // and hold the drake behind an alien that is already dead.
-  assert.equal(releaseBudget(indexOf("racer"), false), 1);
-  assert.equal(releaseBudget(indexOf("racer"), true), 2);
+  assert.equal(releaseBudget(indexOf("fighter"), false), 1);
+  assert.equal(releaseBudget(indexOf("fighter"), true), 2);
   assert.equal(releaseBudget(indexOf("turret"), true), 3);
 });
 
@@ -944,8 +944,8 @@ test("a drill never demands the unit it is about to teach", () => {
   // turns the drill's opening card into a recovery prompt for a unit they never
   // owned. This is the invariant, not just the fix to the one drill that had it.
   const broken = TUTORIAL_DRILLS.map((drill) =>
-    drill.id === "racer"
-      ? { ...drill, keepAlive: ["miner", "racer"] as readonly string[] }
+    drill.id === "fighter"
+      ? { ...drill, keepAlive: ["miner", "fighter"] as readonly string[] }
       : drill,
   );
   const problems = validateDrills(broken);
@@ -974,7 +974,7 @@ test("every drill that needs a builder can recover one", () => {
     const needsBuilder =
       drill.create !== null &&
       drill.create.kind !== "astronaut" &&
-      (drill.create.via === "build" || drill.create.kind === "racer");
+      (drill.create.via === "build" || drill.create.kind === "fighter");
     if (!needsBuilder) continue;
     assert.ok(
       (drill.keepAlive ?? []).includes("astronaut"),
@@ -1077,7 +1077,7 @@ test("the focus effect is aimed by data, not by code", () => {
 
 test("drills that are not gaze beats declare no focus", () => {
   // Otherwise every drill would dim the world.
-  for (const id of ["mine", "astronaut", "racer", "turret", "done"]) {
+  for (const id of ["mine", "astronaut", "fighter", "turret", "done"]) {
     assert.equal(
       gazeTargetFor(TUTORIAL_DRILLS[indexOf(id)]!),
       null,
@@ -1213,7 +1213,7 @@ test("a blue route ends where the player has to click", () => {
   // An attack order is issued by clicking the ENEMY (interaction.ts orders the
   // unit onto the enemy's own tile). A route ending anywhere else would point
   // at a square where clicking achieves nothing.
-  for (const id of ["astronaut", "racer"]) {
+  for (const id of ["astronaut", "fighter"]) {
     const drill = TUTORIAL_DRILLS[indexOf(id)]!;
     const paths = pathsFor(drill, "doing");
     const blue = paths.find((p) => p.style === "friendly")!;
@@ -1237,7 +1237,7 @@ test("the mining drill looks ahead to what you are saving for", () => {
 
 test("a drill that creates something points at its own unit", () => {
   assert.equal(savingTowardFor(indexOf("astronaut"))?.kind, "astronaut");
-  assert.equal(savingTowardFor(indexOf("racer"))?.kind, "racer");
+  assert.equal(savingTowardFor(indexOf("fighter"))?.kind, "fighter");
   assert.equal(savingTowardFor(indexOf("turret"))?.kind, "turret");
 });
 
@@ -1276,7 +1276,7 @@ test("the tab pulses only once the unit is affordable", () => {
 });
 
 test("every drill that creates something pulses the right tab", () => {
-  // The ask was "same for astronaut and turret as for racer" — derived from
+  // The ask was "same for astronaut and turret as for fighter" — derived from
   // where the card actually lives, so all three are identical by construction
   // rather than by three separate catalog entries agreeing.
   //
@@ -1285,7 +1285,7 @@ test("every drill that creates something pulses the right tab", () => {
   // command center rather than a hangar.
   const expected: Record<string, "build" | "crafts"> = {
     astronaut: "build",
-    racer: "crafts",
+    fighter: "crafts",
     turret: "build",
   };
   for (const [id, tab] of Object.entries(expected)) {
@@ -1311,7 +1311,7 @@ test("the tablet lock names the drill's own unit", () => {
 test("recovery outranks the drill, or the player is stranded", () => {
   // Locking the tablet to an astronaut while the miner is dead and there is no
   // income is a soft-lock with no exit but restart.
-  const drill = TUTORIAL_DRILLS[indexOf("racer")]!;
+  const drill = TUTORIAL_DRILLS[indexOf("fighter")]!;
   assert.equal(
     allowedCreateKind(drill, { unit: "miner", affordable: true }),
     "miner",

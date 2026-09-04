@@ -321,18 +321,18 @@ export const DebugSettings = createComponent("DebugSettings", {
     type: Types.Float32,
     default: UNIT_ATTACK_SPECS.astronaut.range,
   },
-  craftRacerAttackRange: {
+  craftFighterAttackRange: {
     type: Types.Float32,
-    default: UNIT_ATTACK_SPECS.racer.range,
+    default: UNIT_ATTACK_SPECS.fighter.range,
   },
   buildingHealthScale: { type: Types.Float32, default: 1 },
   astronautHealth: {
     type: Types.Float32,
     default: UNIT_MAX_HEALTH.astronaut,
   },
-  craftRacerHealth: {
+  craftFighterHealth: {
     type: Types.Float32,
-    default: UNIT_MAX_HEALTH.racer,
+    default: UNIT_MAX_HEALTH.fighter,
   },
   craftMinerHealth: {
     type: Types.Float32,
@@ -343,9 +343,9 @@ export const DebugSettings = createComponent("DebugSettings", {
     type: Types.Float32,
     default: UNIT_ATTACK_SPECS.astronaut.damage,
   },
-  craftRacerAttackDamage: {
+  craftFighterAttackDamage: {
     type: Types.Float32,
-    default: UNIT_ATTACK_SPECS.racer.damage,
+    default: UNIT_ATTACK_SPECS.fighter.damage,
   },
   turretAttackDamage: {
     type: Types.Float32,
@@ -388,14 +388,14 @@ export type DebugSettingKey =
   | "waveReleaseIntervalSeconds"
   | "turretRange"
   | "astronautAttackRange"
-  | "craftRacerAttackRange"
+  | "craftFighterAttackRange"
   | "buildingHealthScale"
   | "astronautHealth"
-  | "craftRacerHealth"
+  | "craftFighterHealth"
   | "craftMinerHealth"
   | "alienHealthScale"
   | "astronautAttackDamage"
-  | "craftRacerAttackDamage"
+  | "craftFighterAttackDamage"
   | "turretAttackDamage"
   | "miningGatherTimeSeconds"
   | "underAttackAlertVolume"

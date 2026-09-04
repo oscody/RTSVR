@@ -90,7 +90,7 @@ import { Contract, Lifecycle, Reason, State, entityKindId } from "./traceIds.js"
  */
 const SHOT_SFX: Readonly<Record<ReturnType<typeof shotProfileKey>, SfxId>> = {
   turret: "turretZap",
-  racer: "plasma",
+  fighter: "plasma",
   astronaut: "laser",
   alien: "melee",
   alienDrake: "melee",

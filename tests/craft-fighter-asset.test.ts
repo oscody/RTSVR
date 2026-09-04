@@ -50,7 +50,7 @@ function reachablePrimitiveCount(gltf: GlbJson): number {
   return count;
 }
 
-test("completed racer keeps movement and empty cannon muzzle anchors", () => {
+test("completed fighter keeps movement and empty cannon muzzle anchors", () => {
   const gltf = readGlbJson("../public/gltf/craft/craft_racerA.glb");
   const byName = new Map(gltf.nodes.map((node) => [node.name, node]));
 
@@ -101,9 +101,9 @@ test("completed racer keeps movement and empty cannon muzzle anchors", () => {
 
 // Retained as SOURCE only — no longer in the asset manifest and never loaded
 // at runtime, since craft production stopped showing a model. Kept on disk
-// because `scripts/optimize-craft-racer.mjs` reads it and because restoring the
+// because `scripts/optimize-craft-fighter.mjs` reads it and because restoring the
 // spawn effect would start here.
-test("unshipped racer construction source retains the full spawn and fire FX", () => {
+test("unshipped fighter construction source retains the full spawn and fire FX", () => {
   const gltf = readGlbJson("../public/gltf/craft/craft_racer_construction.glb");
   const nodeNames = new Set(gltf.nodes.map((node) => node.name));
 
@@ -122,10 +122,10 @@ test("craft production sites carry no model, matching astronaut production", () 
   const production = readSource("../src/systems/craftProduction.ts");
 
   // The two `*Construction` GLBs were the largest draw-call source in the
-  // game — 78 and 53 meshes, cloned per concurrent site. Miner and racer now
+  // game — 78 and 53 meshes, cloned per concurrent site. Miner and fighter now
   // build the way the astronaut always has: foundation plus progress bar and
   // no craft model, which is why the `construction` draw bucket is gone.
-  assert.doesNotMatch(index, /craftRacerConstruction/);
+  assert.doesNotMatch(index, /craftFighterConstruction/);
   assert.doesNotMatch(index, /craftMinerConstruction/);
   assert.doesNotMatch(production, /Construction"/);
   assert.doesNotMatch(

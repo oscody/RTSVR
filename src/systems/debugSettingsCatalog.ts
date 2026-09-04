@@ -71,8 +71,8 @@ export const DEBUG_SETTINGS_CATALOG: readonly DebugSettingSpec[] = [
     decimals: 2,
   },
   {
-    key: "craftRacerAttackRange",
-    label: "CraftRacer Attack Range",
+    key: "craftFighterAttackRange",
+    label: "CraftFighter Attack Range",
     step: 0.05,
     min: 0.1,
     max: 5,
@@ -95,8 +95,8 @@ export const DEBUG_SETTINGS_CATALOG: readonly DebugSettingSpec[] = [
     decimals: 0,
   },
   {
-    key: "craftRacerHealth",
-    label: "CraftRacer Health",
+    key: "craftFighterHealth",
+    label: "CraftFighter Health",
     step: 5,
     min: 5,
     max: 1000,
@@ -127,8 +127,8 @@ export const DEBUG_SETTINGS_CATALOG: readonly DebugSettingSpec[] = [
     decimals: 0,
   },
   {
-    key: "craftRacerAttackDamage",
-    label: "CraftRacer Attack Power",
+    key: "craftFighterAttackDamage",
+    label: "CraftFighter Attack Power",
     step: 1,
     min: 1,
     max: 100,

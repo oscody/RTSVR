@@ -152,7 +152,7 @@ const assets: AssetManifest = {
     type: AssetType.GLTF,
     priority: "critical",
   },
-  craftRacer: {
+  craftFighter: {
     url: "/gltf/craft/craft_racerA.glb",
     type: AssetType.GLTF,
     priority: "critical",

@@ -75,7 +75,7 @@ interface TraceInputHost {
 
 let host: TraceInputHost | null = null;
 
-/** Give the tracer the world so it can sample which hand pressed. */
+/** Give the tfighter the world so it can sample which hand pressed. */
 export function attachInteractionTracing(world: unknown): void {
   if (!INTERACTION_CORRELATION_TRACE_ENABLED) return;
   host = world as TraceInputHost;

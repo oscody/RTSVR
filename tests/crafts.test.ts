@@ -33,7 +33,7 @@ test("craft catalog exposes every model and tablet image", () => {
         locked: false,
       },
       {
-        kind: "racer",
+        kind: "fighter",
         glb: "/gltf/craft/craft_racerA.glb",
         image: "/images/craft_racer.png",
         duration: 8,
@@ -62,7 +62,7 @@ test("valid craft production deducts exactly one catalog cost", () => {
 // and clicking a turret poisoned that selection with no way back. Now a craft
 // only needs to be affordable and to have an open tile.
 test("a craft needs no production building selected or built", () => {
-  for (const kind of ["miner", "racer"]) {
+  for (const kind of ["miner", "fighter"]) {
     const spec = getCraftSpec(kind);
     assert.deepEqual(
       validateCraftPurchase({
@@ -76,7 +76,7 @@ test("a craft needs no production building selected or built", () => {
 });
 
 test("invalid craft requests do not return a new balance", () => {
-  const spec = getCraftSpec("racer");
+  const spec = getCraftSpec("fighter");
   const locked = spec ? { ...spec, locked: true } : undefined;
   const results = [
     validateCraftPurchase({ spec: undefined, crystals: 100, tileAvailable: true }),
@@ -93,7 +93,7 @@ test("invalid craft requests do not return a new balance", () => {
 
 test("a blocked selected tile rejects craft production", () => {
   const result = validateCraftPurchase({
-    spec: getCraftSpec("racer"),
+    spec: getCraftSpec("fighter"),
     crystals: 100,
     tileAvailable: false,
   });

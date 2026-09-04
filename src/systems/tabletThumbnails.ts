@@ -19,7 +19,7 @@
  * | `astronautA` | 40x72 | 0.56 | **137px** |
  * | `turret_single` | 73x82 | 0.89 | 85px |
  * | `rover` | 37x35 | 1.06 | 72px |
- * | `craft_racer` | 176x68 | 2.59 | 29px |
+ * | `craft_fighter` | 176x68 | 2.59 | 29px |
  * | `craft_miner` | 255x64 | 3.98 | 19px |
  *
  * ## Why the size is computed here rather than left to CSS

@@ -176,7 +176,7 @@ test("messages use player-facing names, never kinds or entity indexes", () => {
   assert.equal(alertMessage("building", "hangar"), "Hangar under attack");
   assert.equal(alertMessage("unit", "astronaut"), "Astronaut under attack");
   assert.equal(alertMessage("unit", "miner"), "Mining Craft under attack");
-  assert.equal(alertMessage("unit", "racer"), "Racing Craft under attack");
+  assert.equal(alertMessage("unit", "fighter"), "Fighter Craft under attack");
 });
 
 const SPOTTED_GAP = 8;

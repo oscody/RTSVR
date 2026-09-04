@@ -1851,7 +1851,7 @@ export class TutorialSystem extends createSystem({
       this.refreshNearestCrystal();
     }
     // The tab pulse is DERIVED from affordability rather than declared as an
-    // arrow target, so the astronaut, racer and turret behave identically and
+    // arrow target, so the astronaut, fighter and turret behave identically and
     // the highlight only appears when the click behind it would work.
     this.setTabHint(tabHintFor(drill, snapshot.crystals));
   }

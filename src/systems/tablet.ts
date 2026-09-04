@@ -1408,7 +1408,7 @@ export class TabletSystem extends createSystem({
       });
       this.setText(`craft-name-${slot}`, spec.label);
       this.setText(`craft-cost-${slot}`, `${spec.cost} crystals`);
-      // Live values, so a Settings knob (`craftRacerHealth`, `turretAttackDamage`)
+      // Live values, so a Settings knob (`craftFighterHealth`, `turretAttackDamage`)
       // is reflected here rather than the tile quietly showing catalog defaults.
       const stats = getUnitStats(spec.kind);
       this.setText(`craft-stats-${slot}`, stats ? formatUnitStats(stats) : "");
@@ -1449,7 +1449,7 @@ export class TabletSystem extends createSystem({
     if (spec.key === "turretRange") refreshTurretRangeRingGeometry();
     if (
       spec.key === "astronautAttackRange" ||
-      spec.key === "craftRacerAttackRange"
+      spec.key === "craftFighterAttackRange"
     ) {
       refreshUnitAttackRangeRingGeometry();
     }
@@ -1501,7 +1501,7 @@ export class TabletSystem extends createSystem({
     }
     if (
       key !== "astronautHealth" &&
-      key !== "craftRacerHealth" &&
+      key !== "craftFighterHealth" &&
       key !== "craftMinerHealth"
     ) {
       return;
@@ -1510,7 +1510,7 @@ export class TabletSystem extends createSystem({
       const kind = unit.getValue(Unit, "kind") ?? "";
       if (
         (key === "astronautHealth" && kind !== "astronaut") ||
-        (key === "craftRacerHealth" && kind !== "racer") ||
+        (key === "craftFighterHealth" && kind !== "fighter") ||
         (key === "craftMinerHealth" && kind !== "miner")
       ) {
         continue;

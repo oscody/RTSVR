@@ -28,10 +28,10 @@ import {
 } from "../src/systems/craftCatalog.ts";
 import { DEBUG_SETTINGS_CATALOG } from "../src/systems/debugSettingsCatalog.ts";
 
-test("only astronauts, rovers, and racers can attack", () => {
+test("only astronauts, rovers, and fighters can attack", () => {
   assert.equal(canUnitAttack("astronaut"), true);
   assert.equal(canUnitAttack("rover"), true);
-  assert.equal(canUnitAttack("racer"), true);
+  assert.equal(canUnitAttack("fighter"), true);
   assert.equal(canUnitAttack("miner"), false);
   assert.equal(canUnitAttack("cargo"), false);
   assert.equal(getUnitAttackSpec("miner"), undefined);
@@ -73,20 +73,20 @@ test("debug settings catalog exposes combat health and attack power knobs", () =
   for (const key of [
     "buildingHealthScale",
     "astronautHealth",
-    "craftRacerHealth",
+    "craftFighterHealth",
     "craftMinerHealth",
     "alienHealthScale",
     "astronautAttackDamage",
-    "craftRacerAttackDamage",
+    "craftFighterAttackDamage",
     "turretAttackDamage",
   ]) {
     assert.equal(keys.has(key), true);
   }
   assert.equal(UNIT_MAX_HEALTH.astronaut, 75);
-  assert.equal(UNIT_MAX_HEALTH.racer, 90);
+  assert.equal(UNIT_MAX_HEALTH.fighter, 90);
   assert.equal(UNIT_MAX_HEALTH.miner, 100);
   assert.equal(UNIT_ATTACK_SPECS.astronaut.damage, 8);
-  assert.equal(UNIT_ATTACK_SPECS.racer.damage, 12);
+  assert.equal(UNIT_ATTACK_SPECS.fighter.damage, 12);
   assert.equal(TURRET_ATTACK_SPEC.damage, 18);
 });
 
@@ -154,18 +154,18 @@ test("death and enemy kill occur exactly once at zero health", () => {
   assert.equal(resolveDamage(10, 10, 1, "building").enemyKilled, false);
 });
 
-test("the attack-range ladder holds: turret > racer > astronaut > alien", () => {
+test("the attack-range ladder holds: turret > fighter > astronaut > alien", () => {
   // Set deliberately on 2026-09-03 alongside the repricing. The turret keeps the
-  // longest reach, the racer was moved up toward it without matching it, and the
-  // astronaut gained strictly less than the racer did. A future edit that flips
+  // longest reach, the fighter was moved up toward it without matching it, and the
+  // astronaut gained strictly less than the fighter did. A future edit that flips
   // any of these pairs changes what the prices were chosen to buy.
   const turret = TURRET_ATTACK_SPEC.range;
-  const racer = UNIT_ATTACK_SPECS.racer.range;
+  const fighter = UNIT_ATTACK_SPECS.fighter.range;
   const astronaut = UNIT_ATTACK_SPECS.astronaut.range;
   const alien = ENEMY_ATTACK_SPECS.alien.range;
 
-  assert.ok(turret > racer, `turret ${turret} must outrange racer ${racer}`);
-  assert.ok(racer > astronaut, `racer ${racer} must outrange astronaut ${astronaut}`);
+  assert.ok(turret > fighter, `turret ${turret} must outrange fighter ${fighter}`);
+  assert.ok(fighter > astronaut, `fighter ${fighter} must outrange astronaut ${astronaut}`);
   assert.ok(astronaut > alien, `astronaut ${astronaut} must outrange alien ${alien}`);
 });
 

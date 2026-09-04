@@ -192,7 +192,7 @@ function enemyVisualElevation(spec: EnemyEntitySpec): number {
 }
 
 function isHoverCraftAsset(asset: string): boolean {
-  return asset === "craftRacer";
+  return asset === "craftFighter";
 }
 
 const interactionProxyMaterial = new MeshBasicMaterial({
@@ -433,7 +433,7 @@ export function createInitialScenario(
         if (spec.unit === "astronaut") {
           entity.addComponent(ConstructionState);
         }
-        if (spec.asset === "astronautAAnimated" || spec.asset === "craftRacer") {
+        if (spec.asset === "astronautAAnimated" || spec.asset === "craftFighter") {
           attachUnitAnimation(entity, model, gltf.animations);
         }
         attachHealthBar(holder);
