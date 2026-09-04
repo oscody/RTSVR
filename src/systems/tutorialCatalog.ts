@@ -115,7 +115,19 @@ export interface TutorialDrill {
   /** What releases this drill's opponent. Timers are a last resort. */
   trigger:
     | { kind: "minerTrips"; count: number }
-    | { kind: "crystalsAtLeast"; amount: number }
+    /**
+     * Wait until the player has banked this many crystals.
+     *
+     * **Omit `amount` to derive it from the price of the unit this drill
+     * teaches** — which is what every real drill does. The gate and the price
+     * were separate numbers until 2026-09-03, and they drifted the moment the
+     * catalog was repriced: the turret drill still opened at 30 crystals for a
+     * turret that had gone to 80, so the drill told the player to build
+     * something they could not afford. Deriving it makes that unrepresentable.
+     *
+     * An explicit amount is kept for tests that need a deliberately wrong gate.
+     */
+    | { kind: "crystalsAtLeast"; amount?: number }
     /**
      * Completes when the player actually looks at the thing being named.
      *
@@ -238,8 +250,10 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     create: null,
     placement: null,
     keepAlive: ["miner"],
-    // Four trips = 40 crystals, which is what an astronaut (35) costs plus
-    // change. Completing this releases the first alien.
+    // Four trips = 40 crystals, comfortably above the astronaut the next drill
+    // teaches. Deliberately a TRIP count and not a crystal count: this drill is
+    // about commanding the miner, so it must not move when a unit is repriced.
+    // Completing this releases the first alien.
     trigger: { kind: "minerTrips", count: 4 },
     meet: null,
     // The miner cannot attack, so this drill must have no opponent.
@@ -292,7 +306,7 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     placement: "anywhere",
     // NOT ["miner", "astronaut"]: a drill cannot demand the unit it teaches.
     keepAlive: ["miner"],
-    trigger: { kind: "crystalsAtLeast", amount: 35 },
+    trigger: { kind: "crystalsAtLeast" },
     meet: { gaze: { kind: "nearestEnemy" }, seconds: 3 },
     // Hunts the miner on purpose: being threatened is the most teachable moment
     // in the tutorial, and it spawns far enough away to leave ~24s to react.
@@ -351,7 +365,7 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     // Racer production requires a BUILDER, so this drill depends on the
     // astronaut the previous one taught.
     keepAlive: ["miner", "astronaut"],
-    trigger: { kind: "crystalsAtLeast", amount: 80 },
+    trigger: { kind: "crystalsAtLeast" },
     meet: { gaze: { kind: "nearestEnemy" }, seconds: 3 },
     opponent: { enemy: "alienDrake", count: 1, spawn: "south", hunts: "commandCenter" },
     path: {
@@ -398,7 +412,7 @@ export const TUTORIAL_DRILLS: readonly TutorialDrill[] = [
     placement: "towardThreat",
     // Turret construction needs an astronaut to build it.
     keepAlive: ["miner", "astronaut"],
-    trigger: { kind: "crystalsAtLeast", amount: 30 },
+    trigger: { kind: "crystalsAtLeast" },
     meet: { gaze: { kind: "nearestEnemy" }, seconds: 3 },
     opponent: {
       enemy: "strongAlienMech",

@@ -13,6 +13,9 @@ import {
   TUTORIAL_ENABLED,
   type TutorialDrill,
 } from "../src/systems/tutorialCatalog.ts";
+import { getBuildingSpec } from "../src/systems/buildingCatalog.ts";
+import { getProductionSpec } from "../src/systems/craftCatalog.ts";
+import { DEFAULT_RESOURCE_AMOUNT_PER_TRIP } from "../src/systems/economyConstants.ts";
 import {
   ASTRONAUT_COST,
   advanceGazeProgress,
@@ -28,6 +31,8 @@ import {
   arrowTargetsFor,
   canResolveArrow,
   drillCost,
+  drillCrystalGate,
+  validateTutorialPricing,
   drillUnitCanFight,
   edgeStep,
   interceptTileFor,
@@ -254,11 +259,23 @@ test("a miner drill given an opponent is rejected, not shipped", () => {
 test("a drill released before its unit is affordable is rejected", () => {
   const bad: TutorialDrill = {
     ...drillById("racer"),
-    trigger: { kind: "crystalsAtLeast", amount: 10 }, // racer costs 80
+    // Deliberately below the racer's price, whatever that price is — this is
+    // the one place an explicit amount survives, because the test needs a gate
+    // that is wrong on purpose.
+    trigger: { kind: "crystalsAtLeast", amount: 10 },
   };
+  const racerCost = drillCost(drillById("racer"));
   const problems = validateDrills([drillById("astronaut"), bad]);
-  assert.equal(problems.length, 1);
-  assert.match(problems[0], /releases at 10 crystals but its unit costs 80/);
+  // Assert the one under test, not the count — same reason as the drill above:
+  // adding an invariant must not break a test that is about a different one.
+  assert.ok(
+    problems.some((problem) =>
+      new RegExp(`releases at 10 crystals but its unit costs ${racerCost}`).test(
+        problem,
+      ),
+    ),
+    problems.join("; "),
+  );
 });
 
 test("a builder-requiring drill before the astronaut drill is rejected", () => {
@@ -270,17 +287,48 @@ test("a builder-requiring drill before the astronaut drill is rejected", () => {
 test("every combat drill's counter is affordable when its enemy is released", () => {
   for (const drill of TUTORIAL_DRILLS) {
     if (!drill.opponent || drill.trigger.kind !== "crystalsAtLeast") continue;
+    const gate = drillCrystalGate(drill);
     assert.ok(
-      drill.trigger.amount >= drillCost(drill),
-      `${drill.id}: released at ${drill.trigger.amount}, costs ${drillCost(drill)}`,
+      gate >= drillCost(drill),
+      `${drill.id}: released at ${gate}, costs ${drillCost(drill)}`,
     );
   }
 });
 
+test("no tutorial drill hardcodes a crystal gate", () => {
+  // The gate and the price were separate numbers until 2026-09-03 and drifted
+  // the moment the catalog was repriced. Omitting `amount` is what keeps them
+  // the same number; an explicit one belongs only in a test.
+  for (const drill of TUTORIAL_DRILLS) {
+    if (drill.trigger.kind !== "crystalsAtLeast") continue;
+    assert.equal(
+      drill.trigger.amount,
+      undefined,
+      `drill "${drill.id}" states its own crystal gate; omit it so the gate follows the unit's price`,
+    );
+  }
+});
+
+test("the tutorial's recovery prices resolve against the live catalog", () => {
+  // 0 would make `isStalled` read as "a rebuild is always affordable", so the
+  // tutorial would never offer recovery and never declare a dead end.
+  assert.deepEqual(validateTutorialPricing(), []);
+});
+
+test("the tutorial's unit costs are the catalog's, not copies of it", () => {
+  assert.equal(MINER_COST, getProductionSpec("miner")?.cost);
+  assert.equal(ASTRONAUT_COST, getProductionSpec("astronaut")?.cost);
+  assert.equal(CRYSTALS_PER_TRIP, DEFAULT_RESOURCE_AMOUNT_PER_TRIP);
+  // Zero would make everything look affordable and every gate open at once.
+  assert.ok(MINER_COST > 0 && ASTRONAUT_COST > 0);
+});
+
 test("drill costs match the live catalogs", () => {
   assert.equal(drillCost(drillById("astronaut")), ASTRONAUT_COST);
-  assert.equal(drillCost(drillById("racer")), 80);
-  assert.equal(drillCost(drillById("turret")), 30);
+  // Not a tautology: this is what proves `via` routes to the RIGHT catalog —
+  // the racer through production, the turret through buildings.
+  assert.equal(drillCost(drillById("racer")), getProductionSpec("racer")?.cost);
+  assert.equal(drillCost(drillById("turret")), getBuildingSpec("turret")?.cost);
   assert.equal(drillCost(drillById("mine")), 0);
 });
 
@@ -400,8 +448,9 @@ test("four mining trips releases the first alien", () => {
 
 test("no enemy is released before its counter is affordable", () => {
   const racer = drillById("racer");
-  assert.equal(shouldReleaseOpponent(racer, snapshot({ crystals: 79 })), false);
-  assert.equal(shouldReleaseOpponent(racer, snapshot({ crystals: 80 })), true);
+  const gate = drillCrystalGate(racer);
+  assert.equal(shouldReleaseOpponent(racer, snapshot({ crystals: gate - 1 })), false);
+  assert.equal(shouldReleaseOpponent(racer, snapshot({ crystals: gate })), true);
 });
 
 test("a player who never mines is never attacked", () => {
@@ -433,9 +482,12 @@ test("a partial haul keeps the card on doing", () => {
 });
 
 test("a combat drill starts when its opponent is released", () => {
+  // This drill HAS an opponent, so "started" delegates to the release trigger —
+  // the boundary is the gate itself, not the first crystal banked.
   const astronaut = drillById("astronaut");
-  assert.equal(hasDrillStarted(astronaut, snapshot({ crystals: 34 })), false);
-  assert.equal(hasDrillStarted(astronaut, snapshot({ crystals: 35 })), true);
+  const gate = drillCrystalGate(astronaut);
+  assert.equal(hasDrillStarted(astronaut, snapshot({ crystals: gate - 1 })), false);
+  assert.equal(hasDrillStarted(astronaut, snapshot({ crystals: gate })), true);
 });
 
 // ── Completion and progression (plan tests 1, 2) ────────────────────────────
@@ -1196,10 +1248,17 @@ test("the sign-off has nothing left to save for", () => {
 
 test("the progress line counts crystals, and says when you can afford it", () => {
   const goal = savingTowardFor(indexOf("mine"))!;
-  assert.match(savingProgressLine(goal, 0), /0 \/ 35 crystals toward an /);
-  assert.match(savingProgressLine(goal, 20), /^20 \/ 35 crystals/);
+  assert.equal(goal.cost, ASTRONAUT_COST);
+  assert.match(
+    savingProgressLine(goal, 0),
+    new RegExp(`0 / ${ASTRONAUT_COST} crystals toward an `),
+  );
+  assert.match(
+    savingProgressLine(goal, ASTRONAUT_COST - 1),
+    new RegExp(`^${ASTRONAUT_COST - 1} / ${ASTRONAUT_COST} crystals`),
+  );
   // Affordable: the line stops nagging and starts inviting.
-  assert.match(savingProgressLine(goal, 35), /you can build an /);
+  assert.match(savingProgressLine(goal, ASTRONAUT_COST), /you can build an /);
   assert.match(savingProgressLine(goal, 99), /you can build an /);
   // No goal, no line — never a stray "0 / 0".
   assert.equal(savingProgressLine(null, 10), "");
@@ -1296,8 +1355,8 @@ test("a recovery prompt is priced", () => {
 
 test("the recovery prompt renders through the same progress line", () => {
   const goal = recoveryGoal({ unit: "miner", affordable: false });
-  assert.match(savingProgressLine(goal, 20), /20 \/ 60/);
-  assert.match(savingProgressLine(goal, 60), /banked/);
+  assert.match(savingProgressLine(goal, 20), new RegExp(`20 / ${MINER_COST}`));
+  assert.match(savingProgressLine(goal, MINER_COST), /banked/);
 });
 
 test("the tab pulse follows the recovery, not the drill", () => {

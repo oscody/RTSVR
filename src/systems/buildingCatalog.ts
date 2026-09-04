@@ -37,7 +37,7 @@ export const BUILDING_CATALOG: readonly BuildingSpec[] = [
     asset: "turretSingle",
     image: "/images/turret_single.png",
     widthTiles: 1,
-    cost: 30,
+    cost: 80,
     duration: 3,
     locked: false,
     yawDeg: 180,

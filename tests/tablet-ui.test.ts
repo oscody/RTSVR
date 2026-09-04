@@ -303,6 +303,181 @@ test("every image the tablet can show is sized from code", () => {
   }
 });
 
+// The MSDF font atlases bundled with @pmndrs/msdfonts (inter, firaCode,
+// inconsolata, crimsonText — all four carry the same set) cover printable ASCII
+// 32-126 plus exactly nine Latin-1 codepoints. Anything else has no glyph and
+// renders as nothing at all: silent, and invisible until someone puts a headset
+// on. Canvas-drawn text (the tutorial card, the queue badges, the command
+// center HUD) uses system fonts and is NOT subject to this — only .uikitml is.
+const UIKIT_EXTRA_GLYPHS = [167, 176, 196, 214, 220, 223, 228, 246, 252];
+
+function renderableInUikit(codePoint: number): boolean {
+  if (codePoint >= 32 && codePoint <= 126) return true;
+  return UIKIT_EXTRA_GLYPHS.includes(codePoint);
+}
+
+/** Text the panel actually paints: no <style> block, no HTML comments. */
+function renderedText(markup: string): string[] {
+  const body = markup
+    .replace(/<style>[\s\S]*?<\/style>/g, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
+  return [...body.matchAll(/>([^<>]+)</g)]
+    .map((m) => m[1].trim())
+    .filter((t) => t.length > 0);
+}
+
+test("every character the panels render has a glyph in the font", () => {
+  // The regression this guards, 2026-09-03: an em-dash was used as the "no
+  // value yet" placeholder in 28 spans across both documents. U+2014 is not in
+  // the atlas — max codepoint there is 252 — so every one of those would have
+  // rendered blank on the headset while looking correct in the source.
+  for (const file of ["rts-tablet", "rts-settings", "match-result", "command-center-alert"]) {
+    const markup = readFileSync(
+      new URL(`../ui/${file}.uikitml`, import.meta.url),
+      "utf8",
+    );
+    const texts = renderedText(markup);
+    assert.ok(
+      texts.length > 0,
+      `${file}.uikitml yielded no rendered text — the extractor is broken`,
+    );
+    const offenders: string[] = [];
+    for (const text of texts) {
+      for (const ch of text) {
+        const cp = ch.codePointAt(0)!;
+        if (!renderableInUikit(cp)) {
+          offenders.push(
+            `U+${cp.toString(16).toUpperCase().padStart(4, "0")} in ${JSON.stringify(text.slice(0, 40))}`,
+          );
+        }
+      }
+    }
+    assert.deepEqual(
+      offenders,
+      [],
+      `${file}.uikitml renders characters the MSDF atlas has no glyph for`,
+    );
+  }
+});
+
+test("no card in the markup hardcodes a price", () => {
+  const tablet = readFileSync(
+    new URL("../ui/rts-tablet.uikitml", import.meta.url),
+    "utf8",
+  );
+
+  // The regression this guards, found 2026-09-03: the Build tab advertised a
+  // 30-crystal turret for weeks after the catalog repriced it to 80. The cost
+  // span had no `id`, so no code could write it even in principle — the number
+  // was frozen in the markup. The Craft tab was right the whole time because
+  // it writes `craft-cost-N` from the catalog.
+  const priced = [...tablet.matchAll(/>(\s*\d+)\s+crystals</g)].map((m) =>
+    m[1].trim(),
+  );
+  assert.deepEqual(
+    priced,
+    [],
+    `markup states ${priced.length} literal price(s) (${priced.join(", ")}); ` +
+      "costs must come from the catalog at runtime, not from the markup",
+  );
+});
+
+test("the settings panel states no stat value of its own", () => {
+  const settings = readFileSync(
+    new URL("../ui/rts-settings.uikitml", import.meta.url),
+    "utf8",
+  );
+
+  // Every one of these is written from DEBUG_SETTINGS_CATALOG at render time,
+  // so a number in the markup is a copy that nothing keeps true. Two of them
+  // (astronautAttackRange, craftRacerAttackRange) still read 0.29 on
+  // 2026-09-03, months after the ranges moved — harmless only because the
+  // write happens quickly. A placeholder must not be mistakable for a value.
+  const rows = [
+    ...settings.matchAll(
+      /id="setting-([A-Za-z]+)-value" class="settings-value">([^<]*)</g,
+    ),
+  ];
+  assert.ok(
+    rows.length >= DEBUG_SETTINGS_CATALOG.length,
+    `matched ${rows.length} value spans but the catalog has ${DEBUG_SETTINGS_CATALOG.length}`,
+  );
+  const stated = rows.filter(([, , text]) => /\d/.test(text));
+
+  assert.deepEqual(
+    stated.map(([, key, text]) => `${key}=${text}`),
+    [],
+    "settings markup states values that DEBUG_SETTINGS_CATALOG owns",
+  );
+});
+
+test("no card in the markup states a stat", () => {
+  const tablet = readFileSync(
+    new URL("../ui/rts-tablet.uikitml", import.meta.url),
+    "utf8",
+  );
+
+  // Build time, attack power and health are catalog values, exactly like cost.
+  // These spans held `Build: 0s  Attack: 0  Hp: 0` until 2026-09-03 — harmless
+  // zeros, but a placeholder shaped like a real stat line is how a stale one
+  // hides. `refreshBuildStats` and the craft loop write every one of them, so
+  // the markup never needs a number here.
+  const all = [
+    ...tablet.matchAll(
+      /id="(?:build|craft)-stats-[a-z0-9-]+" class="card-stats">([^<]*)</g,
+    ),
+  ]
+    .map((m) => m[1]);
+
+  // Floor first: an id rename would otherwise leave this matching nothing and
+  // passing for the wrong reason.
+  assert.ok(
+    all.length >= 8,
+    `expected at least 8 stat spans, matched ${all.length} — has an id changed?`,
+  );
+  assert.deepEqual(
+    all.filter((text) => /\d/.test(text)),
+    [],
+    "stat spans state numbers; build time, attack and health come from the catalogs",
+  );
+});
+
+test("every cost span has an id, and code writes all of them", () => {
+  const tablet = readFileSync(
+    new URL("../ui/rts-tablet.uikitml", import.meta.url),
+    "utf8",
+  );
+  const source = readFileSync(
+    new URL("../src/systems/tablet.ts", import.meta.url),
+    "utf8",
+  );
+
+  // An id is what makes a value writable at all. Without one the markup is the
+  // only source and it cannot be kept true.
+  const costSpans = [...tablet.matchAll(/<span([^>]*class="(?:card|craft)-cost")/g)];
+  assert.ok(costSpans.length > 0, "no cost spans found in the markup");
+  for (const [, attrs] of costSpans) {
+    assert.match(
+      attrs,
+      /id="[a-z0-9-]+"/,
+      `a cost span has no id, so nothing can write its price: <span${attrs}`,
+    );
+  }
+
+  // …and an id nothing writes is just as stale. Both families must be written
+  // through a template literal in the tablet system.
+  for (const family of ["build-cost-", "craft-cost-"]) {
+    assert.ok(
+      tablet.includes(`id="${family}`),
+      `markup has no ${family}* span`,
+    );
+    assert.ok(
+      source.includes(`\`${family}\${`),
+      `${family}* exists in the markup but tablet.ts never writes it`,
+    );
+  }
+});
+
 test("every build-image id in the markup is sized by code", () => {
   const tablet = readFileSync(
     new URL("../ui/rts-tablet.uikitml", import.meta.url),

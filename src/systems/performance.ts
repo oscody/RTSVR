@@ -13,10 +13,13 @@ import { Transform } from "@iwsdk/core";
 import {
   Building,
   Enemy,
+  GameState,
+  GameStats,
   Health,
   RuntimePerformance,
   Unit,
   WaveUnit,
+  boardState,
 } from "./state.js";
 
 /**
@@ -59,6 +62,9 @@ const census: ForceCensus = {
   unitsByKind: new Map(UNIT_KIND_ORDER.map((kind) => [kind, 0] as const)),
   buildings: 0,
   buildingsByKind: new Map(BUILDING_KIND_ORDER.map((kind) => [kind, 0] as const)),
+  // -1 until the singleton exists, so "no board" never reads as "broke".
+  crystals: -1,
+  crystalsMined: -1,
 };
 
 /** Zero every known column without dropping it, so the columns stay fixed. */
@@ -162,6 +168,17 @@ export class PerformanceSystem extends createSystem({
    */
   private takeCensus(): number {
     let movingEntities = 0;
+    // Read, not counted: these are singleton fields, so unlike the rosters
+    // there is nothing to walk. The board can be absent during boot and
+    // teardown, which is what -1 is for.
+    // Two different singletons: the balance is on GameState, the running total
+    // on GameStats. They are separate entities, so each is checked on its own.
+    const game = boardState.gameState;
+    const stats = boardState.gameStats;
+    census.crystals = game ? (game.getValue(GameState, "crystals") ?? 0) : -1;
+    census.crystalsMined = stats
+      ? (stats.getValue(GameStats, "crystalsMined") ?? 0)
+      : -1;
     census.units = 0;
     resetCounts(census.unitsByKind);
     for (const unit of this.queries.units.entities) {

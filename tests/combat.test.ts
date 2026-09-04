@@ -4,6 +4,9 @@ import test from "node:test";
 import {
   ATTACK_EPSILON,
   ATTACK_TIMER_EPSILON,
+  BUILDING_MAX_HEALTH,
+  ENEMY_ATTACK_SPECS,
+  ENEMY_MAX_HEALTH,
   TURRET_ATTACK_SPEC,
   UNIT_ATTACK_SPECS,
   UNIT_MAX_HEALTH,
@@ -18,6 +21,11 @@ import {
   shouldAutoAcquireUnitTarget,
   type AttackCycleState,
 } from "../src/systems/combatRules.ts";
+import { BUILDING_CATALOG } from "../src/systems/buildingCatalog.ts";
+import {
+  ASTRONAUT_PRODUCTION_SPEC,
+  CRAFT_CATALOG,
+} from "../src/systems/craftCatalog.ts";
 import { DEBUG_SETTINGS_CATALOG } from "../src/systems/debugSettingsCatalog.ts";
 
 test("only astronauts, rovers, and racers can attack", () => {
@@ -144,4 +152,81 @@ test("death and enemy kill occur exactly once at zero health", () => {
   });
   assert.equal(resolveDamage(10, 10, 1, "friendly").enemyKilled, false);
   assert.equal(resolveDamage(10, 10, 1, "building").enemyKilled, false);
+});
+
+test("the attack-range ladder holds: turret > racer > astronaut > alien", () => {
+  // Set deliberately on 2026-09-03 alongside the repricing. The turret keeps the
+  // longest reach, the racer was moved up toward it without matching it, and the
+  // astronaut gained strictly less than the racer did. A future edit that flips
+  // any of these pairs changes what the prices were chosen to buy.
+  const turret = TURRET_ATTACK_SPEC.range;
+  const racer = UNIT_ATTACK_SPECS.racer.range;
+  const astronaut = UNIT_ATTACK_SPECS.astronaut.range;
+  const alien = ENEMY_ATTACK_SPECS.alien.range;
+
+  assert.ok(turret > racer, `turret ${turret} must outrange racer ${racer}`);
+  assert.ok(racer > astronaut, `racer ${racer} must outrange astronaut ${astronaut}`);
+  assert.ok(astronaut > alien, `astronaut ${astronaut} must outrange alien ${alien}`);
+});
+
+// ── no explicit-stats audit ────────────────────────────────────────────────
+//
+// `getUnitMaxHealth`, `getBuildingMaxHealth` and `getEnemyMaxHealth` each end
+// in a literal fallback (`?? 100`, `?? 250`, `?? 80`). Those numbers appear in
+// no catalog, so a kind that misses its table gets a stat nobody authored — and
+// it shows up on the tablet tile looking exactly as real as the rest. This is
+// not hypothetical: `?? 250` was mistaken for the turret's true health on
+// 2026-09-02, and the turret is actually 240.
+//
+// The fallbacks stay as a crash guard. These tests prove nothing in play needs
+// them, so the invented numbers are unreachable rather than merely unlikely.
+
+test("every unlocked building has an authored max health", () => {
+  const unlocked = BUILDING_CATALOG.filter((spec) => !spec.locked);
+  // Floor: an empty list would make the loop below assert nothing.
+  assert.ok(unlocked.length >= 3, `only ${unlocked.length} unlocked buildings`);
+  for (const spec of unlocked) {
+    assert.ok(
+      Object.hasOwn(BUILDING_MAX_HEALTH, spec.kind),
+      `building "${spec.kind}" is unlocked but has no BUILDING_MAX_HEALTH entry, ` +
+        "so it would silently take the ?? 250 fallback",
+    );
+  }
+});
+
+test("every producible unit has an authored max health", () => {
+  const producible = [
+    ...CRAFT_CATALOG.map((spec) => spec.kind),
+    ASTRONAUT_PRODUCTION_SPEC.kind,
+  ];
+  assert.ok(producible.length >= 3, `only ${producible.length} producible kinds`);
+  for (const kind of producible) {
+    assert.ok(
+      Object.hasOwn(UNIT_MAX_HEALTH, kind),
+      `unit "${kind}" is producible but has no UNIT_MAX_HEALTH entry, ` +
+        "so it would silently take the ?? 100 fallback",
+    );
+  }
+});
+
+test("enemy health and attack tables describe the same roster", () => {
+  // Neither table is the source of truth for which enemies exist, so the only
+  // check available is that they agree — a kind in one and not the other takes
+  // a fallback for whichever it is missing from.
+  const kinds = Object.keys(ENEMY_MAX_HEALTH).sort();
+  assert.ok(kinds.length >= 3, `only ${kinds.length} enemy kinds`);
+  assert.deepEqual(kinds, Object.keys(ENEMY_ATTACK_SPECS).sort());
+});
+
+test("every unit that can attack has a complete attack spec", () => {
+  const entries = Object.entries(UNIT_ATTACK_SPECS);
+  assert.ok(entries.length >= 3, `only ${entries.length} attack specs`);
+  for (const [kind, spec] of entries) {
+    for (const field of ["damage", "cadence", "range"] as const) {
+      assert.ok(
+        typeof spec[field] === "number" && spec[field] > 0,
+        `${kind}.${field} must be a positive number, got ${spec[field]}`,
+      );
+    }
+  }
 });

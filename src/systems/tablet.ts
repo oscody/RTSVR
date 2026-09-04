@@ -1185,13 +1185,25 @@ export class TabletSystem extends createSystem({
     // and the next one will not remember. Same rule as `claimTutorialLevel`,
     // which was broken exactly this way by gaining a second caller.
     if (!this.document) return;
-    const kinds = [
-      ...BUILDING_CATALOG.map((spec) => spec.kind),
-      ASTRONAUT_PRODUCTION_SPEC.kind,
+    // Kind AND price together. The price used to live only in the markup, with
+    // no id on the span to write it through — so the build tab still advertised
+    // a 30-crystal turret after the catalog repriced it to 80, while the craft
+    // tab (which has always written `craft-cost-N` from the catalog) was right.
+    // A card that names a price the purchase does not charge is worse than one
+    // that names none, which is why the markup placeholder is now "— crystals".
+    const priced: readonly { kind: string; cost: number }[] = [
+      ...BUILDING_CATALOG.map((spec) => ({ kind: spec.kind, cost: spec.cost })),
+      {
+        kind: ASTRONAUT_PRODUCTION_SPEC.kind,
+        cost: ASTRONAUT_PRODUCTION_SPEC.cost,
+      },
     ];
-    for (const kind of kinds) {
+    for (const { kind, cost } of priced) {
       const stats = getUnitStats(kind);
       this.setText(`build-stats-${kind}`, stats ? formatUnitStats(stats) : "");
+      // `setText` no-ops on an id the markup does not have, so catalog kinds
+      // with no card (relay, shield, lab) cost nothing here.
+      this.setText(`build-cost-${kind}`, `${cost} crystals`);
     }
   }
 

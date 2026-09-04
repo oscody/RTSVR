@@ -10,6 +10,7 @@ import { STARTING_CRYSTALS } from "./economyConstants.js";
 import { clearMeteors } from "./meteorSystem.js";
 import { clearSfx } from "./sfx.js";
 import { clearMinerAnimations } from "./minerAnimation.js";
+import { gpuWarmupActive, setGpuWarmupPaused } from "./gpuWarmup.js";
 import { clearUnitSelections, updateCommandGridVisibility } from "./selection.js";
 import { clearTurretAnimations } from "./turretAnimation.js";
 import { resetTutorial } from "./tutorial.js";
@@ -50,6 +51,16 @@ const SCENARIO_RESET_DEFAULTS = createScenarioResetDefaults(
   INITIAL_WAVE_DELAY_SECONDS,
 );
 
+/**
+ * How long a reset will wait for an in-flight `compileAsync` before giving up.
+ *
+ * 60 frames is ~0.7s at 90Hz. Quest Browser does not expose
+ * `KHR_parallel_shader_compile`, so Three.js does its compile setup
+ * synchronously and the promise normally settles within a frame or two — this
+ * is a safety margin, not an expected wait.
+ */
+const RESET_WARMUP_WAIT_FRAMES = 60;
+
 export class ScenarioResetSystem extends createSystem({
   objects: { required: [ScenarioObject] },
   // Construction sites are disposed by name, not incidentally. They used to be
@@ -59,6 +70,8 @@ export class ScenarioResetSystem extends createSystem({
   sites: { required: [ConstructionSite] },
 }) {
   private loggedRestart = false;
+  /** Frames spent waiting for an in-flight `compileAsync` to settle. */
+  private warmupWaitFrames = 0;
 
   update(): void {
     const source = boardState.waveSource;
@@ -76,13 +89,45 @@ export class ScenarioResetSystem extends createSystem({
       // `resetScenario` finishes in one frame and this early return then fires.
       // Re-arming on the way out ties the latch to the restart being OVER.
       this.loggedRestart = false;
+      this.warmupWaitFrames = 0;
+      // Only ever released here, so a reset that bailed out early cannot leave
+      // warm-up switched off for the rest of the session.
+      setGpuWarmupPaused(false);
       return;
     }
     if (!this.loggedRestart) {
       this.loggedRestart = true;
       logAction(ActionKind.Restart, "scenario reset requested");
     }
-    this.resetScenario(source);
+
+    // Disposing the scene while Three.js is still polling a `compileAsync`
+    // throws inside its own timer — see `setGpuWarmupPaused`. Pausing first
+    // works because `ScenarioResetSystem` is registered BEFORE
+    // `GpuWarmupSystem` (index.ts), so no new target can start this frame.
+    setGpuWarmupPaused(true);
+    if (gpuWarmupActive()) {
+      this.warmupWaitFrames += 1;
+      if (this.warmupWaitFrames <= RESET_WARMUP_WAIT_FRAMES) {
+        // Status stays `restarting`, so this simply retries next frame.
+        return;
+      }
+      // Bounded on purpose. A compile that never settles is exactly what the
+      // crash above causes, and a restart the player cannot perform is worse
+      // than the error it was avoiding — so give up waiting and say so.
+      logAction(
+        ActionKind.Restart,
+        `proceeding with GPU warm-up still active after ${RESET_WARMUP_WAIT_FRAMES} frames`,
+      );
+    }
+    this.warmupWaitFrames = 0;
+    // `finally`, not a plain call after: a reset that throws must still hand
+    // warm-up back. Leaving it paused would disable first-use compilation for
+    // the rest of the session on top of whatever the original failure was.
+    try {
+      this.resetScenario(source);
+    } finally {
+      setGpuWarmupPaused(false);
+    }
   }
 
   private resetScenario(source: Entity): void {

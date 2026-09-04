@@ -45,13 +45,16 @@ test("craft catalog exposes every model and tablet image", () => {
 
 test("valid craft production deducts exactly one catalog cost", () => {
   const spec = getCraftSpec("miner");
+  assert.ok(spec, "the miner must exist in the catalog");
   const result = validateCraftPurchase({
     spec,
     crystals: 100,
     tileAvailable: true,
   });
 
-  assert.deepEqual(result, { ok: true, remainingCrystals: 40 });
+  // Derived, not restated: the assertion is "one cost was deducted", which is
+  // what the test is named for. A literal here just re-encodes the price.
+  assert.deepEqual(result, { ok: true, remainingCrystals: 100 - spec.cost });
 });
 
 // Place-first, no producer requirement (decided 2026-08-09). You used to have

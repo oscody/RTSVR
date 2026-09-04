@@ -793,6 +793,26 @@ export interface ForceCensus {
   unitsByKind: Map<string, number>;
   buildings: number;
   buildingsByKind: Map<string, number>;
+  /**
+   * Crystals banked right now, and the running total ever mined.
+   *
+   * Added 2026-09-03. Nothing recorded the economy before: the profiler had
+   * FPS, rosters, draw calls and heap, and the action log recorded *that* a
+   * unit was produced but never what it cost or what was left. Mining deposits
+   * do reach the trace, but `[TraceDump]` only prints around a hitch — a
+   * 742s match logged 20 of roughly 180 deposits, so income could not be
+   * reconstructed either.
+   *
+   * That made the balance question unanswerable: a run that ends with 8
+   * turrets and 2 units looks identical whether the player *chose* turrets or
+   * was too crystal-starved to field anything else. Both need a balance to
+   * tell apart, and this line is sampled once a second, unconditionally.
+   *
+   * -1 means "no game state yet" — distinct from a real balance of 0, which is
+   * exactly what a match starts with (`STARTING_CRYSTALS = 0`).
+   */
+  crystals: number;
+  crystalsMined: number;
 }
 
 let forceCensus: ForceCensus | null = null;
@@ -832,7 +852,10 @@ function buildForceLines(): string[] {
     `Force alien ${c.aliensActive} act ${c.aliensWaiting} wait | ` +
       `unit ${c.units} | bldg ${c.buildings}`,
     `Roster ${kindParts(c.aliensByKind)} | ${kindParts(c.unitsByKind)} | ` +
-      kindParts(c.buildingsByKind),
+      kindParts(c.buildingsByKind) +
+      (c.crystals < 0
+        ? ""
+        : ` | crystals ${c.crystals} mined ${c.crystalsMined}`),
   ];
 }
 

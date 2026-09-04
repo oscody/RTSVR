@@ -47,6 +47,7 @@ let active = false;
 let warmedCount = 0;
 let failedCount = 0;
 let activeLabel = "";
+let paused = false;
 
 function mark(phase: "queued" | "start" | "complete" | "failed", label: string): void {
   // Custom trace events make a later Quest capture answer which application
@@ -66,6 +67,11 @@ export function attachGpuWarmup(world: World): void {
   warmedCount = 0;
   failedCount = 0;
   activeLabel = "";
+  // Every other field is cleared here, so this one must be too. A re-attach
+  // that inherited `paused` from a previous world would leave warm-up silently
+  // switched off for the whole session — no error, just first-use hitches
+  // returning and nothing pointing at why.
+  paused = false;
 }
 
 /** Queue one object's shader variants. Duplicate object requests are ignored. */
@@ -102,9 +108,52 @@ function finish(label: string, success: boolean): void {
   }
 }
 
+/**
+ * True while a `compileAsync` is still in flight.
+ *
+ * Exists for one caller: a scenario reset must not dispose the scene's
+ * materials while Three.js is still polling them. See {@link setGpuWarmupPaused}.
+ */
+export function gpuWarmupActive(): boolean {
+  return active;
+}
+
+/**
+ * Stop starting new warm-up targets, without dropping the queue.
+ *
+ * ## The crash this exists to prevent
+ *
+ * `compileAsync()` resolves a promise, but Three.js decides *when* by polling
+ * `material.isReady` from a `setTimeout` it owns. A scenario reset that
+ * disposes those materials mid-poll leaves the poll dereferencing a freed
+ * program:
+ *
+ * ```
+ * [Action] restart scenario reset requested
+ * Uncaught TypeError: Cannot read properties of undefined (reading 'isReady')
+ *     at checkMaterialsReady   <- three.js, inside its own setTimeout
+ *     at WebGLRenderer.compileAsync
+ *     at gpuWarmup.ts:143
+ * ```
+ *
+ * Observed on a real Quest capture, 2026-09-03. **Neither the `try/catch`
+ * around the call nor the promise's rejection handler can catch it** — the
+ * throw happens in a timer callback, not on either path. Worse, the promise
+ * then never settles, so `active` would stay true forever and the warm-up
+ * queue would stall for the rest of the session.
+ *
+ * The only reliable fix is not to dispose while a compile is pending, so the
+ * reset pauses this and waits. Paused is not cancelled: queued targets are
+ * still wanted after the reset, and the module deliberately imports nothing
+ * from the ECS, so the caller drives it.
+ */
+export function setGpuWarmupPaused(value: boolean): void {
+  paused = value;
+}
+
 /** Start at most one warm-up target. Called once per normal world update. */
 export function advanceGpuWarmup(): void {
-  if (active || !targets) return;
+  if (paused || active || !targets) return;
   const target = queue.shift();
   if (!target) return;
 

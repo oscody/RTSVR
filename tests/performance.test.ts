@@ -522,3 +522,86 @@ test("the log sources that needed hand-wiring are actually wired", () => {
     /if \(twoPass\.length > 0 && DIAGNOSTICS_ENABLED\)/,
   );
 });
+
+test("the profiler logs the crystal balance, not just the roster", () => {
+  // The 2026-09-03 capture could not answer its own question. A run ending
+  // with 8 turrets and 2 units reads identically whether the player CHOSE
+  // turrets or was too crystal-starved to field anything else — and nothing in
+  // 79k lines recorded a balance. Mining deposits do reach the trace, but
+  // `[TraceDump]` only prints around a hitch: 20 deposits were logged out of
+  // roughly 180 that a 742s match with three miners must have made.
+  const profiler = source("src/systems/frameProfiler.ts");
+  const performance = source("src/systems/performance.ts");
+
+  assert.match(profiler, /crystals: number;/, "ForceCensus must carry the balance");
+  assert.match(profiler, /crystalsMined: number;/);
+  assert.match(
+    profiler,
+    /crystals \$\{c\.crystals\} mined \$\{c\.crystalsMined\}/,
+    "the Roster line must print them",
+  );
+
+  // The balance lives on GameState, the running total on GameStats — two
+  // separate singletons. Reading both from one is the mistake to prevent.
+  assert.match(performance, /getValue\(GameState, "crystals"\)/);
+  assert.match(performance, /getValue\(GameStats, "crystalsMined"\)/);
+
+  // -1 is "no board yet", which must stay distinct from a real balance of 0 —
+  // the value every match legitimately starts at.
+  assert.match(profiler, /c\.crystals < 0/, "a missing board must not print as a balance");
+});
+
+test("a scenario reset waits for an in-flight GPU compile", () => {
+  // Restart used to throw, on a real Quest, 2026-09-03:
+  //   Uncaught TypeError: Cannot read properties of undefined (reading 'isReady')
+  //       at checkMaterialsReady   <- three.js, inside its own setTimeout
+  // Disposing the scene while `compileAsync` is still polling its materials
+  // dereferences a freed program. The throw lands in a timer, so neither the
+  // try/catch nor the promise rejection handler can see it.
+  const reset = source("src/systems/scenarioReset.ts");
+  const warmup = source("src/systems/gpuWarmup.ts");
+
+  assert.match(warmup, /if \(paused \|\| active \|\| !targets\) return;/,
+    "a paused warm-up must not start new targets");
+  assert.match(warmup, /export function gpuWarmupActive\(\)/);
+
+  assert.match(reset, /setGpuWarmupPaused\(true\)/, "the reset must pause warm-up");
+  assert.match(reset, /if \(gpuWarmupActive\(\)\)/, "and wait while one is in flight");
+  // Bounded: a compile that never settles is exactly what the crash causes, and
+  // a restart the player cannot perform is worse than the error it avoids.
+  assert.match(reset, /RESET_WARMUP_WAIT_FRAMES/);
+  assert.match(reset, /setGpuWarmupPaused\(false\)/, "and release it again");
+  // In a `finally`: a reset that throws must still hand warm-up back, or the
+  // session loses first-use compilation on top of the original failure.
+  assert.match(
+    reset,
+    /finally \{\s*setGpuWarmupPaused\(false\);/,
+    "the release must be in a finally, not a plain call after resetScenario",
+  );
+
+  // `attachGpuWarmup` clears every other field of module state. Missing this
+  // one leaves a re-attached world with warm-up silently switched off — no
+  // error, just first-use hitches back and nothing pointing at why.
+  const attach = warmup.slice(
+    warmup.indexOf("export function attachGpuWarmup"),
+  );
+  const body = attach.slice(0, attach.indexOf("\n}"));
+  for (const field of ["queue", "active", "warmedCount", "paused"]) {
+    assert.match(
+      body,
+      new RegExp(`\\b${field} = `),
+      `attachGpuWarmup must reset "${field}"`,
+    );
+  }
+
+  // Pausing only works because the reset runs first in the frame.
+  const index = source("src/index.ts");
+  const resetAt = index.indexOf("registerSystem(ScenarioResetSystem)");
+  const warmupAt = index.indexOf("registerSystem(GpuWarmupSystem)");
+  assert.ok(resetAt > 0 && warmupAt > 0);
+  assert.ok(
+    resetAt < warmupAt,
+    "ScenarioResetSystem must be registered before GpuWarmupSystem, or the " +
+      "pause lands a frame too late and a compile can still start during teardown",
+  );
+});

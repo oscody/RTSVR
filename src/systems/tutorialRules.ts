@@ -1,6 +1,7 @@
 import { canUnitAttack } from "./combatRules.ts";
 import { getBuildingSpec } from "./buildingCatalog.ts";
 import { getCraftSpec, getProductionSpec } from "./craftCatalog.ts";
+import { DEFAULT_RESOURCE_AMOUNT_PER_TRIP } from "./economyConstants.ts";
 import {
   TUTORIAL_DRILLS,
   type ArrowTarget,
@@ -19,12 +20,25 @@ import {
  * Design: `RTSVR_repos/devlog/plan/2026-08-09-Tutorial-System-Plan.md`.
  */
 
-/** Replacement cost of the only unit that generates income. */
-export const MINER_COST = 60;
-/** Replacement cost of the builder. */
-export const ASTRONAUT_COST = 35;
-/** Crystals per completed mining trip (mirrors DEFAULT_RESOURCE_AMOUNT_PER_TRIP). */
-export const CRYSTALS_PER_TRIP = 10;
+/**
+ * Replacement costs for the two units the recovery path can ask the player to
+ * rebuild, read from the catalog rather than restated.
+ *
+ * These were the literals 60 and 35 until 2026-09-03. Repricing the catalog
+ * that day left both stale, and neither is cosmetic: they drive `isStalled`
+ * (whether the tutorial offers a recovery at all), the `affordable` flag behind
+ * the tab pulse, and the cost shown on the recovery card. A stale copy tells
+ * the player to save 60 for a miner that costs 30 and withholds the highlight
+ * until they have done it.
+ *
+ * `?? 0` matches `drillCost`; a kind missing from the catalog is caught by
+ * {@link validateTutorialPricing} rather than silently priced at zero here.
+ */
+export const MINER_COST = getProductionSpec("miner")?.cost ?? 0;
+/** Replacement cost of the builder. See {@link MINER_COST}. */
+export const ASTRONAUT_COST = getProductionSpec("astronaut")?.cost ?? 0;
+/** Crystals per completed mining trip. */
+export const CRYSTALS_PER_TRIP = DEFAULT_RESOURCE_AMOUNT_PER_TRIP;
 
 /**
  * Everything the rules need, sampled from the world by TutorialSystem.
@@ -250,6 +264,19 @@ export function drillCost(drill: TutorialDrill): number {
   return spec?.cost ?? 0;
 }
 
+/**
+ * Crystals a `crystalsAtLeast` drill waits for before releasing its opponent.
+ *
+ * Falls back to the taught unit's catalog price, so repricing a unit moves its
+ * gate with it. Returns 0 for any other trigger kind — callers only reach this
+ * after matching on the kind, and 0 is the harmless answer for a drill with
+ * nothing to buy.
+ */
+export function drillCrystalGate(drill: TutorialDrill): number {
+  if (drill.trigger.kind !== "crystalsAtLeast") return 0;
+  return drill.trigger.amount ?? drillCost(drill);
+}
+
 /** Can the unit a drill teaches actually kill things? Turrets are buildings. */
 export function drillUnitCanFight(drill: TutorialDrill): boolean {
   if (!drill.create) return false;
@@ -284,9 +311,10 @@ export function validateDrills(
     //    no-fail guarantee is a hope rather than a property.
     if (drill.opponent && drill.trigger.kind === "crystalsAtLeast") {
       const cost = drillCost(drill);
-      if (drill.trigger.amount < cost) {
+      const gate = drillCrystalGate(drill);
+      if (gate < cost) {
         problems.push(
-          `drill "${drill.id}" releases at ${drill.trigger.amount} crystals but its unit costs ${cost}`,
+          `drill "${drill.id}" releases at ${gate} crystals but its unit costs ${cost}`,
         );
       }
     }
@@ -313,8 +341,44 @@ export function validateDrills(
         `drill "${drill.id}" needs a builder but no astronaut drill precedes it`,
       );
     }
+
+    // 5. Every drill that creates something must be priced by the catalog.
+    //    Since 2026-09-03 the crystal gate, the saving-toward card and the tab
+    //    pulse are all DERIVED from that price, so a kind the catalog does not
+    //    know would gate at 0 and pulse immediately — the drill would look
+    //    finished before the player did anything.
+    if (drill.create && drillCost(drill) <= 0) {
+      problems.push(
+        `drill "${drill.id}" creates "${drill.create.kind}", which the catalog does not price`,
+      );
+    }
   });
 
+  return problems;
+}
+
+/**
+ * The recovery path's two prices resolved to something usable.
+ *
+ * Deliberately **not** part of {@link validateDrills}: it inspects module
+ * constants rather than the list it is handed, so folding it in there let
+ * `validateDrills([oneDrill])` report problems about drills the caller never
+ * passed — and several tests assert an exact problem count.
+ *
+ * Both prices come from `getProductionSpec(...)?.cost ?? 0`, and 0 is the
+ * dangerous answer: `isStalled` would read as "can always afford a rebuild",
+ * so the tutorial would never offer recovery and never declare a dead end.
+ */
+export function validateTutorialPricing(): string[] {
+  const problems: string[] = [];
+  if (MINER_COST <= 0) {
+    problems.push("miner has no catalog price (MINER_COST resolved to 0)");
+  }
+  if (ASTRONAUT_COST <= 0) {
+    problems.push(
+      "astronaut has no catalog price (ASTRONAUT_COST resolved to 0)",
+    );
+  }
   return problems;
 }
 
@@ -496,7 +560,7 @@ function triggerMet(drill: TutorialDrill, snapshot: TutorialSnapshot): boolean {
     case "minerTrips":
       return snapshot.crystalsMined >= drill.trigger.count * CRYSTALS_PER_TRIP;
     case "crystalsAtLeast":
-      return snapshot.crystals >= drill.trigger.amount;
+      return snapshot.crystals >= drillCrystalGate(drill);
     case "lookedAt":
       // Accumulated looking, not "is looking right now". The gaze ring makes
       // this legible: a glance no longer completes the beat, and looking away
