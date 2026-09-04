@@ -186,8 +186,26 @@ export const MARS_RIM_THICKNESS_PER_BOARD_UNIT = 0.1392;
 export const GRID_OVERLAY_COLOR = 0x5d3024;
 export const GRID_OVERLAY_OPACITY = 0.5;
 export const GRID_OVERLAY_Y_OFFSET = 0.006;
-export const CRAFT_VISUAL_ELEVATION = TILE_SIZE * 0.90;
-export const ALIEN_DRAKE_VISUAL_ELEVATION = TILE_SIZE * 0.90;
+/**
+ * How high a hovering unit's MODEL floats above its ground anchor.
+ *
+ * Applied to the model inside the holder (`structures.ts`, `craftFactory.ts`),
+ * never to the entity itself — so the entity stays on the board and combat
+ * distance, which is a 3D `distanceTo` between entity positions, is unaffected
+ * by these. That separation is why `entityVisualElevation()` exists in
+ * `combatEffects.ts`: bolts have to add the offset back to aim at the body
+ * rather than the feet.
+ *
+ * Two constants with the same value, deliberately, so a flier can be moved
+ * without moving the other.
+ *
+ * Raised 0.90 -> 1.10 -> 1.50 -> 1.75 tiles on 2026-09-04. Everything downstream
+ * measures rather than restates it: health bars from the holder's bounds, the
+ * under-attack badge from the health bar, the interaction proxy from the offset
+ * passed to it, and the tutorial spotlight from the model's own box.
+ */
+export const CRAFT_VISUAL_ELEVATION = TILE_SIZE * 1.75;
+export const ALIEN_DRAKE_VISUAL_ELEVATION = TILE_SIZE * 1.75;
 export const CRAFT_ELEVATION_RISE_SECONDS = 0.65;
 
 export const PATH_DIRECTIONS = [

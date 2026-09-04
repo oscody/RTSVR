@@ -276,6 +276,10 @@ const subjectHeights = new WeakMap<Object3D, number>();
  * the second half. Placing a cone with the constant alone puts it at 0.258 on a
  * drake, which is still inside it.
  *
+ * (That worked example used the 0.90-tile elevation in force when it was
+ * written; the constant is 1.10 since 2026-09-04. The conclusion is unchanged,
+ * and this code measures rather than assumes — which is the point.)
+ *
  * A per-type table of model heights would work and would rot the first time an
  * asset was swapped. Measuring the model cannot.
  */
