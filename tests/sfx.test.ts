@@ -27,15 +27,20 @@ test("every catalog URL is in the manifest, byte-identical", () => {
   //
   // It is silent on desktop (the sound simply never plays) and total on device,
   // so nothing short of an assertion catches a typo here.
+  //
+  // Both sides are wrapped in `assetUrl(...)` since the GitHub Pages work, so
+  // the literal inside the call is what has to match. `SFX_URLS` still reads
+  // as a bare leading-slash path here because the node runner has no
+  // `import.meta.env`, which is exactly why `assetUrl` falls back to "".
   const manifest = index();
   for (const url of SFX_URLS) {
     assert.ok(
-      manifest.includes(`url: "${url}"`),
+      manifest.includes(`url: assetUrl("${url}")`),
       `${url} is in SFX_CATALOG but not in the index.ts manifest`,
     );
     assert.match(
       manifest,
-      new RegExp(`url: "${url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}",\\s*\\n\\s*type: AssetType\\.Audio`),
+      new RegExp(`url: assetUrl\\("${url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\\),\\s*\\n\\s*type: AssetType\\.Audio`),
       `${url} must be declared as AssetType.Audio`,
     );
   }

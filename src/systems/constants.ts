@@ -1,3 +1,5 @@
+import { assetUrl } from "../app/assetUrl.ts";
+
 export const GRID_SIZE = 24;
 export const TILE_SIZE = 0.18;
 export const BOARD_Y = 0.78;
@@ -497,8 +499,8 @@ export const UNDER_ATTACK_BANNER_CAUTION_ICON_BACKGROUND = "#2e1f05";
 // the prime suspect and PCM removes the question. `space-station` also ships
 // its alarm/hum loops as .wav. WAV additionally has no encoder padding, which
 // is what would otherwise put a gap at the loop point.
-export const UNDER_ATTACK_STING_SRC = "/audio/attack-alarm-sting.wav";
-export const UNDER_ATTACK_ALARM_SRC = "/audio/attack-alarm-loop.wav";
+export const UNDER_ATTACK_STING_SRC = assetUrl("/audio/attack-alarm-sting.wav");
+export const UNDER_ATTACK_ALARM_SRC = assetUrl("/audio/attack-alarm-loop.wav");
 export const UNDER_ATTACK_ALERT_VOLUME = 0.25;
 export const UNDER_ATTACK_STING_VOLUME = 0.45;
 export const UNDER_ATTACK_STING_COMMAND_CENTER_VOLUME = 0.7;

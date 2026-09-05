@@ -1,0 +1,54 @@
+# Build the production bundle and publish it to GitHub Pages.
+#
+# Adapted from the IWSDK build-and-deploy guide, with three changes this repo
+# needs:
+#
+#   1. The guide triggers on `main`. This repository's default branch is
+#      `master`; a workflow watching `main` would simply never run.
+#   2. The guide pins `node-version: '20'`. This repo pins 22.12.0 in `.nvmrc`,
+#      and `scripts/with-supported-node.sh` (which every npm script goes
+#      through) rejects anything below 20.19 / 22.12 / 24. Reading `.nvmrc`
+#      keeps CI and local builds on one version instead of two.
+#   3. `npm run typecheck && npm run test:unit` runs before the build. Pages
+#      serves whatever is uploaded, so a broken bundle would go live silently.
+#
+# NOTE: Pages must be enabled with source "GitHub Actions" in
+# Settings > Pages, and on a private repository that requires a paid plan.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: ["master"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a run finish rather than cancelling it mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: "./dist"
+      - id: deployment
+        uses: actions/deploy-pages@v4

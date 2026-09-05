@@ -38,6 +38,8 @@
  * consistent with the source aspect, which leaves nothing for `keepAspectRatio`
  * to override — no crop, no distortion, and every thumbnail bounded by its slot.
  */
+import { assetKey } from "../app/assetUrl.ts";
+
 
 /**
  * Intrinsic pixel dimensions, read from the PNG headers.
@@ -90,7 +92,13 @@ export function fitThumbnail(
   boxWidth: number,
   boxHeight: number,
 ): ThumbnailSize {
-  const aspect = INTRINSIC_ASPECT[src];
+  // `src` arrives as a fetchable URL — `./images/x.png` on a subpath deploy —
+  // but the table is keyed on the filesystem path, because its test reads
+  // `public/<key>` off disk to check the aspects against the real PNG headers.
+  // Without this every lookup would miss on a deployed build and every
+  // thumbnail would quietly fall back to a square box: a visual regression
+  // with no error attached to it.
+  const aspect = INTRINSIC_ASPECT[assetKey(src)];
   if (!aspect || !Number.isFinite(aspect)) {
     return { width: boxWidth, height: boxHeight };
   }
