@@ -32,6 +32,32 @@ test("the landing markup is authored in HTML, hidden by default", () => {
   assert.match(rule, /display: none/);
 });
 
+test("the analytics tag ships, with the right property and non-blocking", () => {
+  // Analytics fails silently in both directions: a dropped tag collects
+  // nothing and says nothing, and a wrong measurement ID reports into someone
+  // else's property. Neither surfaces until you go looking at a dashboard
+  // weeks later, so it is pinned here.
+  const html = read("index.html");
+  assert.match(html, /googletagmanager\.com\/gtag\/js\?id=G-GS0ZJB7BBH/);
+  assert.match(html, /gtag\('config', 'G-GS0ZJB7BBH'\)/);
+
+  // One property only. Two config calls means double-counted sessions.
+  const ids = html.match(/G-[A-Z0-9]+/g) ?? [];
+  assert.equal(new Set(ids).size, 1, `more than one measurement ID: ${ids}`);
+
+  // `async`, or the loader blocks first paint on a third-party host — this is
+  // a game whose first impression is a loading screen.
+  const loader = /<script[^>]*googletagmanager[^>]*>/.exec(html)?.[0] ?? "";
+  assert.match(loader, /\basync\b/);
+
+  // In <head>, before the app module, so a session is recorded even if the
+  // player closes the tab during the asset preload.
+  assert.ok(
+    html.indexOf("googletagmanager") < html.indexOf("src=\"/src/index.ts\""),
+    "the tag must load ahead of the app entry point",
+  );
+});
+
 test("the landing sits below the loading overlay", () => {
   const html = read("index.html");
   const z = (sel: string): number =>
