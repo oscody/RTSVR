@@ -7,6 +7,17 @@
       content="width=device-width, initial-scale=1, shrink-to-fit=no"
     />
     <title>RTSVR</title>
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-GS0ZJB7BBH"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-GS0ZJB7BBH');
+    </script>
+
     <style>
       html,
       body,
@@ -159,23 +170,6 @@
         background: #a5e4ff;
       }
 
-      #explore-button {
-        padding: 10px 22px;
-        background: transparent;
-        color: #cfe3ec;
-        font-size: 13px;
-        font-weight: 600;
-        letter-spacing: 0.08em;
-        border: 1px solid rgba(207, 227, 236, 0.45);
-        border-radius: 6px;
-        cursor: pointer;
-      }
-
-      #explore-button:hover {
-        color: #ffffff;
-        border-color: rgba(255, 255, 255, 0.8);
-      }
-
       #xr-note {
         margin: 0;
         color: #7c93a1;
@@ -210,7 +204,6 @@
     <div id="landing">
       <p id="xr-note" hidden>No headset detected</p>
       <button id="enter-vr-button" type="button" hidden>ENTER VR</button>
-      <button id="explore-button" type="button">EXPLORE IN BROWSER</button>
       <div id="landing-footer"></div>
     </div>
     <div id="loading-screen">

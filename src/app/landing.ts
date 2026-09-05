@@ -1,6 +1,6 @@
 import { VisibilityState, launchXR, type World } from "@iwsdk/core";
 import { initialLoad } from "./initialLoad.js";
-import { matchAwaitingStart, startMatch } from "../systems/matchStart.js";
+import { matchAwaitingStart } from "../systems/matchStart.js";
 import { ActionKind, logAction } from "../systems/actionLog.js";
 
 /**
@@ -48,7 +48,6 @@ export function setupLanding(world: World): void {
   landing = document.getElementById("landing");
   if (!landing) return;
   const enterButton = document.getElementById("enter-vr-button");
-  const exploreButton = document.getElementById("explore-button");
   const note = document.getElementById("xr-note");
 
   // ENTER VR: request the session and **do not touch the gate**.
@@ -78,13 +77,6 @@ export function setupLanding(world: World): void {
     // this line is our button; one without it is the pill.
     logAction(ActionKind.Xr, "launch requested via=landing-button");
     launchXR(world);
-  });
-
-  // Explore in browser: the desktop player's start. RTSVR plays flat, and
-  // without this a machine with no headset has no way to begin at all.
-  exploreButton?.addEventListener("click", () => {
-    startMatch("landing-explore");
-    applyLandingChrome();
   });
 
   void navigator.xr

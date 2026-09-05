@@ -146,6 +146,7 @@ import {
 import { traceRead } from "./trace.js";
 import { InteractionStage, Reason, State, Terminal } from "./traceIds.js";
 import { trackResource, tracked } from "./resourceLifetime.js";
+import { assetUrl } from "../app/assetUrl.ts";
 
 
 /**
@@ -1157,7 +1158,12 @@ export class TabletSystem extends createSystem({
         TABLET_BUILD_THUMB_WIDTH,
         TABLET_BUILD_THUMB_HEIGHT,
       );
+      // `src` as well as the size. The Build tab's four images were the only
+      // ones left as static markup, so they were the only ones a subpath
+      // deploy could not rewrite — everything else already takes its `src`
+      // from these same catalogs. Now they all do.
       this.setProps(`build-image-${kind}`, image, {
+        src: image,
         width: fit.width,
         height: fit.height,
       });
@@ -1853,14 +1859,14 @@ export class TabletSystem extends createSystem({
 
   private unitImage(unit: Entity, kind: string): string {
     if (kind === "turret") {
-      return getBuildingSpec("turret")?.image ?? "/images/turret_single.png";
+      return getBuildingSpec("turret")?.image ?? assetUrl("/images/turret_single.png");
     }
     if (kind === "astronaut") {
       return unit.object3D?.name.includes("B")
-        ? "/images/astronautB.png"
-        : "/images/astronautA.png";
+        ? assetUrl("/images/astronautB.png")
+        : assetUrl("/images/astronautA.png");
     }
-    return getCraftSpec(kind)?.image ?? "/images/rover.png";
+    return getCraftSpec(kind)?.image ?? assetUrl("/images/rover.png");
   }
 
   // Phase A dirty guard. `setProperties` allocates and dirties UIKit layout, and

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 interface GlbPrimitive {
@@ -153,30 +153,35 @@ function geometryContract(primitive: GlbPrimitive): object {
   };
 }
 
+/**
+ * Whether the uncompressed original for `spec` is on this machine.
+ *
+ * The sources live in the SIBLING repository (`../../RTSVR_repos/animation/`),
+ * which no clone of this one has — CI checks out this repository alone, so the
+ * comparison halves below cannot run there. They are skipped rather than
+ * deleted: on a machine that has both trees they are the only thing proving the
+ * optimizer did not silently drop geometry.
+ *
+ * Everything that reads only the committed output still runs everywhere. That
+ * split is the point — a blanket skip would have taken real CI coverage with it.
+ */
+function sourceMissing(spec: AssetSpec): string | false {
+  return existsSync(new URL(spec.source, import.meta.url))
+    ? false
+    : `uncompressed source not on this machine (${spec.source})`;
+}
+
 for (const spec of ASSETS) {
-  test(`${spec.kind} preserves geometry, nodes, and animations`, () => {
-    const source = readGlbJson(spec.source);
+  test(`${spec.kind} output matches its recorded optimization contract`, () => {
     const output = readGlbJson(spec.output);
 
-    assert.deepEqual(source.skins ?? [], []);
     assert.deepEqual(output.skins ?? [], []);
-    assert.equal(reachablePrimitiveCount(source), spec.primitives);
     assert.equal(reachablePrimitiveCount(output), spec.primitives);
-    assert.equal(estimatedRuntimeMeshCount(source), spec.before);
     assert.equal(estimatedRuntimeMeshCount(output), spec.after);
     assert.deepEqual(
       output.animations.map(({ name }) => name),
       spec.clips,
     );
-    assert.deepEqual(output.nodes, source.nodes);
-    assert.deepEqual(output.animations, source.animations);
-    assert.equal(output.meshes.length, source.meshes.length);
-    output.meshes.forEach((mesh, meshIndex) => {
-      assert.deepEqual(
-        mesh.primitives.map(geometryContract),
-        source.meshes[meshIndex].primitives.map(geometryContract),
-      );
-    });
     for (const animation of output.animations) {
       assert.equal(
         animation.channels.every((channel) => output.nodes[channel.target.node]),
@@ -209,7 +214,48 @@ for (const spec of ASSETS) {
       );
     }
   });
+
+  test(
+    `${spec.kind} preserves the source geometry, nodes, and animations`,
+    { skip: sourceMissing(spec) },
+    () => {
+      // The half that needs BOTH trees. Nothing here can be inferred from the
+      // committed output alone: it is the only check that the optimizer moved
+      // materials without moving a vertex, a node, or an animation channel.
+      const source = readGlbJson(spec.source);
+      const output = readGlbJson(spec.output);
+
+      assert.deepEqual(source.skins ?? [], []);
+      assert.equal(reachablePrimitiveCount(source), spec.primitives);
+      assert.equal(estimatedRuntimeMeshCount(source), spec.before);
+      assert.deepEqual(output.nodes, source.nodes);
+      assert.deepEqual(output.animations, source.animations);
+      assert.equal(output.meshes.length, source.meshes.length);
+      output.meshes.forEach((mesh, meshIndex) => {
+        assert.deepEqual(
+          mesh.primitives.map(geometryContract),
+          source.meshes[meshIndex].primitives.map(geometryContract),
+        );
+      });
+    },
+  );
 }
+
+test("the skip is conditional, not a way to switch the comparison off", () => {
+  // Without this, changing `sourceMissing` to return a reason unconditionally
+  // would silently disable the source comparison on the machines that CAN run
+  // it — and the suite would still report all green.
+  const spec = ASSETS[0];
+  assert.equal(
+    sourceMissing({ ...spec, source: spec.output }),
+    false,
+    "a source that exists on disk must not be skipped",
+  );
+  assert.ok(
+    sourceMissing({ ...spec, source: "../does-not-exist/nothing.glb" }),
+    "a missing source must yield a reason string",
+  );
+});
 
 test("strong alien atlas preserves every material finish in embedded textures", () => {
   const output = readGlbJson("../public/gltf/alien_strong.glb");

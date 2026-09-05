@@ -56,131 +56,132 @@ import { placeViewpoint } from "./systems/viewpoint.js";
 import { TraceDiagnosticsSystem } from "./systems/traceDiagnosticsSystem.js";
 import { SfxSystem } from "./systems/sfx.js";
 import { WaveSystem } from "./systems/wave.js";
+import { assetUrl } from "./app/assetUrl.ts";
 
 const assets: AssetManifest = {
   commandCenter: {
-    url: "/gltf/command_center.glb",
+    url: assetUrl("/gltf/command_center.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   aircraft_factory: {
-    url: "/gltf/kenney_style_aircraft_factory.glb",
+    url: assetUrl("/gltf/kenney_style_aircraft_factory.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   hangarLargeA: {
-    url: "/gltf/kenney-space-kit/hangar_largeA.glb",
+    url: assetUrl("/gltf/kenney-space-kit/hangar_largeA.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   rock: {
-    url: "/gltf/terrain/rock.glb",
+    url: assetUrl("/gltf/terrain/rock.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   rockCrystals: {
-    url: "/gltf/terrain/rock_crystals.glb",
+    url: assetUrl("/gltf/terrain/rock_crystals.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   rockCrystalsLargeA: {
-    url: "/gltf/terrain/rock_crystalsLargeA.glb",
+    url: assetUrl("/gltf/terrain/rock_crystalsLargeA.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   rockCrystalsLargeB: {
-    url: "/gltf/terrain/rock_crystalsLargeB.glb",
+    url: assetUrl("/gltf/terrain/rock_crystalsLargeB.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   rockLargeA: {
-    url: "/gltf/terrain/rock_largeA.glb",
+    url: assetUrl("/gltf/terrain/rock_largeA.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   rockLargeB: {
-    url: "/gltf/terrain/rock_largeB.glb",
+    url: assetUrl("/gltf/terrain/rock_largeB.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   rocksSmallA: {
-    url: "/gltf/terrain/rocks_smallA.glb",
+    url: assetUrl("/gltf/terrain/rocks_smallA.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   rocksSmallB: {
-    url: "/gltf/terrain/rocks_smallB.glb",
+    url: assetUrl("/gltf/terrain/rocks_smallB.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   astronautA: {
-    url: "/gltf/astronautA.glb",
+    url: assetUrl("/gltf/astronautA.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   astronautAAnimated: {
-    url: "/gltf/astronautA_A.glb",
+    url: assetUrl("/gltf/astronautA_A.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   astronautB: {
-    url: "/gltf/astronautB.glb",
+    url: assetUrl("/gltf/astronautB.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
-  alien: { url: "/gltf/alien.glb", type: AssetType.GLTF, priority: "critical" },
+  alien: { url: assetUrl("/gltf/alien.glb"), type: AssetType.GLTF, priority: "critical" },
   alienWalkingSlam: {
-    url: "/gltf/alien_walking_slam_no_fx.glb",
+    url: assetUrl("/gltf/alien_walking_slam_no_fx.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   alienDrakeFlyingAttack: {
-    url: "/gltf/alien_drake.glb",
+    url: assetUrl("/gltf/alien_drake.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   strongAlienMech: {
-    url: "/gltf/alien_strong.glb",
+    url: assetUrl("/gltf/alien_strong.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   craftMinerAnimated: {
-    url: "/gltf/craft/craft_miner_A.glb",
+    url: assetUrl("/gltf/craft/craft_miner_A.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   craftMiner: {
-    url: "/gltf/craft/craft_miner.glb",
+    url: assetUrl("/gltf/craft/craft_miner.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   craftFighter: {
-    url: "/gltf/craft/craft_racerA.glb",
+    url: assetUrl("/gltf/craft/craft_racerA.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   rover: {
-    url: "/gltf/craft/rover.glb",
+    url: assetUrl("/gltf/craft/rover.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   turretSingle: {
-    url: "/gltf/equipment/turret_single.glb",
+    url: assetUrl("/gltf/equipment/turret_single.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   meteor: {
-    url: "/gltf/terrain/meteor/meteor.glb",
+    url: assetUrl("/gltf/terrain/meteor/meteor.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   meteorDetailed: {
-    url: "/gltf/terrain/meteor/meteor_detailed.glb",
+    url: assetUrl("/gltf/terrain/meteor/meteor_detailed.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
   meteorHalf: {
-    url: "/gltf/terrain/meteor/meteor_half.glb",
+    url: assetUrl("/gltf/terrain/meteor/meteor_half.glb"),
     type: AssetType.GLTF,
     priority: "critical",
   },
@@ -188,12 +189,12 @@ const assets: AssetManifest = {
   // (UNDER_ATTACK_*_SRC) so playback reuses the preloaded buffer. WAV because
   // compressed formats produced no sound on Quest — see the constants note.
   alertSting: {
-    url: "/audio/attack-alarm-sting.wav",
+    url: assetUrl("/audio/attack-alarm-sting.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   alertAlarm: {
-    url: "/audio/attack-alarm-loop.wav",
+    url: assetUrl("/audio/attack-alarm-loop.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
@@ -202,82 +203,82 @@ const assets: AssetManifest = {
   // device. Generated by `scripts/generate-audio.mjs`; preview and tune with
   // `scripts/audio-preview.html`.
   sfxClick: {
-    url: "/audio/sfx-click.wav",
+    url: assetUrl("/audio/sfx-click.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   sfxTurretZap: {
-    url: "/audio/sfx-turret-zap.wav",
+    url: assetUrl("/audio/sfx-turret-zap.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   sfxAlienDeath: {
-    url: "/audio/sfx-alien-death.wav",
+    url: assetUrl("/audio/sfx-alien-death.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   sfxPlasma: {
-    url: "/audio/sfx-plasma.wav",
+    url: assetUrl("/audio/sfx-plasma.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   sfxLaser: {
-    url: "/audio/sfx-laser.wav",
+    url: assetUrl("/audio/sfx-laser.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   sfxMelee: {
-    url: "/audio/sfx-melee.wav",
+    url: assetUrl("/audio/sfx-melee.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   sfxFriendlyDeath: {
-    url: "/audio/sfx-friendly-death.wav",
+    url: assetUrl("/audio/sfx-friendly-death.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   sfxCrystal: {
-    url: "/audio/sfx-crystal.wav",
+    url: assetUrl("/audio/sfx-crystal.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   sfxDeposit: {
-    url: "/audio/sfx-deposit.wav",
+    url: assetUrl("/audio/sfx-deposit.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   sfxPlace: {
-    url: "/audio/sfx-place.wav",
+    url: assetUrl("/audio/sfx-place.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   sfxBuildDone: {
-    url: "/audio/sfx-build-done.wav",
+    url: assetUrl("/audio/sfx-build-done.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   sfxCraftReady: {
-    url: "/audio/sfx-craft-ready.wav",
+    url: assetUrl("/audio/sfx-craft-ready.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   sfxDemolish: {
-    url: "/audio/sfx-demolish.wav",
+    url: assetUrl("/audio/sfx-demolish.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   sfxWaveSiren: {
-    url: "/audio/sfx-wave-siren.wav",
+    url: assetUrl("/audio/sfx-wave-siren.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   sfxVictory: {
-    url: "/audio/sfx-victory.wav",
+    url: assetUrl("/audio/sfx-victory.wav"),
     type: AssetType.Audio,
     priority: "background",
   },
   sfxDefeat: {
-    url: "/audio/sfx-defeat.wav",
+    url: assetUrl("/audio/sfx-defeat.wav"),
     type: AssetType.Audio,
     priority: "background",
   },

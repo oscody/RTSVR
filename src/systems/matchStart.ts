@@ -16,15 +16,24 @@ import { resetWaveTransitionLog } from "./waveTransitionLog.js";
  *
  * ## Why more than one trigger
  *
- * There are three ways a player can begin, and all of them have to release the
- * gate or the game looks frozen:
+ * Both remaining ways in are immersive, and both have to release the gate or
+ * the game looks frozen:
  *
- * 1. The landing page's `ENTER VR` button — calls {@link startMatch} directly.
- * 2. The landing page's `Explore in browser` button — same call. RTSVR is
- *    playable flat, so a VR-only release would strand desktop players.
- * 3. **The browser's own `Enter XR` pill.** `xr.offer: "always"` means the
+ * 1. The landing page's `ENTER VR` button — requests the session and lets the
+ *    visibility change release the gate, never calling {@link startMatch}
+ *    itself. See the comment on that handler for why.
+ * 2. **The browser's own `Enter XR` pill.** `xr.offer: "always"` means the
  *    headset can enter a session without ever touching our markup, which
- *    bypasses both buttons — hence {@link attachMatchStart}.
+ *    bypasses the button — hence {@link attachMatchStart}.
+ *
+ * **There is deliberately no flat route.** An `Explore in browser` button
+ * existed and released the gate with `via=landing-explore`; it was removed
+ * 2026-09-05 on request. The consequence is real and intended: a machine
+ * without a headset can now load the page and cannot begin. Anything below
+ * that still describes a desktop start is describing history — the frame-order
+ * bug in `wave.ts` was measured on that route and its guard is kept, because
+ * the guard is about a stale tutorial gate rather than about which button was
+ * pressed.
  *
  * Idempotent on purpose: several of these can fire for one entry, and a restart
  * that is already `playing` must not be knocked back to the start gate.

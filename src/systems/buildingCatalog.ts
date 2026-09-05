@@ -1,3 +1,5 @@
+import { assetUrl } from "../app/assetUrl.ts";
+
 export interface BuildingSpec {
   kind: string;
   label: string;
@@ -15,7 +17,7 @@ export const BUILDING_CATALOG: readonly BuildingSpec[] = [
     kind: "hangar",
     label: "Hangar",
     asset: "hangarLargeA",
-    image: "/images/hangar_largeA.png",
+    image: assetUrl("/images/hangar_largeA.png"),
     widthTiles: 2,
     cost: 40,
     duration: 4,
@@ -25,7 +27,7 @@ export const BUILDING_CATALOG: readonly BuildingSpec[] = [
     kind: "factory",
     label: "Aircraft Factory",
     asset: "aircraft_factory",
-    image: "/images/kenney_style_aircraft_factory_preview.png",
+    image: assetUrl("/images/kenney_style_aircraft_factory_preview.png"),
     widthTiles: 3,
     cost: 60,
     duration: 6,
@@ -35,7 +37,7 @@ export const BUILDING_CATALOG: readonly BuildingSpec[] = [
     kind: "turret",
     label: "Turret",
     asset: "turretSingle",
-    image: "/images/turret_single.png",
+    image: assetUrl("/images/turret_single.png"),
     widthTiles: 1,
     cost: 80,
     duration: 3,

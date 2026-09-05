@@ -181,8 +181,11 @@ test("ENTER VR records intent WITHOUT releasing the gate", () => {
   // browser's own pill: both report via=xr-session. The intent line is what
   // tells them apart without touching the gate.
   assert.match(handler, /logAction\(ActionKind\.Xr, "launch requested via=landing-button"\)/);
-  // EXPLORE IN BROWSER is the one route that legitimately releases it.
-  assert.match(landing, /startMatch\("landing-explore"\)/);
+  // There used to be a second landing route — EXPLORE IN BROWSER — and it was
+  // the one that legitimately released the gate. It was removed 2026-09-05, so
+  // no landing handler releases it at all now; `attachMatchStart` does, on the
+  // visibility change.
+  assert.doesNotMatch(landing, /startMatch\("landing-explore"\)/);
 });
 
 test("the pre-start guard lives in `held`, where it is defined", () => {

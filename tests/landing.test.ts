@@ -22,7 +22,7 @@ test("the landing markup is authored in HTML, hidden by default", () => {
   const html = read("index.html");
   assert.match(html, /id="landing"/);
   assert.match(html, /id="enter-vr-button"[^>]*hidden/);
-  assert.match(html, /id="explore-button"/);
+  assert.doesNotMatch(html, /id="explore-button"/);
   assert.match(html, /id="xr-note"[^>]*hidden/);
   // D7: the slot stays, the badge does not ship yet.
   assert.match(html, /id="landing-footer"/);
@@ -30,6 +30,32 @@ test("the landing markup is authored in HTML, hidden by default", () => {
   // #landing is display:none until .visible is applied.
   const rule = /#landing \{[^}]*\}/.exec(html)?.[0] ?? "";
   assert.match(rule, /display: none/);
+});
+
+test("the analytics tag ships, with the right property and non-blocking", () => {
+  // Analytics fails silently in both directions: a dropped tag collects
+  // nothing and says nothing, and a wrong measurement ID reports into someone
+  // else's property. Neither surfaces until you go looking at a dashboard
+  // weeks later, so it is pinned here.
+  const html = read("index.html");
+  assert.match(html, /googletagmanager\.com\/gtag\/js\?id=G-GS0ZJB7BBH/);
+  assert.match(html, /gtag\('config', 'G-GS0ZJB7BBH'\)/);
+
+  // One property only. Two config calls means double-counted sessions.
+  const ids = html.match(/G-[A-Z0-9]+/g) ?? [];
+  assert.equal(new Set(ids).size, 1, `more than one measurement ID: ${ids}`);
+
+  // `async`, or the loader blocks first paint on a third-party host — this is
+  // a game whose first impression is a loading screen.
+  const loader = /<script[^>]*googletagmanager[^>]*>/.exec(html)?.[0] ?? "";
+  assert.match(loader, /\basync\b/);
+
+  // In <head>, before the app module, so a session is recorded even if the
+  // player closes the tab during the asset preload.
+  assert.ok(
+    html.indexOf("googletagmanager") < html.indexOf("src=\"/src/index.ts\""),
+    "the tag must load ahead of the app entry point",
+  );
 });
 
 test("the landing sits below the loading overlay", () => {
@@ -40,14 +66,25 @@ test("the landing sits below the loading overlay", () => {
   assert.ok(z("#landing") < z("#loading-screen"));
 });
 
-test("desktop always gets a way to start", () => {
+test("the landing page is VR-only — there is no flat route in", () => {
+  // This REVERSES what this file used to assert. The old test read "desktop
+  // always gets a way to start", because RTSVR plays flat and a VR-only
+  // landing page turns a working flat build into an apparent dead end. That
+  // reasoning was sound and is now overridden on request (2026-09-05).
+  //
+  // The consequence is deliberate: a machine with no headset can load the page
+  // and cannot begin. Pinned here so nobody restores the button by accident
+  // while thinking they are fixing a bug — and so that anyone who wants it back
+  // has to delete this test and read why it exists.
   const html = read("index.html");
   const landing = read("src/app/landing.ts");
-  // RTSVR plays flat. A VR-only landing page turns a working flat build into an
-  // apparent dead end, and a machine with no headset could not begin at all.
-  assert.doesNotMatch(html, /id="explore-button"[^>]*hidden/);
-  assert.match(landing, /exploreButton\?\.addEventListener\("click"/);
-  assert.match(landing, /startMatch\("landing-explore"\)/);
+  assert.doesNotMatch(html, /explore-button/, "markup, styles and all");
+  assert.doesNotMatch(landing, /exploreButton/);
+  assert.doesNotMatch(
+    code("src/app/landing.ts"),
+    /startMatch\(/,
+    "no landing handler may release the gate; the visibility change does it",
+  );
 });
 
 test("capability detection does not use world.xrEnabled", () => {
@@ -81,12 +118,17 @@ test("ENTER VR must NOT start the match itself", () => {
   assert.match(enter, /launchXR\(world\)/);
 });
 
-test("the desktop button is what releases the gate on the flat path", () => {
-  const landing = code("src/app/landing.ts");
-  const explore = /exploreButton\?\.addEventListener[\s\S]*?\}\);/.exec(landing)?.[0] ?? "";
-  // Labelled, so the action timeline records which of the three entry routes
-  // released the gate.
-  assert.match(explore, /startMatch\("landing-explore"\)/);
+test("nothing anywhere still starts a match as landing-explore", () => {
+  // The label survived in comments describing the frame-order bug it exposed,
+  // which is fine — that history is still true. What must not survive is a
+  // live call, in any file.
+  for (const path of ["src/app/landing.ts", "src/systems/matchStart.ts"]) {
+    assert.doesNotMatch(
+      code(path),
+      /startMatch\("landing-explore"\)/,
+      `${path} still releases the gate on the removed flat route`,
+    );
+  }
 });
 
 test("every XR entry route starts the match at the same moment", () => {

@@ -17,6 +17,7 @@
  *
  * Design: `RTSVR_repos/devlog/plan/2026-08-09-Game-Audio-Plan.md`.
  */
+import { assetUrl } from "../app/assetUrl.ts";
 
 export interface SfxSpec {
   /** Byte-identical to the manifest URL. Never the manifest key. */
@@ -60,7 +61,7 @@ export const SFX_CATALOG = {
    * an event. One voice: a second click should retrigger, not layer.
    */
   click: {
-    url: "/audio/sfx-click.wav",
+    url: assetUrl("/audio/sfx-click.wav"),
     volume: 0.35,
     voices: 1,
     cooldownMs: 40,
@@ -71,7 +72,7 @@ export const SFX_CATALOG = {
    * what stops a bank of turrets smearing into one continuous tone.
    */
   turretZap: {
-    url: "/audio/sfx-turret-zap.wav",
+    url: assetUrl("/audio/sfx-turret-zap.wav"),
     volume: 0.5,
     voices: 3,
     cooldownMs: 70,
@@ -82,21 +83,21 @@ export const SFX_CATALOG = {
    * clear ones beat twelve overlapping.
    */
   alienDeath: {
-    url: "/audio/sfx-alien-death.wav",
+    url: assetUrl("/audio/sfx-alien-death.wav"),
     volume: 0.55,
     voices: 2,
     cooldownMs: 120,
   },
   /** Fighter's paired cannons. Fatter than the turret so a mixed volley reads as two weapons. */
   plasma: {
-    url: "/audio/sfx-plasma.wav",
+    url: assetUrl("/audio/sfx-plasma.wav"),
     volume: 0.45,
     voices: 3,
     cooldownMs: 70,
   },
   /** Astronaut rifle. Thin and short, so it cuts through a volley without adding weight. */
   laser: {
-    url: "/audio/sfx-laser.wav",
+    url: assetUrl("/audio/sfx-laser.wav"),
     volume: 0.4,
     voices: 3,
     cooldownMs: 70,
@@ -107,7 +108,7 @@ export const SFX_CATALOG = {
    * combat cooldown. Thirty simultaneous thuds is noise, not information.
    */
   melee: {
-    url: "/audio/sfx-melee.wav",
+    url: assetUrl("/audio/sfx-melee.wav"),
     volume: 0.4,
     voices: 2,
     cooldownMs: 110,
@@ -117,7 +118,7 @@ export const SFX_CATALOG = {
    * voice budget: it must not be masked by the fight that caused it.
    */
   friendlyDeath: {
-    url: "/audio/sfx-friendly-death.wav",
+    url: assetUrl("/audio/sfx-friendly-death.wav"),
     volume: 0.7,
     voices: 2,
     cooldownMs: 150,
@@ -131,21 +132,21 @@ export const SFX_CATALOG = {
 
   /** A miner has filled up. Fires on a loop all match, so it is the quietest cue here. */
   crystal: {
-    url: "/audio/sfx-crystal.wav",
+    url: assetUrl("/audio/sfx-crystal.wav"),
     volume: 0.22,
     voices: 2,
     cooldownMs: 250,
   },
   /** Crystals arriving at the base. Rising where the pickup falls — the pair reads as a round trip. */
   deposit: {
-    url: "/audio/sfx-deposit.wav",
+    url: assetUrl("/audio/sfx-deposit.wav"),
     volume: 0.3,
     voices: 2,
     cooldownMs: 250,
   },
   /** A site staked out. A decision, not an impact. */
   place: {
-    url: "/audio/sfx-place.wav",
+    url: assetUrl("/audio/sfx-place.wav"),
     volume: 0.4,
     voices: 1,
     cooldownMs: 200,
@@ -155,21 +156,21 @@ export const SFX_CATALOG = {
    * bank. Loud enough to carry over a fight, because it usually lands in one.
    */
   buildDone: {
-    url: "/audio/sfx-build-done.wav",
+    url: assetUrl("/audio/sfx-build-done.wav"),
     volume: 0.52,
     voices: 1,
     cooldownMs: 200,
   },
   /** A craft rolling out. Shares the build-done language without repeating it. */
   craftReady: {
-    url: "/audio/sfx-craft-ready.wav",
+    url: assetUrl("/audio/sfx-craft-ready.wav"),
     volume: 0.42,
     voices: 1,
     cooldownMs: 200,
   },
   /** Destructive but voluntary — heavy and final rather than violent. */
   demolish: {
-    url: "/audio/sfx-demolish.wav",
+    url: assetUrl("/audio/sfx-demolish.wav"),
     volume: 0.45,
     voices: 1,
     cooldownMs: 200,
@@ -193,21 +194,21 @@ export const SFX_CATALOG = {
    * sustained siren would still be wailing through the fight it announced.
    */
   waveSiren: {
-    url: "/audio/sfx-wave-siren.wav",
+    url: assetUrl("/audio/sfx-wave-siren.wav"),
     volume: 0.34,
     voices: 1,
     cooldownMs: 1000,
   },
   /** Cleared the last wave. The only fully consonant sound in the bank. */
   victory: {
-    url: "/audio/sfx-victory.wav",
+    url: assetUrl("/audio/sfx-victory.wav"),
     volume: 0.9,
     voices: 1,
     cooldownMs: 1000,
   },
   /** Command centre lost. Slow decay, so it outlasts the moment rather than punctuating it. */
   defeat: {
-    url: "/audio/sfx-defeat.wav",
+    url: assetUrl("/audio/sfx-defeat.wav"),
     volume: 0.9,
     voices: 1,
     cooldownMs: 1000,
