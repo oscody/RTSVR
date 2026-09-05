@@ -2,6 +2,21 @@ import { Entity, createSystem } from "@iwsdk/core";
 import { GRID_SIZE, worldToGrid } from "./board.js";
 import { triggerCommandCenterDepositDoors } from "./commandCenterAnimation.js";
 import {
+  CARGO_RETREAT_SECONDS,
+  CARGO_REVEAL_SECONDS,
+  CARGO_TRANSITION_START_SCALE,
+  NODE_DEPLETION_END_SCALE,
+  NODE_DEPLETION_SECONDS,
+  NODE_DEPLETION_SINK,
+} from "./constants.js";
+import { emitDepositVfx, emitMiningLoadedVfx } from "./gameplayEffects.js";
+import {
+  settleObject,
+  startRetreat,
+  startReveal,
+} from "./objectTransitions.js";
+import { disableModelRaycast } from "./structures.js";
+import {
   DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
   MINING_GATHER_TIME_SECONDS,
 } from "./economyConstants.js";
@@ -155,6 +170,12 @@ export class MiningSystem extends createSystem({
         );
         traceDecision(Reason.Deposited, deposited, miner.index, corr);
         trackMiningDeposit(revision, corr);
+        if (deposited > 0) {
+          // Only a credited, positive deposit. Not `baseUnavailable`, not a
+          // zero-value cycle, not reset cleanup — this branch runs after the
+          // stockpile write that already proved the crystals arrived.
+          emitDepositVfx(boardState.commandCenter);
+        }
         const stats = boardState.gameStats;
         if (stats && deposited > 0) {
           stats.setValue(
@@ -171,6 +192,10 @@ export class MiningSystem extends createSystem({
       }
 
       if (transition === "loadedCargo") {
+        // Keyed to the TRANSITION, not the miner's stage: a miner sits in one
+        // stage across many frames, and stage-driven effects re-fire on every
+        // one of them.
+        emitMiningLoadedVfx(node);
         this.setCargoVisible(miner, true);
         this.issueStoredOrder(miner, "depositX", "depositY");
       } else if (transition === "deposited") {
@@ -277,7 +302,7 @@ export class MiningSystem extends createSystem({
     miner.setValue(MinerState, "timer", 0);
     if (clearCargo) {
       miner.setValue(MinerState, "cargo", 0);
-      this.setCargoVisible(miner, false);
+      this.setCargoVisible(miner, false, true);
     }
     miner.setValue(MinerState, "target", null);
     miner.setValue(MinerState, "targetX", -1);
@@ -307,15 +332,54 @@ export class MiningSystem extends createSystem({
     );
   }
 
-  private setCargoVisible(miner: Entity, visible: boolean): void {
+  /**
+   * Show or hide a miner's crystal cargo.
+   *
+   * `immediate` is for teardown — a miner that lost its node or its base is
+   * not mid-story, and animating cargo off a unit the player has stopped
+   * watching is motion for nothing. The round-trip paths animate.
+   */
+  private setCargoVisible(
+    miner: Entity,
+    visible: boolean,
+    immediate = false,
+  ): void {
     const cargo = boardState.cargoVisualByUnit.get(miner.index);
-    if (cargo) cargo.visible = visible;
+    if (!cargo) return;
+    if (immediate) {
+      settleObject(cargo, visible);
+    } else if (visible) {
+      startReveal(cargo, CARGO_REVEAL_SECONDS, CARGO_TRANSITION_START_SCALE);
+    } else {
+      startRetreat(cargo, CARGO_RETREAT_SECONDS, CARGO_TRANSITION_START_SCALE);
+    }
   }
 
+  /**
+   * An emptied crystal node leaves the board.
+   *
+   * Order matters: everything the RULES depend on happens first and instantly
+   * — the tile opens, and the node stops being a ray target — and only then
+   * does the visual take a third of a second to shrink away. A miner
+   * retargeting onto this tile in the same frame must not be blocked by a
+   * rock that is still politely disappearing.
+   */
   private exhaustNode(node: Entity): void {
-    if (node.object3D) node.object3D.visible = false;
     const x = node.getValue(ResourceNode, "x") ?? -1;
     const y = node.getValue(ResourceNode, "y") ?? -1;
     setTerrainAt(x, y, "open");
+    const object = node.object3D;
+    if (!object) return;
+    // Scenery keeps its own raycast (it has no interaction proxy to take
+    // over), so a departing node would stay ray-testable for as long as it is
+    // visible. Nothing currently points at resource nodes, which makes this
+    // cheap insurance rather than a fix for an observed bug.
+    disableModelRaycast(object);
+    startRetreat(
+      object,
+      NODE_DEPLETION_SECONDS,
+      NODE_DEPLETION_END_SCALE,
+      NODE_DEPLETION_SINK,
+    );
   }
 }

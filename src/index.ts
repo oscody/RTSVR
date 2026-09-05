@@ -20,6 +20,8 @@ import { CraftProductionSystem } from "./systems/craftProduction.js";
 import { CraftVisualRiseSystem } from "./systems/craftVisualRise.js";
 import { InteractionSystem } from "./systems/interaction.js";
 import { MeteorSystem } from "./systems/meteorSystem.js";
+import { GameplayEffectsSystem } from "./systems/gameplayEffects.js";
+import { ObjectTransitionSystem } from "./systems/objectTransitionSystem.js";
 import { MiningSystem } from "./systems/mining.js";
 import { MatchResultSystem } from "./systems/matchResult.js";
 import { optimizeLoadedAssets } from "./systems/meshMerge.js";
@@ -368,6 +370,14 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
       .registerSystem(CraftVisualRiseSystem)
       .registerSystem(MeteorSystem)
       .registerSystem(MatchResultSystem)
+      // After every system that emits an effect (Wave, Combat, Mining,
+      // Construction, CraftProduction) and before the reset that parks them.
+      // Emitters activate slots directly, so same-frame visibility does not
+      // depend on this order — it only controls when lifetimes advance.
+      .registerSystem(GameplayEffectsSystem)
+      // Same placement, same reasons: after every system that STARTS a
+      // transition, before the reset that drops them.
+      .registerSystem(ObjectTransitionSystem)
       .registerSystem(ScenarioResetSystem)
       // Run last so systems can enqueue one target and the worker can start it
       // during the same frame, after their normal work has completed.

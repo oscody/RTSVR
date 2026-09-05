@@ -10,6 +10,8 @@ import { STARTING_CRYSTALS } from "./economyConstants.js";
 import { clearMeteors } from "./meteorSystem.js";
 import { clearSfx } from "./sfx.js";
 import { clearMinerAnimations } from "./minerAnimation.js";
+import { clearGameplayEffects } from "./gameplayEffects.js";
+import { clearObjectTransitions } from "./objectTransitions.js";
 import { beginHeapCycle } from "./frameProfiler.js";
 import { resetWaveTransitionLog } from "./waveTransitionLog.js";
 import {
@@ -176,6 +178,11 @@ export class ScenarioResetSystem extends createSystem({
     );
     clearUnitSelections();
     clearCombatEffects();
+    clearGameplayEffects();
+    // Dropped, not settled: the objects these slots point at are being
+    // disposed a few lines above, so restoring their transforms would be work
+    // for nothing on the most expensive frame of the match.
+    clearObjectTransitions();
     clearSfx();
     clearMeteors();
     clearAlienAnimations();

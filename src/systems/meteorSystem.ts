@@ -16,6 +16,11 @@ import { makeNonInteractive } from "./sharedGeometry.js";
 import {
   METEOR_ARRIVAL_EPSILON,
   METEOR_CYCLE_GAP_SECONDS,
+  METEOR_DEPART_SECONDS,
+  METEOR_DEPART_SINK,
+  METEOR_MATERIALIZE_RISE,
+  METEOR_MATERIALIZE_SECONDS,
+  METEOR_MATERIALIZE_START_SCALE,
   METEOR_FALL_ACCEL,
   METEOR_FALL_SPEED,
   METEOR_FLOAT_BOB,
@@ -38,10 +43,21 @@ import { warmObjectForRender } from "./gpuWarmup.js";
 import { MatchState, WaveSource, boardState, getTerrainAt } from "./state.js";
 import { TUTORIAL_WAVE_NUMBER } from "./waveCatalog.js";
 import { trackResource, tracked } from "./resourceLifetime.js";
+import {
+  departPose,
+  materializePose,
+  transitionProgress,
+} from "./transitionRules.ts";
 
 // One synchronized batch: the rocks float, fall together, rest, then vanish and
 // the cycle restarts. "idle" is the gap between cycles.
-type MeteorPhase = "idle" | "floating" | "falling" | "resting";
+type MeteorPhase =
+  | "idle"
+  | "materializing" // easing in from small-and-low, before the hover
+  | "floating"
+  | "falling"
+  | "resting"
+  | "departing"; // shrinking and sinking, before the slot is parked
 
 interface MeteorSlot {
   holder: Group;
@@ -58,6 +74,14 @@ interface MeteorSlot {
   bobOffset: number;
   spinX: number;
   spinY: number;
+  /**
+   * Y this slot began its departure from.
+   *
+   * Sampled when the departure starts rather than assumed to be the landed
+   * height, because a match can end mid-fall — the rock then shrinks and sinks
+   * from wherever it actually is instead of snapping to the ground first.
+   */
+  departFromY: number;
 }
 
 interface FlashSlot {
@@ -163,6 +187,7 @@ function ensurePool(): boolean {
       bobOffset: 0,
       spinX: 0,
       spinY: 0,
+      departFromY: METEOR_FLOAT_HEIGHT,
     });
   }
 
@@ -244,13 +269,23 @@ function startCycle(): void {
     slot.bobOffset = Math.random() * Math.PI * 2;
     slot.spinX = (Math.random() * 2 - 1) * METEOR_SPIN_RATE;
     slot.spinY = (Math.random() * 2 - 1) * METEOR_SPIN_RATE;
-    slot.holder.position.set(worldX, METEOR_FLOAT_HEIGHT, worldZ);
+    slot.departFromY = METEOR_FLOAT_HEIGHT;
+    // Enter small and low; `updateMaterializing` eases both to the hover pose.
+    const entry = materializePose(
+      0,
+      METEOR_MATERIALIZE_START_SCALE,
+      METEOR_FLOAT_HEIGHT,
+      METEOR_MATERIALIZE_RISE,
+    );
+    slot.holder.position.set(worldX, entry.y, worldZ);
+    slot.holder.scale.setScalar(entry.scale);
     slot.spinner.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
     slot.trail.visible = false; // hidden while hovering
     slot.holder.visible = true;
   }
-  phase = tiles.length > 0 ? "floating" : "idle";
-  phaseTimer = tiles.length > 0 ? METEOR_FLOAT_SECONDS : METEOR_CYCLE_GAP_SECONDS;
+  phase = tiles.length > 0 ? "materializing" : "idle";
+  phaseTimer =
+    tiles.length > 0 ? METEOR_MATERIALIZE_SECONDS : METEOR_CYCLE_GAP_SECONDS;
 }
 
 function spawnImpact(x: number, y: number, z: number): void {
@@ -266,12 +301,41 @@ function spawnImpact(x: number, y: number, z: number): void {
   }
 }
 
+/**
+ * Begin a graceful exit for whatever is currently on the board.
+ *
+ * Each slot records where it is NOW as its departure origin, so a batch caught
+ * mid-fall by a victory sinks from mid-air rather than teleporting to the
+ * ground first. Called both when a batch finishes resting and when a match
+ * ends — the difference between those is only where the rocks happen to be.
+ */
+function beginDeparture(): void {
+  let any = false;
+  for (const slot of meteorSlots) {
+    if (!slot.used) continue;
+    slot.departFromY = slot.holder.position.y;
+    slot.trail.visible = false; // no streak on the way out
+    any = true;
+  }
+  if (!any) {
+    phase = "idle";
+    phaseTimer = METEOR_CYCLE_GAP_SECONDS;
+    return;
+  }
+  phase = "departing";
+  phaseTimer = METEOR_DEPART_SECONDS;
+}
+
 export function clearMeteors(): void {
   for (const slot of meteorSlots) {
     slot.used = false;
     slot.released = false;
     slot.landed = false;
     slot.holder.visible = false;
+    // Restore the transform the transitions animate. Without this a Restart
+    // during a materialise or departure leaves the slot at a fractional scale,
+    // and the next cycle's rock enters at the wrong size.
+    slot.holder.scale.setScalar(1);
   }
   for (const slot of flashSlots) {
     slot.active = false;
@@ -308,8 +372,24 @@ export class MeteorSystem extends createSystem({}) {
     const source = boardState.waveSource;
     const status = source?.getValue(MatchState, "status") ?? "playing";
     const waveNumber = source?.getValue(WaveSource, "waveNumber") ?? 1;
-    if (status !== "playing" || waveNumber === TUTORIAL_WAVE_NUMBER) {
+    // Two different exits, deliberately.
+    //
+    // Tutorial suppression is IMMEDIATE: the shower is a competing motion cue
+    // aimed at nothing while someone is being taught, so it has to stop being
+    // one this frame rather than over the next half second.
+    if (waveNumber === TUTORIAL_WAVE_NUMBER) {
       if (phase !== "idle") clearMeteors();
+      return;
+    }
+    // A match ending is GRACEFUL: rocks shrink and sink from wherever they are.
+    // The departure must keep advancing after the status changes, or it would
+    // freeze half-shrunk on the board behind the result panel.
+    if (status !== "playing") {
+      if (phase !== "idle" && phase !== "departing") beginDeparture();
+      if (phase === "departing") {
+        this.updateDeparting(Math.max(0, delta));
+        this.updateFlashes(Math.max(0, delta));
+      }
       return;
     }
 
@@ -328,15 +408,77 @@ export class MeteorSystem extends createSystem({}) {
         break;
       case "resting":
         phaseTimer -= frameDelta;
-        if (phaseTimer <= 0) {
-          for (const slot of meteorSlots) slot.holder.visible = false;
-          phase = "idle";
-          phaseTimer = METEOR_CYCLE_GAP_SECONDS;
-        }
+        if (phaseTimer <= 0) beginDeparture();
+        break;
+      case "materializing":
+        this.updateMaterializing(frameDelta);
+        break;
+      case "departing":
+        this.updateDeparting(frameDelta);
         break;
     }
 
     this.updateFlashes(frameDelta);
+  }
+
+  /**
+   * Ease a fresh batch in from small-and-low to its hover pose.
+   *
+   * Scale and Y only — the rocks keep their own materials, because these models
+   * come from `AssetManager` and their materials are shared with every clone.
+   * Fading one would fade them all.
+   */
+  private updateMaterializing(delta: number): void {
+    phaseTimer -= delta;
+    const t = transitionProgress(phaseTimer, METEOR_MATERIALIZE_SECONDS);
+    for (const slot of meteorSlots) {
+      if (!slot.used) continue;
+      const pose = materializePose(
+        t,
+        METEOR_MATERIALIZE_START_SCALE,
+        slot.floatY,
+        METEOR_MATERIALIZE_RISE,
+      );
+      slot.holder.scale.setScalar(pose.scale);
+      slot.holder.position.y = pose.y;
+    }
+    if (t < 1) return;
+    // Settle exactly, so floating starts from the pose it expects rather than
+    // wherever the last frame's easing happened to land.
+    for (const slot of meteorSlots) {
+      if (!slot.used) continue;
+      slot.holder.scale.setScalar(1);
+      slot.holder.position.y = slot.floatY;
+    }
+    phase = "floating";
+    phaseTimer = METEOR_FLOAT_SECONDS;
+  }
+
+  /**
+   * Shrink and sink a finished batch, then park it.
+   *
+   * Each rock leaves from its own `departFromY`, so a batch caught mid-fall by
+   * a match ending departs from where it is rather than snapping down first.
+   */
+  private updateDeparting(delta: number): void {
+    phaseTimer -= delta;
+    const t = transitionProgress(phaseTimer, METEOR_DEPART_SECONDS);
+    for (const slot of meteorSlots) {
+      if (!slot.used) continue;
+      const pose = departPose(t, slot.departFromY, METEOR_DEPART_SINK);
+      slot.holder.scale.setScalar(pose.scale);
+      slot.holder.position.y = pose.y;
+    }
+    if (t < 1) return;
+    // Park AND restore the transform. A slot left half-shrunk would make the
+    // next cycle's rock enter at the wrong size.
+    for (const slot of meteorSlots) {
+      slot.used = false;
+      slot.holder.visible = false;
+      slot.holder.scale.setScalar(1);
+    }
+    phase = "idle";
+    phaseTimer = METEOR_CYCLE_GAP_SECONDS;
   }
 
   private updateFloating(delta: number): void {

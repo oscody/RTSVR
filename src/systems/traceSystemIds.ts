@@ -93,6 +93,8 @@ const STABLE_IDS: Readonly<Record<string, number>> = {
   CraftProductionSystem: 123,
   CraftVisualRiseSystem: 124,
   MeteorSystem: 125,
+  GameplayEffectsSystem: 132,
+  ObjectTransitionSystem: 133,
   MatchResultSystem: 126,
   ScenarioResetSystem: 127,
   GpuWarmupSystem: 128,

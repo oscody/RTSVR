@@ -157,6 +157,25 @@ export const METEOR_ARRIVAL_EPSILON = 0.06;
 export const METEOR_REST_SECONDS = 10;
 export const METEOR_REST_Y_OFFSET = TILE_SIZE * 0.35;
 export const METEOR_CYCLE_GAP_SECONDS = 3; // pause between shower cycles
+
+// Entry and exit transitions, so a batch never pops into or out of existence.
+//
+// These animate the HOLDER's scale and Y. The rock model inside is scaled once
+// at pool build (`METEOR_SIZE_TILES`) and the holder's own scale is otherwise
+// always 1 — so it is free for this, and `clearMeteors()` restores it to 1.
+//
+// Deliberately NOT a material fade: the meteor models come from AssetManager
+// and their materials are shared across every clone. Making one transparent
+// would change them all, and would recreate the shader churn already fixed.
+export const METEOR_MATERIALIZE_SECONDS = 0.32;
+export const METEOR_DEPART_SECONDS = 0.45;
+// Where a rock starts: nearly invisible, and a little below its hover height so
+// it rises into place rather than inflating on the spot.
+export const METEOR_MATERIALIZE_START_SCALE = 0.05;
+export const METEOR_MATERIALIZE_RISE = TILE_SIZE * 1.2;
+// Landed rocks sink slightly as they shrink, so they read as sinking into the
+// terrain rather than evaporating.
+export const METEOR_DEPART_SINK = TILE_SIZE * 0.45;
 export const METEOR_TRAIL_LENGTH = 1.8;
 export const METEOR_TRAIL_THICKNESS = 0.05;
 export const METEOR_TRAIL_COLOR = 0xff7a2c; // hot orange (additive, pops on dark space)
@@ -285,6 +304,72 @@ export const COMBAT_VFX_TARGET_BODY_Y = TILE_SIZE * 0.6;
 // Fallback muzzle for attackers with no named cannon node (turret, astronaut).
 export const COMBAT_VFX_MUZZLE_UP = TILE_SIZE * 0.7;
 export const COMBAT_VFX_MUZZLE_FORWARD = TILE_SIZE * 0.45;
+// ── Gameplay effects (economy, death, completion) ───────────────────────────
+//
+// Separate from the COMBAT_VFX_* block above on purpose: `combatEffects.ts`
+// stays focused on weapon fire, and these punctuate events that currently
+// happen with sound but no picture. Same pooled, non-interactive, reset-safe
+// shape — see `gameplayEffects.ts`.
+//
+// Pool sizes are the cap on SIMULTANEOUS effects, not a budget for a match. A
+// full pool drops the extra visual rather than allocating mid-frame, so these
+// are sized for the worst realistic burst: several aliens dying at once.
+export const GAMEPLAY_VFX_FLASH_POOL_SIZE = 12;
+export const GAMEPLAY_VFX_PULSE_POOL_SIZE = 8;
+
+// A flash is a small bright sphere that expands and fades. A pulse is a flat
+// ring that expands faster and fades — it reads as "something happened here"
+// from the tabletop viewpoint without hiding what is underneath.
+export const GAMEPLAY_VFX_FLASH_RADIUS = TILE_SIZE * 0.16;
+export const GAMEPLAY_VFX_PULSE_INNER_RADIUS = TILE_SIZE * 0.30;
+export const GAMEPLAY_VFX_PULSE_OUTER_RADIUS = TILE_SIZE * 0.38;
+
+// Lifetimes. All well under half a second: these punctuate an event that has
+// already resolved in the rules, so a long effect would trail the truth.
+export const GAMEPLAY_VFX_MINING_SECONDS = 0.25;
+export const GAMEPLAY_VFX_DEPOSIT_SECONDS = 0.3;
+export const GAMEPLAY_VFX_DEATH_SECONDS = 0.36;
+export const GAMEPLAY_VFX_COMPLETION_SECONDS = 0.4;
+
+// Colours carry the meaning, so the event reads without text.
+export const GAMEPLAY_VFX_MINING_COLOR = 0x8fe8ff; // crystal cyan
+export const GAMEPLAY_VFX_DEPOSIT_COLOR = 0xffd479; // cyan -> gold at the base
+export const GAMEPLAY_VFX_DEATH_ALIEN_COLOR = 0xc65cff; // purple/red
+export const GAMEPLAY_VFX_DEATH_UNIT_COLOR = 0x9fd0ff; // friendly blue/white
+export const GAMEPLAY_VFX_DEATH_BUILDING_COLOR = 0xffb066; // orange/white
+export const GAMEPLAY_VFX_COMPLETION_COLOR = 0xffe6a8; // warm gold
+
+// A building death reads as a bigger event than a unit death.
+export const GAMEPLAY_VFX_BUILDING_DEATH_SCALE = 1.8;
+
+// Raise an effect from a ground anchor to roughly body centre, the same reason
+// COMBAT_VFX_TARGET_BODY_Y exists.
+export const GAMEPLAY_VFX_BODY_Y = TILE_SIZE * 0.5;
+
+// Object transitions (phase 3): short scale/position moves on ONE existing
+// object, as opposed to the pooled overlay effects above. These replace a
+// `visible = true/false` flip, so they must be short enough that nobody waits
+// on them — the rule they follow has already resolved.
+//
+// The pool caps SIMULTANEOUS transitions. A full pool snaps to the end state,
+// which is exactly the old one-frame behaviour: graceful degradation back to
+// what shipped before, never an allocation inside a system update.
+export const OBJECT_TRANSITION_POOL_SIZE = 16;
+
+// Miner cargo appearing on load and leaving on deposit. Faster than the
+// meteors: a round trip has two of these in it, and the miner is already
+// moving away by the time the second one plays.
+export const CARGO_REVEAL_SECONDS = 0.16;
+export const CARGO_RETREAT_SECONDS = 0.14;
+export const CARGO_TRANSITION_START_SCALE = 0.15;
+
+// An exhausted resource node shrinking and sinking into the terrain. Longer
+// than the cargo, because this one is a board-state change the player should
+// notice: that tile is now walkable.
+export const NODE_DEPLETION_SECONDS = 0.35;
+export const NODE_DEPLETION_END_SCALE = 0.05;
+export const NODE_DEPLETION_SINK = TILE_SIZE * 0.35;
+
 // Named cannon-tip nodes inside the CraftFighter GLB (paired plasma cannons).
 export const FIGHTER_CANNON_MUZZLE_NODES = [
   "StrafeFire_MuzzleFlash_L",
