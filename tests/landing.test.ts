@@ -58,6 +58,58 @@ test("the analytics tag ships, with the right property and non-blocking", () => 
   );
 });
 
+test("analytics stays silent while testing", () => {
+  // HTML comments survive `code()`, and the rationale beside the guard names
+  // every host the guard excludes. Strip them here, or an assertion about the
+  // code ends up reading the prose that explains it.
+  const html = read("index.html").replace(/<!--[\s\S]*?-->/g, "");
+
+  // gtag's own opt-out flag rather than a conditionally-injected tag: the
+  // markup exercised on a dev build is the markup that ships, minus the
+  // beacon. A tag that only exists in production can only be verified there.
+  assert.match(html, /window\["ga-disable-G-GS0ZJB7BBH"\] = !enabled;/);
+
+  // `config` sends a page_view the moment it runs, and the flag is read at
+  // send time - so the guard has to be set before the loader, not merely
+  // before the first custom event.
+  assert.ok(
+    html.indexOf("ga-disable") < html.indexOf("googletagmanager"),
+    "the guard must run before the tag loads, or the first page_view escapes",
+  );
+
+  // Two conditions, because each one alone leaks in a case the other covers.
+  //
+  // `%MODE%` is substituted by Vite at transform time, so any dev server reads
+  // "development" regardless of the URL that reached it. That is the only half
+  // that catches the headset, which loads the dev server over the LAN at an
+  // address no localhost check would recognise. Verified in both directions:
+  // `vite build` writes "production", the dev server serves "development".
+  assert.match(html, /"%MODE%" === "production"/);
+
+  // The host half catches the reverse: a production bundle - MODE already
+  // "production" - served to this machine through `npm run preview`.
+  // Substrings, not regexes: the thing being asserted about is itself a set of
+  // regex literals, and matching a pattern against a pattern gets the
+  // backslashes wrong in a way that still passes for the wrong reason.
+  for (const host of [
+    'host === "localhost"',
+    'host === "::1"',
+    'host === "0.0.0.0"',
+    'host.endsWith(".local")',
+    "/^127\\./.test(host)",
+    "/^10\\./.test(host)",
+    "/^192\\.168\\./.test(host)",
+    "/^172\\.(1[6-9]|2[0-9]|3[01])\\./.test(host)",
+  ]) {
+    assert.ok(html.includes(host), `the guard no longer excludes ${host}`);
+  }
+
+  // An escape hatch both ways, or confirming the tag works means deploying to
+  // find out, and browsing the live site means polluting it.
+  assert.match(html, /asked === "on" \|\| asked === "off"/);
+  assert.match(html, /override === "on"/);
+});
+
 test("the landing sits below the loading overlay", () => {
   const html = read("index.html");
   const z = (sel: string): number =>

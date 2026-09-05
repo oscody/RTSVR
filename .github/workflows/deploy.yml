@@ -46,6 +46,14 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      # The analytics guard turns on `%MODE%` being substituted by Vite at
+      # transform time. The unit tests can only see the source, and they run
+      # before the build, so this is the one place the substitution is actually
+      # observable. If a Vite upgrade ever stops doing it, the literal `%MODE%`
+      # survives, never equals "production", and the deployed site collects
+      # nothing while looking perfectly healthy - fail the deploy instead.
+      - name: the analytics guard survived the build
+        run: grep -q '"production" === "production"' dist/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
