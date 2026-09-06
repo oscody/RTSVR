@@ -1,5 +1,6 @@
-import { BoxGeometry, type Object3D } from "@iwsdk/core";
+import { BoxGeometry, Color, type Object3D } from "@iwsdk/core";
 import { trackResource } from "./resourceLifetime.js";
+import { MARS_GROUND_COLOR } from "./constants.js";
 
 /**
  * Mark decoration as never hit-testable.
@@ -18,6 +19,43 @@ import { trackResource } from "./resourceLifetime.js";
 export function makeNonInteractive<T extends Object3D>(object: T): T {
   object.raycast = () => {};
   return object;
+}
+
+/** Resolved once: every ground decal blends over the same surface. */
+const groundColor = new Color(MARS_GROUND_COLOR);
+
+/**
+ * The colour a translucent overlay resolves to once blended over the board's
+ * ground — which is the only thing these decals ever blend over, since each one
+ * is a flat quad, ring or line sitting just above `MARS_GROUND_COLOR`.
+ *
+ * ## Why a flat decal should not be translucent at all
+ *
+ * The Quest's `OCULUS_multiview` path loses Three.js's **transparent render
+ * pass** for a frame at a time — the overlay blink investigated on 2026-09-05.
+ * Three.js sorts a mesh into that pass on `material.transparent` alone, so a
+ * decal whose only use of alpha is a constant opacity over a constant
+ * background is paying the blink for a blend it does not need. Pre-compute the
+ * blend, render opaque, and it becomes immune: the opaque pass is never
+ * affected (health bars and the starfield never flicker, and both are opaque
+ * while still setting `depthWrite: false`).
+ *
+ * ## Why not a hand-written hex
+ *
+ * Two reasons. The meaning disappears — nobody reading `0x894b36` later will
+ * know it was "the grid at 50% over Mars ground", and they will not be able to
+ * retune either input. And the obvious arithmetic is wrong: the GPU blends in
+ * **linear** space, so the sRGB midpoint is a different, muddier colour
+ * (`0x824633` against the correct `0x894b36` for the grid). `Color.lerpColors`
+ * works in the renderer's working space, so this is the mix the blend would
+ * actually have produced.
+ *
+ * **Only for decals that lie flat on the ground.** Anything that can be seen
+ * against the sky, against a building, or against another decal still needs a
+ * real blend — the pre-computed colour is only correct over the ground.
+ */
+export function flattenOverGround(color: number, opacity: number): Color {
+  return new Color().lerpColors(groundColor, new Color(color), opacity);
 }
 
 /**

@@ -15,7 +15,7 @@ import {
   createSystem,
 } from "@iwsdk/core";
 import { Object3D, RingGeometry } from "@iwsdk/core";
-import { makeNonInteractive } from "./sharedGeometry.js";
+import { flattenOverGround, makeNonInteractive } from "./sharedGeometry.js";
 import { tracked } from "./resourceLifetime.js";
 import {
   BoardMarker,
@@ -373,12 +373,27 @@ export class BoardSystem extends createSystem({}) {
       "position",
       new Float32BufferAttribute(gridVertices, 3),
     );
+    // OPAQUE, and deliberately so — this is Phase 0 of the blink fix.
+    //
+    // The grid used to be `transparent: true` at `GRID_OVERLAY_OPACITY`, which
+    // put it in Three.js's transparent pass, which the Quest's multiview path
+    // drops for a frame at a time (see the 2026-09-05 investigation). It lies
+    // flat on a single uniform surface, so the blend result is a constant and
+    // `flattenOverGround` can pre-compute it: identical on screen, immune to
+    // the blink.
+    //
+    // It is the ONLY overlay converted so far, on purpose. If the grid holds
+    // steady through a blink that still takes the rings and badges, the whole
+    // approach is proved on one material and the rest is mechanical. If it
+    // blinks anyway, the transparent-pass theory is wrong and nothing else
+    // should be converted.
+    //
+    // `depthWrite: false` stays: it orders draws within a pass and is not what
+    // decides which pass an object lands in.
     const gridOverlay = new LineSegments(
       gridGeometry,
       tracked(new LineBasicMaterial({
-        color: GRID_OVERLAY_COLOR,
-        transparent: true,
-        opacity: GRID_OVERLAY_OPACITY,
+        color: flattenOverGround(GRID_OVERLAY_COLOR, GRID_OVERLAY_OPACITY),
         depthWrite: false,
       }), "material", "session", "grid-overlay"),
     );
