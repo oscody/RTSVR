@@ -14,6 +14,7 @@ import {
   installFrameProfiler,
   isFrameProfilerEnabled,
 } from "./systems/frameProfiler.js";
+import { installTransparentPassProbe } from "./systems/transparentPassProbe.js";
 import { AlienAnimationSystem } from "./systems/alienAnimation.js";
 import { CommandCenterAnimationSystem } from "./systems/commandCenterAnimation.js";
 import { CraftProductionSystem } from "./systems/craftProduction.js";
@@ -383,6 +384,9 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
       // would fail every time if the sweep ran mid-frame.
       .registerSystem(TraceDiagnosticsSystem);
     installFrameProfiler(world);
+    // Hooks `scene.onAfterRender`, so it must be installed before the first
+    // frame but after the renderer exists. Inert unless its flag is on.
+    installTransparentPassProbe(world);
     // The one line that makes every capture attributable. Until now a log could
     // not say which code produced it, which is the ambiguity the landing plan's
     // deferred `[Build]` line was meant to close.

@@ -165,6 +165,66 @@ export const INTERACTION_CORRELATION_TRACE_ENABLED = DIAGNOSTICS_ENABLED;
  */
 export const VISUAL_VISIBILITY_TRACE_ENABLED = DIAGNOSTICS_ENABLED;
 
+/**
+ * Per-frame witness for "the overlays blinked" — the grid, rings, badges,
+ * hologram and HUD vanishing together for a single frame.
+ *
+ * Added 2026-09-05, after {@link VISUAL_VISIBILITY_TRACE_ENABLED} returned a
+ * clean negative on the same symptom. That probe proved the grid's `visible`
+ * flag is stable (every `visible=false` it ever logged has a matching
+ * `units=0 turret=false placement=false`, and `HIDDEN-BY` has never appeared),
+ * and the `Draw` census independently showed `hud 1` on 801 of 801 samples. So
+ * the objects are not being switched off — and yet a person wearing the headset
+ * sees them blink.
+ *
+ * What the video adds is the shape of the loss: everything that disappears has
+ * `transparent: true` and everything that survives does not, health bars and
+ * the starfield included. That is Three.js's transparent render pass, which
+ * points below `object.visible` at the renderer itself.
+ *
+ * So this probe watches the renderer rather than the game. Per frame it asks
+ * three questions of one always-present transparent mesh (`CommandCenterHud`,
+ * which is `frustumCulled = false`, so culling cannot be the answer):
+ *
+ * 1. is it visible?  2. did it reach the transparent render list?
+ * 3. did the renderer actually draw it?
+ *
+ * The three answers separate the three possible causes, and they are the only
+ * three left:
+ *
+ * | visible | in list | drawn | conclusion |
+ * | --- | --- | --- | --- |
+ * | no | - | - | something does switch it off after all |
+ * | yes | no | - | `projectObject` dropped it — material or frustum state |
+ * | yes | yes | no | the transparent pass did not execute |
+ * | yes | yes | yes | JS submitted it; the loss is below JS (GPU/compositor) |
+ *
+ * That last row is the one this exists to be able to state, because it is the
+ * only outcome that ends the search in the app.
+ *
+ * Cost shape: two array-length reads, one integer read, and a scan of the
+ * transparent list (tens of entries) per frame — no allocation, and console
+ * output only on an anomaly, behind a cooldown. A per-frame `console.log` would
+ * itself cause the missed frames this is trying to observe.
+ *
+ * **Deliberately absent from {@link anyTraceEnabled} and
+ * {@link traceRecorderNeeded}**, for the same reason as the flag above: it
+ * writes straight to the console and needs no flight recorder.
+ */
+export const TRANSPARENT_PASS_TRACE_ENABLED = DIAGNOSTICS_ENABLED;
+
+/** Frames of render-pass history kept for the window dump around an anomaly. */
+export const TRANSPARENT_PASS_RING_FRAMES = 128;
+
+/** Frames of context printed either side of an anomaly. */
+export const TRANSPARENT_PASS_DUMP_CONTEXT = 6;
+
+/** Minimum seconds between two transparent-pass anomaly dumps. */
+export const TRANSPARENT_PASS_COOLDOWN_SECONDS = 5;
+
+/** Prefix for the transparent-pass witness records. */
+export const TRANSPARENT_PASS_PREFIX = "[PassWitness]";
+
 /** True when at least one optional diagnostic is on. */
 export function anyTraceEnabled(): boolean {
   return (

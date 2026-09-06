@@ -468,8 +468,16 @@ test("no console.log escapes the diagnostics switch", () => {
 
       // Modules whose entire output is switch-gated at the top, or that guard
       // each call inline.
+      // `transparentPassProbe.ts` is installation-gated the same way `trace*.ts`
+      // is: `installTransparentPassProbe()` returns before hooking anything or
+      // allocating a ring when its flag is off, and nothing else in the module
+      // is reachable without that hook. Both halves of that claim are pinned in
+      // "the log sources that needed hand-wiring are actually wired" below,
+      // because an exemption nobody checks is how the four original offenders
+      // got in.
       const selfGated =
         /const (ACTION_LOG_ENABLED|FRAME_PROFILER_ENABLED|PROGRAM_CHURN_ENABLED)/.test(src) ||
+        /TRANSPARENT_PASS_TRACE_ENABLED/.test(src) ||
         /DIAGNOSTICS_ENABLED/.test(src);
       if (selfGated) continue;
       const lines = src.split("\n");
@@ -520,6 +528,22 @@ test("the log sources that needed hand-wiring are actually wired", () => {
   assert.match(
     read("systems/meshMerge.ts"),
     /if \(twoPass\.length > 0 && DIAGNOSTICS_ENABLED\)/,
+  );
+
+  // The transparent-pass witness earns its exemption from the sweep above by
+  // being unreachable when the switch is off, so both halves are pinned here.
+  // It hooks `scene.onAfterRender` — the one diagnostic that sits inside the
+  // render path — so "inert when off" has to mean the hook is never installed,
+  // not merely that it returns early once per frame.
+  assert.match(
+    read("systems/traceFlags.ts"),
+    /const TRANSPARENT_PASS_TRACE_ENABLED = DIAGNOSTICS_ENABLED;/,
+    "the witness must follow the build switch, not its own constant",
+  );
+  assert.match(
+    read("systems/transparentPassProbe.ts"),
+    /if \(!TRANSPARENT_PASS_TRACE_ENABLED \|\| installed\) return;/,
+    "install must bail before hooking the renderer or allocating the ring",
   );
 });
 

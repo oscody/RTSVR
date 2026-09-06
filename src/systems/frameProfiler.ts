@@ -8,6 +8,7 @@ import {
 } from "./state.js";
 import { WaveSystem } from "./wave.js";
 import { gpuWarmupLine } from "./gpuWarmup.js";
+import { getTransparentPassSummary } from "./transparentPassProbe.js";
 import {
   beginResourceInterval,
   renderTargetLine,
@@ -629,6 +630,12 @@ export function flushFrameProfile(): void {
   if (traceCostLine.length > 0) lines.push(traceCostLine);
   const allocLine = allocationLine();
   if (allocLine.length > 0) lines.push(allocLine);
+  // The transparent-pass witness reports here rather than on its own schedule,
+  // because its headline claim — "the renderer drew every overlay it was asked
+  // to" — is worthless without proof it was still sampling when it said so. A
+  // `sampled 0` on this line means the hook died, not that the frames were fine.
+  const passWitnessLine = getTransparentPassSummary();
+  if (passWitnessLine.length > 0) lines.push(passWitnessLine);
   hudLines = lines;
   hudLine = lines.join("\n");
   // Context first: without it a reading is a wall of milliseconds with no way to
