@@ -8,6 +8,69 @@
     />
     <title>RTSVR</title>
 
+    <!--
+      Analytics is OFF while testing, and this is the switch that decides.
+
+      Two independent conditions, because either one alone leaks. `%MODE%` is
+      replaced by Vite at transform time, so a dev server always reads
+      "development" no matter which URL reached it - that covers the headset,
+      which loads the dev server over the LAN at an address no localhost check
+      would recognise. The host check then covers the reverse case: a
+      production bundle run through `npm run preview`, built with MODE
+      production and served to this machine. Both must say "not testing"
+      before a single beacon is sent.
+
+      The tag itself is left unconditional on purpose. gtag's own
+      `ga-disable-<ID>` flag makes it load, parse and stay silent, so the
+      markup exercised in testing is the markup that ships - a tag injected
+      only in production would be a tag that can only be verified in
+      production.
+
+      Override when you want the opposite: ?analytics=on to confirm the tag
+      really fires from a dev build, ?analytics=off to browse the live site
+      without adding yourself to it. Remembered afterwards, because a headset
+      is a miserable place to retype a query string.
+    -->
+    <script>
+      (function () {
+        var override = null;
+        try {
+          var asked = new URLSearchParams(location.search).get("analytics");
+          if (asked === "on" || asked === "off") {
+            localStorage.setItem("rtsvr.analytics", asked);
+          }
+          override = localStorage.getItem("rtsvr.analytics");
+        } catch (e) {
+          // Storage blocked (private window, or a browser set to refuse it).
+          // Fall through to the checks below rather than failing the page.
+        }
+
+        var host = location.hostname;
+        var testing =
+          host === "" ||
+          host === "localhost" ||
+          host === "::1" ||
+          host === "0.0.0.0" ||
+          host.endsWith(".local") ||
+          /^127\./.test(host) ||
+          /^10\./.test(host) ||
+          /^192\.168\./.test(host) ||
+          /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host);
+
+        var enabled = override
+          ? override === "on"
+          : "%MODE%" === "production" && !testing;
+
+        window["ga-disable-G-GS0ZJB7BBH"] = !enabled;
+
+        if (!enabled) {
+          console.info(
+            "[analytics] off - " + (override ? "override" : "%MODE%/" + host),
+          );
+        }
+      })();
+    </script>
+
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-GS0ZJB7BBH"></script>
     <script>
