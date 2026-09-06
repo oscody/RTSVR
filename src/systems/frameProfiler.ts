@@ -9,6 +9,7 @@ import {
 import { WaveSystem } from "./wave.js";
 import { gpuWarmupLine } from "./gpuWarmup.js";
 import { getTransparentPassSummary } from "./transparentPassProbe.js";
+import { getTransparentRasterSummary } from "./transparentRasterProbe.js";
 import {
   beginResourceInterval,
   renderTargetLine,
@@ -636,6 +637,8 @@ export function flushFrameProfile(): void {
   // `sampled 0` on this line means the hook died, not that the frames were fine.
   const passWitnessLine = getTransparentPassSummary();
   if (passWitnessLine.length > 0) lines.push(passWitnessLine);
+  const rasterWitnessLine = getTransparentRasterSummary();
+  if (rasterWitnessLine.length > 0) lines.push(rasterWitnessLine);
   hudLines = lines;
   hudLine = lines.join("\n");
   // Context first: without it a reading is a wall of milliseconds with no way to

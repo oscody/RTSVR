@@ -545,6 +545,13 @@ test("the log sources that needed hand-wiring are actually wired", () => {
     /if \(!TRANSPARENT_PASS_TRACE_ENABLED \|\| installed\) return;/,
     "install must bail before hooking the renderer or allocating the ring",
   );
+  // Same exemption, same obligation: the raster witness adds a draw and a pool
+  // of GL queries, so "inert when off" has to mean neither is ever created.
+  assert.match(
+    read("systems/transparentRasterProbe.ts"),
+    /if \(!TRANSPARENT_PASS_TRACE_ENABLED \|\| installed\) return;/,
+    "install must bail before adding the probe mesh or creating queries",
+  );
 });
 
 test("the profiler logs the crystal balance, not just the roster", () => {

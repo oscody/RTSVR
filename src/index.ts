@@ -16,6 +16,7 @@ import {
 } from "./systems/frameProfiler.js";
 import { installTransparentPassProbe } from "./systems/transparentPassProbe.js";
 import { applyMultiviewOverride } from "./systems/multiviewOverride.js";
+import { installTransparentRasterProbe } from "./systems/transparentRasterProbe.js";
 import { AlienAnimationSystem } from "./systems/alienAnimation.js";
 import { CommandCenterAnimationSystem } from "./systems/commandCenterAnimation.js";
 import { CraftProductionSystem } from "./systems/craftProduction.js";
@@ -393,6 +394,9 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     // Hooks `scene.onAfterRender`, so it must be installed before the first
     // frame but after the renderer exists. Inert unless its flag is on.
     installTransparentPassProbe(world);
+    // Must follow it: the pass witness owns the per-frame hook that drains this
+    // one's queries, so they report the same frame numbers.
+    installTransparentRasterProbe(world);
     // The one line that makes every capture attributable. Until now a log could
     // not say which code produced it, which is the ambiguity the landing plan's
     // deferred `[Build]` line was meant to close.

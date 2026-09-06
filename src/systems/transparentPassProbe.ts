@@ -6,6 +6,7 @@ import {
   TRANSPARENT_PASS_RING_FRAMES,
   TRANSPARENT_PASS_TRACE_ENABLED,
 } from "./traceFlags.js";
+import { pollTransparentRasterProbe } from "./transparentRasterProbe.js";
 
 /**
  * Witness for the one-frame overlay blink. See
@@ -291,6 +292,8 @@ function sample(): void {
   if (!scene || !renderer?.renderLists) return;
 
   frame += 1;
+  // Same hook, same frame number, so the two witnesses can be read together.
+  pollTransparentRasterProbe(frame);
   const justBound = !canary || !canary.parent ? bindCanary(scene) : false;
   if (!control || !control.parent) bindControl(scene);
 
