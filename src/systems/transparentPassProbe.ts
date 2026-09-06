@@ -30,10 +30,15 @@ import {
  *
  * ## Reading the counter in XR
  *
- * `render()` runs once per frame but `renderScene()` runs once per view, so on
- * a headset the per-object callback fires **twice** per frame (once per eye)
- * and once per frame on the desktop mirror. The witness therefore records the
- * raw count and asks only whether it is zero, never whether it equals one.
+ * `render()` runs once per frame but `renderScene()` runs once per view, and
+ * how many views there are depends on multiview: one draw covers both eyes with
+ * `OCULUS_multiview` present, two draws without it. So the healthy count is
+ * **learned rather than assumed** — see {@link expectedCanaryDraws} — and the
+ * view count it settles on then scales the whole-pass call arithmetic too.
+ *
+ * The opaque control is what stops that becoming a lie. Both witnesses falling
+ * together means the frame rendered fewer views, which says nothing about the
+ * transparent pass; only the transparent one falling further does.
  */
 
 interface ProbeRenderList {
@@ -86,12 +91,13 @@ let priorControlAfterRender: Object3D["onAfterRender"] | null = null;
  * How many times the canary is drawn on a healthy frame.
  *
  * **Not assumed to be 1.** `render()` runs once per frame but `renderScene()`
- * runs once per view, so the per-object callback fires twice on a headset
- * rendering two eye viewports and once under `OVR_multiview2` or on the desktop
- * mirror. Testing `draws > 0` — which is what the first version did — would
- * therefore miss a transparent pass lost in ONE eye, which is exactly the shape
- * a single-eye screen recording shows. So the healthy count is learned, and any
- * shortfall against it is the anomaly.
+ * runs once per view: the callback fires twice on a headset rendering two eye
+ * viewports, and once under `OCULUS_multiview` or on the desktop mirror.
+ * Testing `draws > 0` — which is what the first version did — would therefore
+ * miss a transparent pass lost in ONE eye, which is exactly the shape a
+ * single-eye screen recording shows. So the healthy count is learned, and any
+ * shortfall against it is the anomaly. Measured both ways: 1 with the SDK's
+ * multiview on, 2 under `?multiview=off`.
  */
 let expectedCanaryDraws = 0;
 let framesAtExpected = 0;
@@ -120,6 +126,8 @@ const OVERHEAD_ADOPT_RUN = 30;
 let frame = 0;
 let lastDumpSeconds = -Infinity;
 let anomalies = 0;
+/** Frames where opaque and transparent fell together — fewer views, not a loss. */
+let underRendered = 0;
 /** Frame counter at the previous summary, so the line can report a rate. */
 let lastSummaryFrame = 0;
 let lastTransparent = 0;
@@ -294,27 +302,6 @@ function sample(): void {
   lastTransparent = transparentLen;
   lastOpaque = opaqueLen;
 
-  // Learn the overhead by repetition. A value only becomes the reference after
-  // holding for OVERHEAD_ADOPT_RUN consecutive frames, so the frame a blink
-  // lands on cannot itself redefine "normal" and hide the next one.
-  const overhead = calls - listSum;
-  if (overhead === stableOverhead) {
-    framesSinceOverheadSet += 1;
-    overheadCandidate = -1;
-    overheadRun = 0;
-  } else if (overhead === overheadCandidate) {
-    overheadRun += 1;
-    if (overheadRun >= OVERHEAD_ADOPT_RUN) {
-      stableOverhead = overheadCandidate;
-      framesSinceOverheadSet = 0;
-      overheadCandidate = -1;
-      overheadRun = 0;
-    }
-  } else {
-    overheadCandidate = overhead;
-    overheadRun = 1;
-  }
-
   let flags = 0;
   if (canary) {
     if (effectivelyVisible(canary)) flags |= FLAG_VISIBLE;
@@ -347,16 +334,69 @@ function sample(): void {
     framesAtExpected += 1;
   }
 
+  // Learn the overhead by repetition, per VIEW. The first version compared
+  // `calls - listSum`, which is only stable while one pass covers both eyes:
+  // on the per-view path every list entry is drawn once per view, so that
+  // difference IS the list length and moves with every spawn and death. It held
+  // for 30 straight frames on 13 of 691 samples in the multiview-off run and
+  // spent the rest `warming` — the check was effectively switched off in the
+  // exact arm it was needed for. Scaling by the view count (the canary's own
+  // learned draw rate) makes the residue small and steady on both paths.
+  const views = expectedCanaryDraws > 0 ? expectedCanaryDraws : 1;
+
+  /**
+   * How many views this frame ACTUALLY rendered, per the opaque control.
+   *
+   * This is the reference everything else is judged against, and it has to be,
+   * because a frame that renders one view instead of two halves its draw calls
+   * as a matter of course. Measuring against the *expected* view count instead
+   * reported that halving as a missing transparent pass — twice, on frames
+   * whose deficit was exactly half the expectation (82 of 164, 246 of 492) and
+   * whose opaque control had dropped to 1 right alongside the canary.
+   *
+   * Judging against what the frame actually drew asks the only question that
+   * matters: given that this frame rendered N views, did the transparent pass
+   * appear in all N?
+   */
+  const viewsRendered = control !== null && ctrlDraws > 0 ? ctrlDraws : views;
+  // A value only becomes the reference after holding for OVERHEAD_ADOPT_RUN
+  // consecutive frames, so the frame a blink lands on cannot itself redefine
+  // "normal" and hide the next one.
+  const overhead = calls - listSum * viewsRendered;
+  if (overhead === stableOverhead) {
+    framesSinceOverheadSet += 1;
+    overheadCandidate = -1;
+    overheadRun = 0;
+  } else if (overhead === overheadCandidate) {
+    overheadRun += 1;
+    if (overheadRun >= OVERHEAD_ADOPT_RUN) {
+      stableOverhead = overheadCandidate;
+      framesSinceOverheadSet = 0;
+      overheadCandidate = -1;
+      overheadRun = 0;
+    }
+  } else {
+    overheadCandidate = overhead;
+    overheadRun = 1;
+  }
+
   // The whole-pass check, independent of the canary. Tolerance is half the
   // transparent list (min 4): a lost pass costs all of it, while a couple of
   // calls either way is ordinary jitter — a material turned invisible inside a
   // list, or the background toggling.
+  const expectedCalls = listSum * viewsRendered + stableOverhead;
   const callsArmed =
     stableOverhead >= 0 && framesSinceOverheadSet >= EXPECTED_DRAWS_WARMUP;
-  const deficit = listSum + stableOverhead - calls;
+  const deficit = expectedCalls - calls;
   const callsShort =
     callsArmed && transparentLen > 0 &&
-    deficit >= Math.max(4, transparentLen >> 1);
+    deficit >= Math.max(4, (transparentLen * viewsRendered) >> 1);
+
+  // A frame that drew fewer views than usual is worth counting but is not a
+  // pass failure, and with `viewsRendered` as the yardstick it no longer drags
+  // the other two checks down with it.
+  const armed = framesAtExpected >= EXPECTED_DRAWS_WARMUP;
+  if (armed && viewsRendered < views) underRendered += 1;
 
   // A canary that SHOULD have been drawn and was not is interesting; a hidden
   // canary is the game's business and the older probe's beat, and the bind
@@ -364,10 +404,9 @@ function sample(): void {
   // reports on its own regardless.
   const canaryUsable =
     canary !== null && !justBound && (flags & FLAG_VISIBLE) !== 0;
-  const armed = framesAtExpected >= EXPECTED_DRAWS_WARMUP;
   const canaryFailed =
     canaryUsable &&
-    ((flags & FLAG_IN_LIST) === 0 || (armed && draws < expectedCanaryDraws));
+    ((flags & FLAG_IN_LIST) === 0 || draws < viewsRendered);
   if (!canaryFailed && !callsShort) return;
 
   anomalies += 1;
@@ -375,23 +414,24 @@ function sample(): void {
   if (seconds - lastDumpSeconds < TRANSPARENT_PASS_COOLDOWN_SECONDS) return;
   lastDumpSeconds = seconds;
 
-  // The control is what turns "not drawn" into "the TRANSPARENT pass was lost".
-  // A frame where neither was drawn is a frame that did not render at all, and
-  // that is a different bug with a different fix.
+  // Everything below is measured against the views this frame actually drew, so
+  // each verdict really is about the transparent pass rather than about a frame
+  // that rendered less of everything.
   const verdict = !canaryFailed
     ? "PASS-CALLS-SHORT (the canary drew, but the frame is missing draw calls)"
     : (flags & FLAG_IN_LIST) === 0
       ? "NOT-IN-LIST (projectObject dropped it: material or frustum state)"
-      : draws === 0 && ctrlDraws === 0
+      : ctrlDraws === 0
         ? "NOTHING-DREW (the whole frame rendered nothing — not a pass problem)"
         : draws === 0
           ? "IN-LIST-NOT-DRAWN (the transparent pass did not execute)"
-          : "PARTIAL-DRAW (the transparent pass was lost in some views, not all)";
+          : "PARTIAL-DRAW (transparent drew in fewer views than opaque did)";
   console.log(
     `${TRANSPARENT_PASS_PREFIX} ANOMALY #${anomalies} frame ${frame} ` +
       `t+${seconds.toFixed(3)}s | ${verdict} | ` +
-      `transparent ${transparentLen} opaque ${opaqueLen} calls ${calls} ` +
-      `expected ${listSum + stableOverhead} deficit ${deficit} | ` +
+      `transparent ${transparentLen} opaque ${opaqueLen} ` +
+      `views ${viewsRendered}/${views} ` +
+      `calls ${calls} expected ${expectedCalls} deficit ${deficit} | ` +
       `canaryDraws ${draws}/${expectedCanaryDraws} opaqueDraws ${ctrlDraws}`,
   );
   dumpWindow();
@@ -425,6 +465,7 @@ export function getTransparentPassSummary(): string {
       : "warming";
   return (
     `PassWitness sampled ${sampled} frames ${frame} anomalies ${anomalies} ` +
+    `underRendered ${underRendered} ` +
     `canary ${bound} ${armed} draws/frame ${expectedCanaryDraws} | ` +
     `calls ${callsArmed} | ` +
     `last transparent ${lastTransparent} opaque ${lastOpaque}`

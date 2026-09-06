@@ -15,6 +15,7 @@ import {
   isFrameProfilerEnabled,
 } from "./systems/frameProfiler.js";
 import { installTransparentPassProbe } from "./systems/transparentPassProbe.js";
+import { applyMultiviewOverride } from "./systems/multiviewOverride.js";
 import { AlienAnimationSystem } from "./systems/alienAnimation.js";
 import { CommandCenterAnimationSystem } from "./systems/commandCenterAnimation.js";
 import { CraftProductionSystem } from "./systems/craftProduction.js";
@@ -287,6 +288,11 @@ const assets: AssetManifest = {
 // across the preload it exists to cover, and the preload happens inside that
 // call. Wiring it in the .then() would attach the driver after the only stretch
 // of time it matters.
+// BEFORE World.create for a harder reason than the loading screen's: the
+// renderer is constructed inside that call and asks for OCULUS_multiview there,
+// so an override applied afterwards is simply too late. Inert without
+// `?multiview=off`. See `multiviewOverride.ts` for what the A/B decides.
+applyMultiviewOverride();
 setupLoadingScreen();
 // The shared LoadingManager does not exist until AssetManager.init runs inside
 // World.create, so this polls for it rather than reaching for it now.
