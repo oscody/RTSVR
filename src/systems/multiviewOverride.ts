@@ -5,13 +5,14 @@ import { DIAGNOSTICS_ENABLED } from "./traceFlags.js";
  *
  * ## Why this exists
  *
- * The transparent-pass witness (`transparentPassProbe.ts`) cleared the
- * application: across a 60,680-frame wave-6 session that missed up to 61.7% of
- * its frames, Three.js issued draw calls exactly equal to its render lists on
- * every single frame — `calls === opaque + transmissive + transparent`, no
- * deficit, ever. JavaScript submitted the complete transparent pass every time
- * the overlays blinked. Whatever loses them is below `renderer.info`, which
- * counts draws *issued*, not draws *executed*.
+ * A transparent-pass witness — since removed from the tree, and written up in
+ * `RTSVR_repos/devlog/Video/issue/2026-09-05-Overlay-Dropout-Investigation.md`
+ * — cleared the application: across a 60,680-frame wave-6 session that missed
+ * up to 61.7% of its frames, Three.js issued draw calls exactly equal to its
+ * render lists on every single frame — `calls === opaque + transmissive +
+ * transparent`, no deficit, ever. JavaScript submitted the complete transparent
+ * pass every time the overlays blinked. Whatever loses them is below
+ * `renderer.info`, which counts draws *issued*, not draws *executed*.
  *
  * Multiview is the first thing below that line, and it is not this app's
  * choice. IWSDK hardcodes it:
