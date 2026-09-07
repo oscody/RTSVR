@@ -26,11 +26,10 @@ import { DIAGNOSTICS_ENABLED } from "./traceFlags.js";
  *
  * (`@iwsdk/core/dist/init/world-initializer.js:200-206`. Three.js's own default
  * is `multiviewStereo = false`, `three.module.js:15607`.) It was confirmed
- * ACTIVE by measurement rather than assumed: the witness reports
- * `draws/frame 1` and an overhead of `+0`, and both mean `renderScene()` runs
- * once per frame, which happens on exactly one branch —
+ * ACTIVE by measurement rather than assumed: a since-removed witness recorded
+ * one `renderScene()` per frame, which happens on exactly one branch —
  * `if ( xr.enabled && xr.isMultiview )` at `three.module.js:17180`. Two views
- * walking the list would double `calls`.
+ * would have walked the render list twice.
  *
  * Multiview is a driver path, not a Three.js one: it rewrites every shader with
  * `layout(num_views = 2)` and renders into a texture array. Blending into a
@@ -63,16 +62,16 @@ import { DIAGNOSTICS_ENABLED } from "./traceFlags.js";
  * point when the other arm of the test is a headset. `?multiview=on` or no
  * parameter leaves the SDK's behaviour untouched.
  *
- * **Confirm which arm actually ran** from the witness line in `[Profile]`
- * rather than from intent:
+ * **Confirm which arm actually ran** from {@link reportMultiviewState}, never
+ * from intent. Every session logs one of:
  *
- * | | `draws/frame` | `calls armed` |
- * | --- | --- | --- |
- * | multiview on (SDK default) | 1 | `+0` |
- * | multiview off (this override) | 2 | roughly the list length |
+ * ```
+ * [MultiviewOverride] MEASURED: OCULUS_multiview AVAILABLE -> multiview ON
+ * [MultiviewOverride] MEASURED: OCULUS_multiview absent -> multiview OFF
+ * ```
  *
- * If it still reads `draws/frame 1` after asking for `off`, the override did not
- * take and the run proves nothing.
+ * and an override that was asked for but did not take is called out explicitly
+ * as `OVERRIDE FAILED`. A run whose arm is unconfirmed proves nothing.
  *
  * Then: blink stops, it is a multiview interaction. Blink persists, multiview is
  * exonerated and the compositor is what is left.
@@ -118,7 +117,22 @@ function requested(): boolean {
  * string.
  */
 export function applyMultiviewOverride(): void {
-  if (!DIAGNOSTICS_ENABLED || applied || !requested()) return;
+  if (!DIAGNOSTICS_ENABLED || applied) return;
+  if (!requested()) {
+    // Log the untouched arm too. Silence here would be indistinguishable from
+    // an override that failed to apply, and every arm of this investigation
+    // that was assumed rather than reported cost a run to re-do.
+    // Reports what it DID, not what the resulting state is — it cannot know
+    // that. The first run of this line claimed "multiview left ON" while the
+    // MEASURED line below correctly said OFF, because a desktop browser has no
+    // `OCULUS_multiview` at all. Asserting a state instead of measuring it is
+    // the exact mistake this investigation has repeatedly paid for.
+    console.log(
+      `[MultiviewOverride] not patching (no ?multiview=off). The SDK requests ` +
+        `multiviewStereo: true; actual state on the MEASURED line below.`,
+    );
+    return;
+  }
   const contexts = [
     typeof WebGL2RenderingContext !== "undefined"
       ? WebGL2RenderingContext.prototype
@@ -147,6 +161,42 @@ export function applyMultiviewOverride(): void {
   }
   console.log(
     `[MultiviewOverride] ${EXTENSION} hidden by ?multiview=off — ` +
-      `expect PassWitness draws/frame 2. Contexts patched: ${contexts.length}`,
+      `contexts patched: ${contexts.length}. Confirm with the MEASURED line below.`,
+  );
+}
+
+/**
+ * Report the arm that is actually in force, read off the live GL context.
+ *
+ * The boot line above states *intent*; this states *fact*. They can disagree —
+ * a patch applied too late, a context created before the shadow was installed,
+ * or a device with no multiview at all would each leave the boot line claiming
+ * something the renderer never saw.
+ *
+ * This matters more than it sounds. The transparent-pass witness used to supply
+ * this confirmation as a per-frame draw count (1 with multiview, 2 without), and it was
+ * the only thing that proved which path a recording was made on. That witness
+ * has been removed, so without this a session's arm is unverifiable and the
+ * whole A/B becomes a matter of recollection again.
+ *
+ * Call once, AFTER `World.create()` resolves.
+ */
+export function reportMultiviewState(world: unknown): void {
+  if (!DIAGNOSTICS_ENABLED) return;
+  const renderer = (world as { renderer?: { getContext?: () => unknown } })
+    ?.renderer;
+  const gl = renderer?.getContext?.() as WebGLRenderingContext | undefined;
+  if (!gl?.getExtension) {
+    console.log("[MultiviewOverride] MEASURED: no GL context to read");
+    return;
+  }
+  // Ask the live context the same question Three.js asks
+  // (`extensions.has('OCULUS_multiview')`, three.module.js:13863). Whatever it
+  // answers here is what the renderer will act on.
+  const available = gl.getExtension(EXTENSION) !== null;
+  console.log(
+    `[MultiviewOverride] MEASURED: ${EXTENSION} ` +
+      `${available ? "AVAILABLE -> multiview ON" : "absent -> multiview OFF"}` +
+      `${applied && available ? " (OVERRIDE FAILED — it asked for off)" : ""}`,
   );
 }
