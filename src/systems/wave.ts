@@ -2,6 +2,9 @@ import { Entity, RayInteractable, createSystem } from "@iwsdk/core";
 import { GRID_SIZE, gridToWorld, worldToGrid } from "./board.js";
 import {
   ALIEN_PATHFINDS_PER_FRAME,
+  ALIEN_RELEASE_REVEAL_RISE,
+  ALIEN_RELEASE_REVEAL_SECONDS,
+  ALIEN_RELEASE_REVEAL_START_SCALE,
   UNIT_APPROACH_OFFSETS,
   WAVE_PREP_PER_FRAME,
   TUTORIAL_WAVE_ACTIVATION_LEAD_SECONDS,
@@ -46,7 +49,8 @@ import { setShaderPhaseWaveStage } from "./traceShader.js";
  * includes 0. Anything negative works; -1 reads as "none".
  */
 const NO_WAVE = -1;
-import { createEnemyEntity } from "./structures.js";
+import { createEnemyEntity, modelChildOf } from "./structures.js";
+import { startReveal } from "./objectTransitions.js";
 import {
   Building,
   CombatState,
@@ -903,6 +907,25 @@ export class WaveSystem extends createSystem({
         // Re-attach: reserves are detached from the board root while waiting.
         if (boardRoot && alien.object3D.parent !== boardRoot) {
           boardRoot.add(alien.object3D);
+        }
+        // MODEL only. The holder carries the alien's board position and the
+        // interaction proxy carries its hit box; scaling either would move the
+        // alien or change what the player can click. So the holder is shown at
+        // its full resting transform, exactly as before, and only the look
+        // grows in.
+        //
+        // Hidden first because `startReveal` refuses an object that is already
+        // visible — it is called from per-frame code elsewhere and must not
+        // restart an entrance every frame.
+        const model = modelChildOf(alien.object3D);
+        if (model) {
+          model.visible = false;
+          startReveal(
+            model,
+            ALIEN_RELEASE_REVEAL_SECONDS,
+            ALIEN_RELEASE_REVEAL_START_SCALE,
+            ALIEN_RELEASE_REVEAL_RISE,
+          );
         }
         alien.object3D.visible = true;
       }

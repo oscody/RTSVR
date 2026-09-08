@@ -406,6 +406,14 @@ export const GAMEPLAY_VFX_BODY_Y = TILE_SIZE * 0.5;
 // what shipped before, never an allocation inside a system update.
 export const OBJECT_TRANSITION_POOL_SIZE = 16;
 
+// An alien entering the board. Shorter than the meteor's entrance because a
+// release can put several on the board at once and they are already moving;
+// this is a beat, not a set piece.
+export const ALIEN_RELEASE_REVEAL_SECONDS = 0.28;
+export const ALIEN_RELEASE_REVEAL_START_SCALE = 0.35;
+/** Comes up out of the ground rather than fading in at full height. */
+export const ALIEN_RELEASE_REVEAL_RISE = TILE_SIZE * 0.35;
+
 // Miner cargo appearing on load and leaving on deposit. Faster than the
 // meteors: a round trip has two of these in it, and the miner is already
 // moving away by the time the second one plays.

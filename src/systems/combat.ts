@@ -11,7 +11,9 @@ import {
   type DamageResult,
   type DamageTargetType,
 } from "./combatRules.js";
-import { cancelCrystalCarry } from "./gameplayEffects.js";
+import { cancelCrystalCarry, emitDeathVfx } from "./gameplayEffects.js";
+import { settleObject } from "./objectTransitions.js";
+import { modelChildOf } from "./structures.js";
 import { ActionKind, logAction } from "./actionLog.js";
 import { logWaveTransition } from "./waveTransitionLog.js";
 import { worldToGrid } from "./board.js";
@@ -320,6 +322,16 @@ export class CombatSystem extends createSystem({
   }
 
   private destroyTarget(target: Entity, enemyKilled: boolean): void {
+    // Classified FIRST, while every component is still attached. The branches
+    // below strip and detach as they go, and the effect has to know what died,
+    // not what is left of it.
+    const deathKind = target.hasComponent(Enemy)
+      ? "alien"
+      : target.hasComponent(Building)
+        ? "friendly-building"
+        : target.hasComponent(Unit)
+          ? "friendly-unit"
+          : null;
     // Entity indexes are pooled and reused, so a threat entry left behind here
     // would re-point at whatever entity is created next.
     clearThreat(target);
@@ -394,6 +406,10 @@ export class CombatSystem extends createSystem({
       traceEntityDestroyed(target.index, kindId, Reason.Killed);
       playSfx("alienDeath");
       detachAlienAnimation(target);
+      // An alien killed during its entrance still owns a transition slot. Left
+      // running it animates an orphaned object for the rest of the duration and
+      // holds a slot the next release could have used.
+      settleObject(modelChildOf(target.object3D), false);
       // Index recycling: a ring left keyed to this dead alien would reappear
       // under whatever entity claims the index next.
       disposeEnemyRangeRing(target);
@@ -401,6 +417,12 @@ export class CombatSystem extends createSystem({
     if (target.hasComponent(Building) && target.getValue(Building, "kind") === "turret") {
       detachTurretAnimation(target);
     }
+    // LAST thing before the subtree goes. The effect samples the target's world
+    // position, so it has to run while the `Object3D` still exists — and only
+    // from here: putting it in `releaseEntity` would make scenario resets,
+    // cancelled construction sites and discarded reserve aliens all look like
+    // deaths.
+    if (deathKind) emitDeathVfx(target, deathKind);
     releaseEntity(target);
   }
 

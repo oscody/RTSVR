@@ -323,3 +323,70 @@ test("the clear parks the carry slots too", () => {
   assert.ok(body.includes("carrySlots"), "a reset must park flights in progress");
   assert.ok(!body.includes(".dispose()"), "clear must park slots, not dispose them");
 });
+
+// ── Phase 4: deaths and the alien entrance ─────────────────────────────────
+
+test("only combat kills emit a death effect", () => {
+  // In `releaseEntity` it would fire for scenario resets, cancelled
+  // construction sites and discarded reserve aliens alike — the plan's
+  // ownership rule, and the reason the call is not in the teardown helper.
+  assert.ok(
+    source("src/systems/combat.ts").includes("emitDeathVfx("),
+    "the combat kill path must emit it",
+  );
+  for (const path of [
+    "src/systems/entityTeardown.ts",
+    "src/systems/scenarioReset.ts",
+    "src/systems/wave.ts",
+    "src/systems/demolition.ts",
+  ]) {
+    assert.ok(
+      !source(path).includes("emitDeathVfx"),
+      `${path} must stay silent: releasing an entity is not a death`,
+    );
+  }
+});
+
+test("the death effect fires before the entity is released", () => {
+  // It samples the target's world position, so a call after teardown has
+  // nothing to read.
+  const src = source("src/systems/combat.ts");
+  const emit = src.indexOf("emitDeathVfx(target");
+  const release = src.indexOf("releaseEntity(target)", emit);
+  assert.ok(emit > 0, "emitDeathVfx must be called on the target");
+  assert.ok(release > emit, "emitDeathVfx must precede releaseEntity");
+
+  // And the classification has to happen before the branches start detaching.
+  const classify = src.indexOf("const deathKind");
+  assert.ok(
+    classify > 0 && classify < src.indexOf("clearThreat(target)"),
+    "the kind must be read while every component is still attached",
+  );
+});
+
+test("the alien entrance grows the model, never the holder or the proxy", () => {
+  // Scaling the holder would move the alien off its tile; scaling the proxy
+  // would desynchronise the hit box from what the player sees.
+  const src = source("src/systems/wave.ts");
+  assert.match(src, /startReveal\(\s*model,/);
+  assert.ok(
+    src.includes("modelChildOf(alien.object3D)"),
+    "the reveal target must come from the shared model lookup",
+  );
+  // `startReveal` refuses an already-visible object, so the model must be
+  // hidden first or the entrance silently never plays.
+  const release = src.slice(src.indexOf("private releaseReserveAliens"));
+  const body = release.slice(0, release.indexOf("\n  }"));
+  assert.ok(
+    body.indexOf("model.visible = false") < body.indexOf("startReveal("),
+    "the model must be hidden before the reveal starts",
+  );
+});
+
+test("an alien killed mid-entrance releases its transition slot", () => {
+  const src = source("src/systems/combat.ts");
+  assert.ok(
+    src.includes("settleObject(modelChildOf(target.object3D), false)"),
+    "a corpse must not hold a transition slot for the rest of the duration",
+  );
+});

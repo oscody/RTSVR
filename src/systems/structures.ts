@@ -206,6 +206,28 @@ trackResource(interactionProxyMaterial, {
   label: "structure-interaction-proxy",
 });
 
+/**
+ * The visible model under an entity holder, skipping the interaction proxy.
+ *
+ * A holder carries exactly two children — the GLTF model and the proxy cube
+ * {@link addInteractionProxy} adds — and callers that animate the *look* of an
+ * entity must touch only the first. Scaling the holder would scale the proxy
+ * with it and change what the player can click; scaling the proxy alone would
+ * desynchronise the hit box from the model.
+ *
+ * Identified by the proxy's own `drawCat` tag rather than by child order or by
+ * name. Order is an accident of construction, and renaming a GLTF root risks
+ * breaking `AnimationMixer` track binding, which resolves nodes by name.
+ */
+export function modelChildOf(holder: Object3D | null | undefined): Object3D | null {
+  if (!holder) return null;
+  for (const child of holder.children) {
+    if (child.userData?.drawCat === "proxy") continue;
+    return child;
+  }
+  return null;
+}
+
 function addInteractionProxy(
   holder: Group,
   spec: InteractionProxySpec,
