@@ -9,7 +9,12 @@ import {
   NODE_DEPLETION_SECONDS,
   NODE_DEPLETION_SINK,
 } from "./constants.js";
-import { emitDepositVfx, emitMiningLoadedVfx } from "./gameplayEffects.js";
+import {
+  cancelCrystalCarry,
+  emitDepositVfx,
+  emitMiningLoadedVfx,
+  startCrystalCarry,
+} from "./gameplayEffects.js";
 import {
   settleObject,
   startRetreat,
@@ -203,15 +208,17 @@ export class MiningSystem extends createSystem({
         this.setCargoVisible(miner, true);
         this.issueStoredOrder(miner, "depositX", "depositY");
       } else if (transition === "reachedBase") {
-        // The doors belong to ARRIVAL, not to the credit. While the deposit was
-        // instantaneous the two were the same frame; now they are 1.5 s apart,
-        // and opening on the credit would leave the miner standing at a shut
-        // door for the whole stage and then flash as it walked away.
+        // Everything that belongs to ARRIVAL happens here. While the deposit
+        // was instantaneous, arrival and credit were the same frame; they are
+        // now a second apart, and hanging these off the credit would open the
+        // doors as the miner walked away and leave it standing on a closed
+        // base for the whole stage.
         triggerCommandCenterDepositDoors(boardState.commandCenter);
-      } else if (transition === "deposited") {
-        // Cargo stays visible for the whole deposit stage and clears here, on
-        // the frame the stockpile actually takes it.
+        // The load leaves the miner and flies in. The cargo visual retreats as
+        // the flying one launches, so there is exactly one crystal on screen.
+        startCrystalCarry(miner, boardState.commandCenter, this.cycle.depositDuration);
         this.setCargoVisible(miner, false);
+      } else if (transition === "deposited") {
         if (this.cycle.stage === "toResource") {
           this.issueStoredOrder(miner, "approachX", "approachY");
         } else {
@@ -309,6 +316,10 @@ export class MiningSystem extends createSystem({
   }
 
   private stopMining(miner: Entity, clearCargo = false): void {
+    // A hand-over in flight is a delivery that is no longer going to be paid —
+    // the base died under it, or the player took the miner off the job. Left
+    // running, the crystal lands and shows a deposit the stockpile never got.
+    cancelCrystalCarry(miner.index);
     miner.setValue(MinerState, "stage", "idle");
     miner.setValue(MinerState, "timer", 0);
     if (clearCargo) {

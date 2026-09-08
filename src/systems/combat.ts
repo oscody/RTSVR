@@ -11,6 +11,7 @@ import {
   type DamageResult,
   type DamageTargetType,
 } from "./combatRules.js";
+import { cancelCrystalCarry } from "./gameplayEffects.js";
 import { ActionKind, logAction } from "./actionLog.js";
 import { logWaveTransition } from "./waveTransitionLog.js";
 import { worldToGrid } from "./board.js";
@@ -352,6 +353,9 @@ export class CombatSystem extends createSystem({
       removeUnitFromSelection(target);
       disposeUnitSelectionVisuals(target);
       boardState.cargoVisualByUnit.delete(target.index);
+      // A miner killed mid-hand-over: the crystal must not fly on and land, or
+      // the base appears to receive a delivery from a unit that just died.
+      cancelCrystalCarry(target.index);
       boardState.pathByUnit.delete(target.index);
     }
     if (target.hasComponent(Building)) {

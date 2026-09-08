@@ -284,6 +284,23 @@ export const COMMAND_CENTER_IDLE_OPERATIONAL_CLIP = "Idle_Operational";
 export const COMMAND_CENTER_DOOR_OPEN_CLIP = "Door_Open";
 export const COMMAND_CENTER_DOOR_CLOSE_CLIP = "Door_Close";
 export const COMMAND_CENTER_DOOR_HOLD_SECONDS = 0.25;
+/**
+ * The four door pivots in `command_center.glb`, one per side.
+ *
+ * These are the nodes `Door_Open`/`Door_Close` drive, which is also why they
+ * survive `meshMerge` — it may never remove a node an animation clip targets.
+ *
+ * Their node translations are all `[0, 0, 0]`: they are pivots at the model
+ * origin, and the door geometry is baked into the vertices beneath them. So a
+ * caller that wants to know WHERE a door is must take the bounding box of the
+ * subtree, never the node's position.
+ */
+export const COMMAND_CENTER_DOOR_NODES = [
+  "DoorAssembly_0",
+  "DoorAssembly_1",
+  "DoorAssembly_2",
+  "DoorAssembly_3",
+] as const;
 
 export const TURRET_FIRE_RECOIL_CLIP = "Fire_Recoil";
 
@@ -340,6 +357,37 @@ export const GAMEPLAY_VFX_DEATH_ALIEN_COLOR = 0xc65cff; // purple/red
 export const GAMEPLAY_VFX_DEATH_UNIT_COLOR = 0x9fd0ff; // friendly blue/white
 export const GAMEPLAY_VFX_DEATH_BUILDING_COLOR = 0xffb066; // orange/white
 export const GAMEPLAY_VFX_COMPLETION_COLOR = 0xffe6a8; // warm gold
+
+// The crystal handed from miner to base during the deposit stage.
+//
+// Four slots: one per miner a match realistically fields at once. A fifth
+// simultaneous hand-over drops its visual rather than allocating mid-frame,
+// which is the same rule the flash and pulse pools follow.
+export const GAMEPLAY_VFX_CARRY_POOL_SIZE = 4;
+/** Matches the cargo model already riding on the miner, so it reads as the same rock. */
+export const GAMEPLAY_VFX_CARRY_WIDTH = TILE_SIZE * 0.3;
+/** Turns per second in flight. Enough to catch the light, not enough to spin. */
+export const GAMEPLAY_VFX_CARRY_SPIN = 1.5;
+/**
+ * FALLBACK only, for a build whose command center has no door nodes.
+ *
+ * The crystal normally glides to the nearest of {@link COMMAND_CENTER_DOOR_NODES}.
+ * If none resolve, it aims at the building's origin instead — which is a point
+ * well inside a 3x3 footprint, so it is pulled this far back toward the miner to
+ * stop at the near face rather than clipping through a wall.
+ */
+export const GAMEPLAY_VFX_CARRY_STOP_SHORT = 0.35;
+
+/**
+ * Fraction of the deposit stage the flight occupies.
+ *
+ * Under 1 on purpose: the crystal must be **home before the stockpile moves**,
+ * never after. The flight and the rules timer run off the same delta from the
+ * same frame, so at 1.0 they would land on the same frame and any rounding
+ * would show the counter tick while the crystal was still in the air. The
+ * remaining tenth of a second is the beat between arrival and payment.
+ */
+export const GAMEPLAY_VFX_CARRY_ARRIVE_FRACTION = 0.9;
 
 // A building death reads as a bigger event than a unit death.
 export const GAMEPLAY_VFX_BUILDING_DEATH_SCALE = 1.8;

@@ -81,15 +81,18 @@ test("emitters never create entities, components, or timers", () => {
   ]) {
     assert.ok(!src.includes(forbidden), `gameplayEffects must not use ${forbidden}`);
   }
-  // `createTransformEntity` appears exactly twice — once per pool, inside
-  // ensurePool. Anywhere else would mean an emitter is allocating.
+  // `createTransformEntity` appears exactly three times — once per pool.
+  // Anywhere else would mean an emitter is allocating.
+  //
+  // Two live in `ensurePool`, the third in `ensureCarryPool`, which is separate
+  // because it waits on a loaded GLTF rather than just a board root.
   const creations = src.match(/createTransformEntity/g) ?? [];
-  assert.equal(creations.length, 2, "only the two pool builders may create entities");
-  const ensure = src.slice(src.indexOf("function ensurePool"), src.indexOf("function toRootLocal"));
+  assert.equal(creations.length, 3, "only the three pool builders may create entities");
+  const builders = src.slice(src.indexOf("function ensurePool"), src.indexOf("function toRootLocal"));
   assert.equal(
-    (ensure.match(/createTransformEntity/g) ?? []).length,
-    2,
-    "both creations must be inside ensurePool",
+    (builders.match(/createTransformEntity/g) ?? []).length,
+    3,
+    "every creation must sit inside a pool builder",
   );
 });
 
@@ -111,10 +114,13 @@ test("every effect mesh is non-interactive and counted as vfx", () => {
   // underneath it, and one without a draw category would be invisible to the
   // profiler that has to prove this system costs nothing.
   const src = effects();
-  const nonInteractive = (src.match(/makeNonInteractive\(mesh\)/g) ?? []).length;
+  // The carry pool flies a Group, so it marks the holder rather than a `mesh`;
+  // the census inherits `drawCat` down the tree, so tagging the holder covers
+  // every mesh the GLTF brought with it.
+  const nonInteractive = (src.match(/makeNonInteractive\((mesh|holder)\)/g) ?? []).length;
   const categorised = (src.match(/userData\.drawCat = "vfx"/g) ?? []).length;
-  assert.equal(nonInteractive, 2, "both pools must mark their meshes non-interactive");
-  assert.equal(categorised, 2, "both pools must set a draw category");
+  assert.equal(nonInteractive, 3, "all three pools must mark their objects non-interactive");
+  assert.equal(categorised, 3, "all three pools must set a draw category");
 });
 
 test("both shader variants are GPU-warmed before the first event", () => {
@@ -123,6 +129,7 @@ test("both shader variants are GPU-warmed before the first event", () => {
   const src = effects();
   assert.match(src, /warmObjectForRender\(flashSlots\[0\]\?\.mesh/);
   assert.match(src, /warmObjectForRender\(pulseSlots\[0\]\?\.mesh/);
+  assert.match(src, /warmObjectForRender\(carrySlots\[0\]\?\.object/);
 });
 
 // ── Lifetime contracts (plan verification items 9, and the reset section) ───
@@ -238,4 +245,81 @@ test("every effect is brief — these punctuate a rule that already resolved", (
     const seconds = Number(match[1]);
     assert.ok(seconds > 0 && seconds <= 0.5, `${name} is ${seconds}s; keep it under half a second`);
   }
+});
+
+// ── The crystal hand-over (deposit stage) ───────────────────────────────────
+
+test("the hand-over launches on arrival, not on the credit", () => {
+  const mining = source("src/systems/mining.ts");
+  const reached = mining.indexOf('transition === "reachedBase"');
+  const credited = mining.indexOf('transition === "deposited"');
+  const launch = mining.indexOf("startCrystalCarry(");
+  assert.ok(reached > 0 && credited > reached, "both branches must exist, in order");
+  assert.ok(
+    launch > reached && launch < credited,
+    "startCrystalCarry belongs to the arrival branch: the flight fills the " +
+      "deposit stage, so launching it at the credit would fly the crystal " +
+      "after the stockpile had already taken it",
+  );
+});
+
+test("the flight is shorter than the stage it fills", () => {
+  // The crystal must be home BEFORE the counter moves, never after.
+  const constants = source("src/systems/constants.ts");
+  const fraction = /GAMEPLAY_VFX_CARRY_ARRIVE_FRACTION = ([0-9.]+)/.exec(constants)?.[1];
+  assert.ok(fraction, "the fraction must be declared");
+  assert.ok(Number(fraction) < 1, `flight fraction must be < 1, got ${fraction}`);
+});
+
+test("the crystal glides into the open door, and is not lobbed at the base", () => {
+  const src = effectsCode();
+  const update = src.slice(src.indexOf("for (const slot of carrySlots) {"));
+  const body = update.slice(0, update.indexOf("\n    }"));
+  // An arc reads as throwing. The crystal is being carried in.
+  assert.ok(
+    !body.includes("Math.sin") && !body.includes("ARC_HEIGHT"),
+    "the flight must be a straight glide, with no arc term",
+  );
+
+  // Aimed at a door, not at the building's origin — those pivots all sit at the
+  // model centre, so the target has to come from the door geometry's bounds.
+  assert.match(src, /function nearestDoor/);
+  assert.match(src, /setFromObject\(node\)/);
+  assert.ok(
+    src.includes("COMMAND_CENTER_DOOR_NODES"),
+    "the door nodes must come from the shared constant, not a literal",
+  );
+});
+
+test("every path that ends a mining job cancels the flight", () => {
+  // A crystal that lands after its miner died shows a delivery the stockpile
+  // never received.
+  for (const [path, why] of [
+    ["src/systems/mining.ts", "base lost, retarget failure, manual reassign"],
+    ["src/systems/combat.ts", "the miner was killed mid-hand-over"],
+    ["src/systems/demolition.ts", "the miner was recycled mid-hand-over"],
+  ] as const) {
+    assert.ok(
+      source(path).includes("cancelCrystalCarry("),
+      `${path} must cancel the flight (${why})`,
+    );
+  }
+});
+
+test("a landed flight releases its slot in the same frame", () => {
+  // The slot is keyed on `entity.index`, which EliCS recycles. A slot left
+  // claiming a dead miner's index would be cancelled by whichever unit is
+  // handed that index next.
+  const src = effectsCode();
+  const update = src.slice(src.indexOf("for (const slot of carrySlots) {"));
+  const body = update.slice(0, update.indexOf("\n    }"));
+  assert.match(body, /slot\.active = false/);
+  assert.match(body, /slot\.owner = -1/);
+});
+
+test("the clear parks the carry slots too", () => {
+  const clear = effects().slice(effects().indexOf("export function clearGameplayEffects"));
+  const body = clear.slice(0, clear.indexOf("\n}"));
+  assert.ok(body.includes("carrySlots"), "a reset must park flights in progress");
+  assert.ok(!body.includes(".dispose()"), "clear must park slots, not dispose them");
 });

@@ -1,6 +1,9 @@
 import {
   AdditiveBlending,
+  AssetManager,
+  Box3,
   type Entity,
+  Group,
   Mesh,
   MeshBasicMaterial,
   type Object3D,
@@ -13,6 +16,12 @@ import {
 import {
   GAMEPLAY_VFX_BODY_Y,
   GAMEPLAY_VFX_BUILDING_DEATH_SCALE,
+  COMMAND_CENTER_DOOR_NODES,
+  GAMEPLAY_VFX_CARRY_ARRIVE_FRACTION,
+  GAMEPLAY_VFX_CARRY_POOL_SIZE,
+  GAMEPLAY_VFX_CARRY_SPIN,
+  GAMEPLAY_VFX_CARRY_STOP_SHORT,
+  GAMEPLAY_VFX_CARRY_WIDTH,
   GAMEPLAY_VFX_COMPLETION_COLOR,
   GAMEPLAY_VFX_COMPLETION_SECONDS,
   GAMEPLAY_VFX_DEATH_ALIEN_COLOR,
@@ -85,6 +94,28 @@ interface FlashSlot {
   baseScale: number;
 }
 
+/**
+ * One crystal in flight from a miner to the command center.
+ *
+ * `owner` is the miner's entity index rather than the entity, so a slot can be
+ * cancelled by a caller that no longer has the entity — which is exactly the
+ * case that matters, a miner killed mid-deposit.
+ *
+ * NOTE the index-recycling hazard: `entity.index` is pooled and reused, so a
+ * slot MUST be released the moment its flight ends or its miner stops mining.
+ * A stale slot still claiming index 12 would be cancelled by whatever unit is
+ * handed index 12 next.
+ */
+interface CarrySlot {
+  object: Object3D;
+  active: boolean;
+  age: number;
+  life: number;
+  owner: number;
+  from: Vector3;
+  to: Vector3;
+}
+
 interface PulseSlot {
   mesh: Mesh;
   material: MeshBasicMaterial;
@@ -96,12 +127,65 @@ interface PulseSlot {
 
 const flashSlots: FlashSlot[] = [];
 const pulseSlots: PulseSlot[] = [];
+const carrySlots: CarrySlot[] = [];
 let pooledRoot: Object3D | null = null;
 let effectsWorld: World | null = null;
 
 // Scratch, reused across events. Allocating a Vector3 per death would put a
 // GC pause exactly where the frame is already busiest.
 const tmpWorld = new Vector3();
+const tmpTarget = new Vector3();
+const tmpDoor = new Vector3();
+
+/**
+ * The four door pivots, resolved once per command center.
+ *
+ * `getObjectByName` walks the whole building, so it is done on the first
+ * hand-over and kept until the command center object changes — which is what a
+ * scenario reset produces. The BOX of each door is still measured fresh at every
+ * launch, because the doors are open by then and their geometry has moved.
+ */
+let doorNodes: Object3D[] = [];
+let doorSource: Object3D | null = null;
+
+/**
+ * World-space centre of the door nearest `fromWorld`, written into `out`.
+ *
+ * Returns false when the model has no door nodes, which is the fallback the
+ * caller handles — a different command center asset should degrade to a sane
+ * flight, not to no deposit visual.
+ */
+function nearestDoor(commandCenter: Object3D, fromWorld: Vector3, out: Vector3): boolean {
+  if (doorSource !== commandCenter) {
+    doorSource = commandCenter;
+    doorNodes = [];
+    for (const name of COMMAND_CENTER_DOOR_NODES) {
+      const node = commandCenter.getObjectByName(name);
+      if (node) doorNodes.push(node);
+    }
+  }
+  let best = Infinity;
+  for (const node of doorNodes) {
+    // The BOX, not the node position: these pivots all sit at the model origin
+    // and the door geometry is baked into the vertices below them, so every
+    // node position would resolve to the same point in the middle of the base.
+    tmpBox.setFromObject(node);
+    // An empty box means the node has no mesh under it any more — a merge rule
+    // change, or a different asset. `getCenter` answers (0,0,0) for an empty
+    // box, which is the BOARD ORIGIN: the crystal would sail off to the corner
+    // of the map with nothing in the log to say why. Skip it and let the
+    // fallback aim at the building instead.
+    if (tmpBox.isEmpty()) continue;
+    tmpBox.getCenter(tmpDoor);
+    const distance = tmpDoor.distanceToSquared(fromWorld);
+    if (distance >= best) continue;
+    best = distance;
+    out.copy(tmpDoor);
+  }
+  return best < Infinity;
+}
+const tmpSize = new Vector3();
+const tmpBox = new Box3();
 
 /** Colour and lifetime for each kind, so emitters carry no magic numbers. */
 const EFFECT_STYLE: Readonly<
@@ -133,6 +217,7 @@ function ensurePool(): boolean {
 
   flashSlots.length = 0;
   pulseSlots.length = 0;
+  carrySlots.length = 0;
 
   // One geometry shared by every flash; per-slot materials because each fades
   // its own opacity and carries its own colour.
@@ -207,6 +292,75 @@ function ensurePool(): boolean {
 
   pooledRoot = rootObject;
   return true;
+}
+
+/**
+ * Build the crystal pool, which is deliberately NOT part of {@link ensurePool}.
+ *
+ * The flash and pulse pools need only a board root. This one needs a loaded
+ * GLTF, and the two are not ready at the same moment: the root exists during
+ * the loading screen, while `rockCrystals` arrives whenever the manifest gets
+ * to it. Built inside `ensurePool`, an early call would find no asset, take
+ * the identity-check early return on every later frame, and leave the game
+ * permanently without a hand-over visual — failing silently, which is the
+ * worst way for an effect to fail.
+ *
+ * So it retries. Cheap to call every frame: one length check once it is built,
+ * and one map lookup while it is not.
+ */
+function ensureCarryPool(): boolean {
+  if (carrySlots.length > 0) return true;
+  const root = boardState.boardRoot;
+  if (!root || !root.object3D || !effectsWorld) return false;
+  // Asked ONCE, before anything is built. Checking per iteration could leave a
+  // half-built pool parented to the board with its slots discarded — invisible,
+  // undisposed, and rebuilt again on the next frame.
+  if (!AssetManager.getGLTF("rockCrystals")?.scene) return false;
+
+  for (let index = 0; index < GAMEPLAY_VFX_CARRY_POOL_SIZE; index += 1) {
+    // The crystal in flight is a clone of the model the miner carries, not an
+    // abstract shard: the point of the effect is that the rock you watched it
+    // pick up is the rock that goes in. `getGLTF` hands back a fresh clone per
+    // call, so the slots do not share a scene graph.
+    const crystal = AssetManager.getGLTF("rockCrystals")?.scene;
+    if (!crystal) break;
+
+    // A HOLDER is flown, not the model itself, and the model carries the
+    // centring offset inside it. The two cannot be the same object: the flight
+    // writes `object.position` every frame, which would overwrite any offset
+    // stored there and put the pivot back wherever the GLB happens to keep it.
+    // The miner's cargo seats this same GLB on the ground (`seatModel` in
+    // craftFactory); a crystal in flight has no ground, so it is centred on all
+    // three axes instead, or it would swing around the path rather than follow
+    // along it.
+    tmpBox.setFromObject(crystal).getCenter(tmpTarget);
+    crystal.position.sub(tmpTarget);
+    const width = tmpBox.getSize(tmpSize).x || 1;
+
+    const holder = new Group();
+    holder.add(crystal);
+    holder.scale.setScalar(GAMEPLAY_VFX_CARRY_WIDTH / width);
+    holder.visible = false;
+    makeNonInteractive(holder);
+    holder.name = `GameplayCarry_${index}`;
+    // Inherited by every child mesh when the draw census walks the tree, so
+    // these land in the `vfx` bucket rather than silently inflating `static`.
+    holder.userData.drawCat = "vfx";
+    // Same as every other pool here: an ECS entity under the board root, never
+    // a bare `object3D.add`, so it takes part in the level lifecycle.
+    effectsWorld.createTransformEntity(holder, { parent: root });
+    carrySlots.push({
+      object: holder,
+      active: false,
+      age: 0,
+      life: 0,
+      owner: -1,
+      from: new Vector3(),
+      to: new Vector3(),
+    });
+  }
+  warmObjectForRender(carrySlots[0]?.object, "gameplay-carry-pool");
+  return carrySlots.length > 0;
 }
 
 /** Convert a world point into board-root local space, where the pool lives. */
@@ -291,6 +445,84 @@ export function emitDepositVfx(commandCenter: Entity | null): void {
 }
 
 /**
+ * A miner has reached the base and is handing its load over.
+ *
+ * Called on the ARRIVAL edge, not the credit: the flight fills the deposit
+ * stage that the arrival opens. `seconds` is the stage length, and the flight
+ * itself takes {@link GAMEPLAY_VFX_CARRY_ARRIVE_FRACTION} of it so the crystal
+ * is home before the stockpile moves.
+ *
+ * Presentation only, like everything else here — the crystals are credited by
+ * `advanceMiningCycle`, on its own timer. If this drops the visual because the
+ * pool is full, the deposit still happens exactly as it would have.
+ */
+export function startCrystalCarry(
+  miner: Entity | null,
+  commandCenter: Entity | null,
+  seconds: number,
+): void {
+  if (!miner?.object3D || !commandCenter?.object3D) return;
+  if (!ensureCarryPool() || seconds <= 0) return;
+
+  // The hand-over starts where the cargo actually sits — on top of the miner —
+  // rather than at its feet, so the crystal does not jump on the first frame.
+  const cargo = boardState.cargoVisualByUnit.get(miner.index);
+  if (cargo) cargo.getWorldPosition(tmpWorld);
+  else {
+    miner.object3D.getWorldPosition(tmpWorld);
+    tmpWorld.y += GAMEPLAY_VFX_BODY_Y;
+  }
+  // Into the door that just opened — the nearest of the four, which is the one
+  // on the side the miner walked up to.
+  if (nearestDoor(commandCenter.object3D, tmpWorld, tmpTarget)) {
+    toRootLocal(tmpWorld);
+    toRootLocal(tmpTarget);
+  } else {
+    commandCenter.object3D.getWorldPosition(tmpTarget);
+    tmpTarget.y += GAMEPLAY_VFX_BODY_Y;
+    toRootLocal(tmpWorld);
+    toRootLocal(tmpTarget);
+    tmpTarget.lerp(tmpWorld, GAMEPLAY_VFX_CARRY_STOP_SHORT);
+  }
+
+  // One flight per miner. A second call for a miner already carrying restarts
+  // that slot instead of consuming a new one, so a re-issued order cannot leak.
+  const slot =
+    carrySlots.find((candidate) => candidate.active && candidate.owner === miner.index) ??
+    carrySlots.find((candidate) => !candidate.active);
+  if (!slot) return; // Pool full: drop it. See the module comment.
+
+  slot.active = true;
+  slot.age = 0;
+  slot.life = seconds * GAMEPLAY_VFX_CARRY_ARRIVE_FRACTION;
+  slot.owner = miner.index;
+  slot.from.copy(tmpWorld);
+  slot.to.copy(tmpTarget);
+  slot.object.position.copy(tmpWorld);
+  // Reset rather than let it accumulate: a slot reused every trip for a long
+  // match would otherwise carry an ever-growing angle into float territory
+  // where the spin visibly stutters.
+  slot.object.rotation.y = 0;
+  slot.object.visible = true;
+}
+
+/**
+ * Abandon a hand-over that will never be paid.
+ *
+ * Called wherever a miner stops mining — the base destroyed under it, the
+ * player reassigning it, the miner killed. Without this the crystal would fly
+ * on and land, showing a delivery the stockpile never received.
+ */
+export function cancelCrystalCarry(minerIndex: number): void {
+  for (const slot of carrySlots) {
+    if (!slot.active || slot.owner !== minerIndex) continue;
+    slot.active = false;
+    slot.owner = -1;
+    slot.object.visible = false;
+  }
+}
+
+/**
  * A real combat kill, emitted before the target is released.
  *
  * **Only from the combat kill path.** Putting this in `releaseEntity` would
@@ -330,15 +562,31 @@ export function clearGameplayEffects(): void {
     slot.mesh.visible = false;
     slot.material.opacity = 0;
   }
+  for (const slot of carrySlots) {
+    slot.active = false;
+    slot.owner = -1;
+    slot.object.visible = false;
+  }
+  // Drop the door lookup with them. A reset builds a new command center, and
+  // holding its predecessor's nodes would keep a disposed subtree alive until
+  // the next hand-over happened to notice the object had changed.
+  doorSource = null;
+  doorNodes = [];
 }
 
 /** Diagnostic surface: how many slots are live right now. */
-export function gameplayEffectsActive(): { flashes: number; pulses: number } {
+export function gameplayEffectsActive(): {
+  flashes: number;
+  pulses: number;
+  carries: number;
+} {
   let flashes = 0;
   let pulses = 0;
+  let carries = 0;
   for (const slot of flashSlots) if (slot.active) flashes += 1;
   for (const slot of pulseSlots) if (slot.active) pulses += 1;
-  return { flashes, pulses };
+  for (const slot of carrySlots) if (slot.active) carries += 1;
+  return { flashes, pulses, carries };
 }
 
 export class GameplayEffectsSystem extends createSystem({}) {
@@ -359,6 +607,8 @@ export class GameplayEffectsSystem extends createSystem({}) {
     //
     // Cheap to call every frame: it returns on an identity check once built.
     if (!ensurePool()) return;
+    // Retries until `rockCrystals` has loaded; a no-op length check after that.
+    ensureCarryPool();
     const frameDelta = Math.max(0, delta);
 
     for (const slot of flashSlots) {
@@ -389,6 +639,28 @@ export class GameplayEffectsSystem extends createSystem({}) {
       // as a shockwave rather than a second sphere.
       slot.material.opacity = 0.9 * (1 - t) * (1 - t);
       slot.mesh.scale.setScalar(slot.baseScale * (0.4 + t * 1.6));
+    }
+
+    for (const slot of carrySlots) {
+      if (!slot.active) continue;
+      slot.age += frameDelta;
+      const t = slot.age / slot.life;
+      if (t >= 1) {
+        // Released the frame it lands. The slot is keyed on a POOLED entity
+        // index, so holding it a moment longer than the flight risks a later
+        // unit inheriting the index and cancelling a stranger's delivery.
+        slot.active = false;
+        slot.owner = -1;
+        slot.object.visible = false;
+        continue;
+      }
+      // A GLIDE, not a throw: straight from where the miner set it down to the
+      // open door, on a smoothstep so it eases away and settles into the
+      // doorway instead of stopping dead. There is deliberately no arc — an arc
+      // reads as the crystal being lobbed, and it is being carried in.
+      const eased = t * t * (3 - 2 * t);
+      slot.object.position.lerpVectors(slot.from, slot.to, eased);
+      slot.object.rotation.y += frameDelta * GAMEPLAY_VFX_CARRY_SPIN;
     }
   }
 }

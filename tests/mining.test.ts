@@ -57,7 +57,7 @@ test("economy constants define the resource baseline", () => {
       defaultCapacity: 50,
       amountPerTrip: 10,
       gatherTime: 5,
-      depositTime: 1.5,
+      depositTime: 1,
       largeCapacity: 1000,
       smallCapacity: 100,
     },
@@ -118,15 +118,15 @@ test("the deposit stage holds the miner for its duration", () => {
 
   // The defect this guards: before 2026-09-08 the deposit branch had no timer,
   // so this first call credited immediately and the miner left inside one frame.
-  assert.equal(advanceMiningCycle(state, 0.5, false), "none");
+  assert.equal(advanceMiningCycle(state, 0.4, false), "none");
   assert.equal(state.crystals, 20, "nothing is credited mid-deposit");
   assert.equal(state.cargo, 10, "the miner is still carrying it");
   assert.equal(state.stage, "deposit");
 
-  assert.equal(advanceMiningCycle(state, 0.5, false), "none");
+  assert.equal(advanceMiningCycle(state, 0.4, false), "none");
   assert.equal(state.crystals, 20);
 
-  assert.equal(advanceMiningCycle(state, 0.5, false), "deposited");
+  assert.equal(advanceMiningCycle(state, 0.4, false), "deposited");
   assert.equal(state.crystals, 30);
   assert.equal(state.cargo, 0);
   assert.equal(state.stage, "toResource");

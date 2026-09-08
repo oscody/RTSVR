@@ -1,4 +1,5 @@
 import { type Entity } from "@iwsdk/core";
+import { cancelCrystalCarry } from "./gameplayEffects.js";
 import { getBuildingSpec } from "./buildingCatalog.js";
 import { getProductionSpec } from "./craftCatalog.js";
 import {
@@ -109,6 +110,7 @@ function destroyUnit(unit: Entity): DemolitionResult {
   removeUnitFromSelection(unit);
   disposeUnitSelectionVisuals(unit);
   boardState.cargoVisualByUnit.delete(unit.index);
+  cancelCrystalCarry(unit.index);
   boardState.pathByUnit.delete(unit.index);
   disposeEntity(unit);
   grantCrystals(refund);
