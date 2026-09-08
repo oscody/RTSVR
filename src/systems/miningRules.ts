@@ -21,6 +21,7 @@ export interface MiningCycleState {
   nodeRemaining: number;
   amountPerTrip: number;
   gatherDuration: number;
+  depositDuration: number;
   crystals: number;
 }
 
@@ -119,6 +120,13 @@ export function advanceMiningCycle(
   }
 
   if (state.stage === "deposit") {
+    // Symmetric with `gathering` above, and deliberately so: the stockpile is
+    // credited on the frame the timer completes, not on arrival. `reachedBase`
+    // is the arrival edge; anything that should happen when the miner gets
+    // there hooks that, not this.
+    state.timer += delta;
+    if (state.timer < state.depositDuration) return "none";
+    state.timer = 0;
     state.crystals += state.cargo;
     state.cargo = 0;
     state.stage = state.nodeRemaining > 0 ? "toResource" : "idle";

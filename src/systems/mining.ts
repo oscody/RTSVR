@@ -18,6 +18,7 @@ import {
 import { disableModelRaycast } from "./structures.js";
 import {
   DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
+  MINING_DEPOSIT_TIME_SECONDS,
   MINING_GATHER_TIME_SECONDS,
 } from "./economyConstants.js";
 import {
@@ -63,6 +64,9 @@ export class MiningSystem extends createSystem({
     nodeRemaining: 0,
     amountPerTrip: DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
     gatherDuration: MINING_GATHER_TIME_SECONDS,
+    // Set once, unlike `gatherDuration`: this one has no live knob, and nothing
+    // in the loop writes it, so the initializer is the whole story.
+    depositDuration: MINING_DEPOSIT_TIME_SECONDS,
     crystals: 0,
   };
 
@@ -198,9 +202,16 @@ export class MiningSystem extends createSystem({
         emitMiningLoadedVfx(node);
         this.setCargoVisible(miner, true);
         this.issueStoredOrder(miner, "depositX", "depositY");
-      } else if (transition === "deposited") {
-        this.setCargoVisible(miner, false);
+      } else if (transition === "reachedBase") {
+        // The doors belong to ARRIVAL, not to the credit. While the deposit was
+        // instantaneous the two were the same frame; now they are 1.5 s apart,
+        // and opening on the credit would leave the miner standing at a shut
+        // door for the whole stage and then flash as it walked away.
         triggerCommandCenterDepositDoors(boardState.commandCenter);
+      } else if (transition === "deposited") {
+        // Cargo stays visible for the whole deposit stage and clears here, on
+        // the frame the stockpile actually takes it.
+        this.setCargoVisible(miner, false);
         if (this.cycle.stage === "toResource") {
           this.issueStoredOrder(miner, "approachX", "approachY");
         } else {

@@ -5,6 +5,7 @@ import {
   DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
   DEFAULT_RESOURCE_CAPACITY,
   LARGE_CRYSTAL_NODE_CAPACITY,
+  MINING_DEPOSIT_TIME_SECONDS,
   MINING_GATHER_TIME_SECONDS,
   SMALL_CRYSTAL_NODE_CAPACITY,
   STARTING_CRYSTALS,
@@ -32,7 +33,10 @@ function completeCycle(state: MiningCycleState): void {
   assert.equal(state.stage, "deposit");
   assert.equal(state.crystals, beforeGather, "carrying must not change the stockpile");
 
-  assert.equal(advanceMiningCycle(state, 0, false), "deposited");
+  assert.equal(
+    advanceMiningCycle(state, MINING_DEPOSIT_TIME_SECONDS, false),
+    "deposited",
+  );
   assert.equal(state.crystals, beforeGather + carried);
   assert.equal(state.cargo, 0);
 }
@@ -44,6 +48,7 @@ test("economy constants define the resource baseline", () => {
       defaultCapacity: DEFAULT_RESOURCE_CAPACITY,
       amountPerTrip: DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
       gatherTime: MINING_GATHER_TIME_SECONDS,
+      depositTime: MINING_DEPOSIT_TIME_SECONDS,
       largeCapacity: LARGE_CRYSTAL_NODE_CAPACITY,
       smallCapacity: SMALL_CRYSTAL_NODE_CAPACITY,
     },
@@ -52,6 +57,7 @@ test("economy constants define the resource baseline", () => {
       defaultCapacity: 50,
       amountPerTrip: 10,
       gatherTime: 5,
+      depositTime: 1.5,
       largeCapacity: 1000,
       smallCapacity: 100,
     },
@@ -66,6 +72,7 @@ test("three mining cycles add crystals only during deposit", () => {
     nodeRemaining: LARGE_CRYSTAL_NODE_CAPACITY,
     amountPerTrip: DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
     gatherDuration: MINING_GATHER_TIME_SECONDS,
+    depositDuration: MINING_DEPOSIT_TIME_SECONDS,
     crystals: STARTING_CRYSTALS,
   };
 
@@ -86,6 +93,7 @@ test("the final trip cannot extract more than the node has", () => {
     nodeRemaining: 6,
     amountPerTrip: DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
     gatherDuration: MINING_GATHER_TIME_SECONDS,
+    depositDuration: MINING_DEPOSIT_TIME_SECONDS,
     crystals: 20,
   };
 
@@ -96,6 +104,51 @@ test("the final trip cannot extract more than the node has", () => {
   assert.equal(state.stage, "idle");
 });
 
+test("the deposit stage holds the miner for its duration", () => {
+  const state: MiningCycleState = {
+    stage: "deposit",
+    timer: 0,
+    cargo: 10,
+    nodeRemaining: 40,
+    amountPerTrip: DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
+    gatherDuration: MINING_GATHER_TIME_SECONDS,
+    depositDuration: MINING_DEPOSIT_TIME_SECONDS,
+    crystals: 20,
+  };
+
+  // The defect this guards: before 2026-09-08 the deposit branch had no timer,
+  // so this first call credited immediately and the miner left inside one frame.
+  assert.equal(advanceMiningCycle(state, 0.5, false), "none");
+  assert.equal(state.crystals, 20, "nothing is credited mid-deposit");
+  assert.equal(state.cargo, 10, "the miner is still carrying it");
+  assert.equal(state.stage, "deposit");
+
+  assert.equal(advanceMiningCycle(state, 0.5, false), "none");
+  assert.equal(state.crystals, 20);
+
+  assert.equal(advanceMiningCycle(state, 0.5, false), "deposited");
+  assert.equal(state.crystals, 30);
+  assert.equal(state.cargo, 0);
+  assert.equal(state.stage, "toResource");
+  assert.equal(state.timer, 0, "the timer resets for the next cycle");
+});
+
+test("a zero deposit duration credits on the first frame, as it did before", () => {
+  const state: MiningCycleState = {
+    stage: "deposit",
+    timer: 0,
+    cargo: 10,
+    nodeRemaining: 40,
+    amountPerTrip: DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
+    gatherDuration: MINING_GATHER_TIME_SECONDS,
+    depositDuration: 0,
+    crystals: 20,
+  };
+
+  assert.equal(advanceMiningCycle(state, 0, false), "deposited");
+  assert.equal(state.crystals, 30);
+});
+
 test("miner cannot deposit after the command center is unavailable", () => {
   const state: MiningCycleState = {
     stage: "deposit",
@@ -104,6 +157,7 @@ test("miner cannot deposit after the command center is unavailable", () => {
     nodeRemaining: 40,
     amountPerTrip: DEFAULT_RESOURCE_AMOUNT_PER_TRIP,
     gatherDuration: MINING_GATHER_TIME_SECONDS,
+    depositDuration: MINING_DEPOSIT_TIME_SECONDS,
     crystals: 20,
   };
 
