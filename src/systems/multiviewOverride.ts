@@ -1,7 +1,8 @@
 import { DIAGNOSTICS_ENABLED } from "./traceFlags.js";
 
 /**
- * A/B switch for OVR multiview, for the overlay-blink investigation.
+ * Multiview off by default, with an A/B switch back on — from the overlay-blink
+ * investigation.
  *
  * ## Why this exists
  *
@@ -56,14 +57,28 @@ import { DIAGNOSTICS_ENABLED } from "./traceFlags.js";
  * reasoning `programChurn.ts` gives for reading `renderer.properties` instead of
  * editing Three.js.
  *
- * ## How to run the A/B
+ * ## Off by default, and how to get the SDK path back
  *
- * Append `?multiview=off` to the app URL. No rebuild, no redeploy — which is the
- * point when the other arm of the test is a headset. `?multiview=on` or no
- * parameter leaves the SDK's behaviour untouched.
+ * Multiview is **off by default**: this applies on every load, production
+ * builds included, with no query string. That is a deliberate reversal of how
+ * the file started. It was an opt-in arm behind `?multiview=off`, on the
+ * principle that a render-path change should never be a default — but the blink
+ * it was built to test for is a shipped-experience bug, and the arm that does
+ * not blink is the one players should get. A default nobody has to remember
+ * beats a flag someone will forget.
+ *
+ * `?multiview=on` restores the SDK's own path for one load. That is now the only
+ * way to run the other arm of the A/B, and it is still a query string rather
+ * than a rebuild for the same reason as before: the other arm of the test is a
+ * headset.
+ *
+ * Because this is a production behaviour now, the patch itself is NOT gated on
+ * `DIAGNOSTICS_ENABLED` — only the logging is. A `npm run build` app renders on
+ * exactly the path a diagnostics run measures, and says nothing about it. Gating
+ * the patch would mean shipping the one configuration never tested.
  *
  * **Confirm which arm actually ran** from {@link reportMultiviewState}, never
- * from intent. Every session logs one of:
+ * from intent. Every diagnostics session logs one of:
  *
  * ```
  * [MultiviewOverride] MEASURED: OCULUS_multiview AVAILABLE -> multiview ON
@@ -73,8 +88,11 @@ import { DIAGNOSTICS_ENABLED } from "./traceFlags.js";
  * and an override that was asked for but did not take is called out explicitly
  * as `OVERRIDE FAILED`. A run whose arm is unconfirmed proves nothing.
  *
- * Then: blink stops, it is a multiview interaction. Blink persists, multiview is
- * exonerated and the compositor is what is left.
+ * Then, comparing a default load against a `?multiview=on` one: blink only on
+ * the `on` arm and it is a multiview interaction, which is what this default
+ * bets on. Blink on both and multiview is exonerated, the compositor is what is
+ * left — and this default should be reverted rather than left standing as a
+ * change that costs a GPU optimisation and fixes nothing.
  */
 /**
  * The only name hidden, and deliberately the only one.
@@ -96,11 +114,17 @@ const EXTENSION = "OCULUS_multiview";
 
 let applied = false;
 
-/** Whether the URL asked for the non-multiview arm. */
-function requested(): boolean {
+/**
+ * Whether the URL asked to opt back into the SDK's multiview path.
+ *
+ * Absence means off — so a non-browser context with no `location` (the
+ * strip-types test runner) also gets the default, rather than silently taking
+ * the arm the app no longer ships.
+ */
+function sdkPathRequested(): boolean {
   if (typeof location === "undefined") return false;
   try {
-    return new URLSearchParams(location.search).get("multiview") === "off";
+    return new URLSearchParams(location.search).get("multiview") === "on";
   } catch {
     return false;
   }
@@ -111,14 +135,13 @@ function requested(): boolean {
  * queries the extension there and again at session start, so anything later is
  * too late.
  *
- * Does nothing at all unless diagnostics are on AND the URL asks for it. This
- * changes how the app renders, so it is never a default and never silent: a
- * production build cannot be pushed onto a different render path by a query
- * string.
+ * Runs on every load unless `?multiview=on` asks for the SDK path. Deliberately
+ * not gated on `DIAGNOSTICS_ENABLED` — see the header: this is how the app
+ * renders now, in production as much as in development.
  */
 export function applyMultiviewOverride(): void {
-  if (!DIAGNOSTICS_ENABLED || applied) return;
-  if (!requested()) {
+  if (applied) return;
+  if (sdkPathRequested()) {
     // Log the untouched arm too. Silence here would be indistinguishable from
     // an override that failed to apply, and every arm of this investigation
     // that was assumed rather than reported cost a run to re-do.
@@ -127,10 +150,12 @@ export function applyMultiviewOverride(): void {
     // MEASURED line below correctly said OFF, because a desktop browser has no
     // `OCULUS_multiview` at all. Asserting a state instead of measuring it is
     // the exact mistake this investigation has repeatedly paid for.
-    console.log(
-      `[MultiviewOverride] not patching (no ?multiview=off). The SDK requests ` +
-        `multiviewStereo: true; actual state on the MEASURED line below.`,
-    );
+    if (DIAGNOSTICS_ENABLED)
+      console.log(
+        `[MultiviewOverride] not patching (?multiview=on asked for the SDK ` +
+          `path). The SDK requests multiviewStereo: true; actual state on the ` +
+          `MEASURED line below.`,
+      );
     return;
   }
   const contexts = [
@@ -159,10 +184,12 @@ export function applyMultiviewOverride(): void {
       return original.call(this, name);
     } as unknown as WebGLRenderingContext["getExtension"];
   }
-  console.log(
-    `[MultiviewOverride] ${EXTENSION} hidden by ?multiview=off — ` +
-      `contexts patched: ${contexts.length}. Confirm with the MEASURED line below.`,
-  );
+  if (DIAGNOSTICS_ENABLED)
+    console.log(
+      `[MultiviewOverride] ${EXTENSION} hidden by default — contexts patched: ` +
+        `${contexts.length}. ?multiview=on restores the SDK path. Confirm with ` +
+        `the MEASURED line below.`,
+    );
 }
 
 /**
@@ -197,6 +224,6 @@ export function reportMultiviewState(world: unknown): void {
   console.log(
     `[MultiviewOverride] MEASURED: ${EXTENSION} ` +
       `${available ? "AVAILABLE -> multiview ON" : "absent -> multiview OFF"}` +
-      `${applied && available ? " (OVERRIDE FAILED — it asked for off)" : ""}`,
+      `${applied && available ? " (OVERRIDE FAILED — the patch installed but the extension is still visible)" : ""}`,
   );
 }

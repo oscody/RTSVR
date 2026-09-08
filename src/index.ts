@@ -292,8 +292,9 @@ const assets: AssetManifest = {
 // of time it matters.
 // BEFORE World.create for a harder reason than the loading screen's: the
 // renderer is constructed inside that call and asks for OCULUS_multiview there,
-// so an override applied afterwards is simply too late. Inert without
-// `?multiview=off`. See `multiviewOverride.ts` for what the A/B decides.
+// so an override applied afterwards is simply too late. Multiview is off by
+// DEFAULT here, production included — `?multiview=on` is the only way back onto
+// the SDK's path. See `multiviewOverride.ts` for why the app renders this way.
 applyMultiviewOverride();
 setupLoadingScreen();
 // The shared LoadingManager does not exist until AssetManager.init runs inside
