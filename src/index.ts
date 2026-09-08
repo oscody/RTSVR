@@ -14,6 +14,10 @@ import {
   installFrameProfiler,
   isFrameProfilerEnabled,
 } from "./systems/frameProfiler.js";
+import {
+  applyMultiviewOverride,
+  reportMultiviewState,
+} from "./systems/multiviewOverride.js";
 import { AlienAnimationSystem } from "./systems/alienAnimation.js";
 import { CommandCenterAnimationSystem } from "./systems/commandCenterAnimation.js";
 import { CraftProductionSystem } from "./systems/craftProduction.js";
@@ -288,6 +292,12 @@ const assets: AssetManifest = {
 // across the preload it exists to cover, and the preload happens inside that
 // call. Wiring it in the .then() would attach the driver after the only stretch
 // of time it matters.
+// BEFORE World.create for a harder reason than the loading screen's: the
+// renderer is constructed inside that call and asks for OCULUS_multiview there,
+// so an override applied afterwards is simply too late. Multiview is off by
+// DEFAULT here, production included — `?multiview=on` is the only way back onto
+// the SDK's path. See `multiviewOverride.ts` for why the app renders this way.
+applyMultiviewOverride();
 setupLoadingScreen();
 // The shared LoadingManager does not exist until AssetManager.init runs inside
 // World.create, so this polls for it rather than reaching for it now.
@@ -393,6 +403,9 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
       // would fail every time if the sweep ran mid-frame.
       .registerSystem(TraceDiagnosticsSystem);
     installFrameProfiler(world);
+    // States which render path is actually in force, read off the live GL
+    // context. Intent is logged before World.create; this is the fact.
+    reportMultiviewState(world);
     // The one line that makes every capture attributable. Until now a log could
     // not say which code produced it, which is the ambiguity the landing plan's
     // deferred `[Build]` line was meant to close.
