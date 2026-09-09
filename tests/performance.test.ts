@@ -157,7 +157,26 @@ test("waves prepare incrementally while reserves stay cheap", () => {
 
   assert.match(enemyFactory, /holder\.visible = false/);
   assert.doesNotMatch(enemyFactory, /\.addComponent\(RayInteractable\)/);
-  assert.equal(enemyFactory.match(/setFromObject\(model\)/g)?.length, 1);
+
+  // ONE bounds traversal per alien built. `setFromObject` walks the whole
+  // model, and countdown preparation builds the bulk of every wave.
+  //
+  // The measurement moved out of the factory into `seatEnemyModel` on
+  // 2026-09-09 so the alien-remnant pool could seat its clones the same way —
+  // a clone that skipped it pivoted about the GLB's own origin and threw the
+  // body sideways instead of toppling. The invariant is unchanged; only where
+  // it lives moved, so the assertion follows it rather than being relaxed.
+  const seatHelper = structures.slice(
+    structures.indexOf("export function seatEnemyModel"),
+    structures.indexOf("export function modelChildOf"),
+  );
+  assert.equal(seatHelper.match(/setFromObject\(model\)/g)?.length, 1);
+  assert.match(enemyFactory, /seatEnemyModel\(model, spec\.widthTiles\)/);
+  assert.doesNotMatch(
+    enemyFactory,
+    /setFromObject\(/,
+    "the factory must delegate the measurement, not repeat it",
+  );
 });
 
 test("GPU warm-up is queued, labelled, and covers first-use effect resources", () => {

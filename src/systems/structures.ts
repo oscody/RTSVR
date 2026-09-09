@@ -219,6 +219,32 @@ trackResource(interactionProxyMaterial, {
  * name. Order is an accident of construction, and renaming a GLTF root risks
  * breaking `AnimationMixer` track binding, which resolves nodes by name.
  */
+/**
+ * Scale a freshly cloned enemy model to its tile footprint and seat it on its
+ * own base, so the holder's origin is the model's FEET. Returns the scaled size,
+ * which the interaction proxy needs.
+ *
+ * Shared rather than inlined because getting it wrong is invisible until
+ * something rotates the holder. A GLTF carries whatever origin it was authored
+ * with; an unseated clone pivots about that instead of about the ground, and a
+ * topple throws the body sideways in an arc rather than laying it down. That is
+ * exactly the bug the alien remnant shipped with on 2026-09-08, from a clone
+ * that skipped this.
+ */
+export function seatEnemyModel(model: Object3D, widthTiles: number): Vector3 {
+  const modelBox = new Box3().setFromObject(model);
+  const modelSize = modelBox.getSize(new Vector3());
+  const scale = (widthTiles * TILE_SIZE) / modelSize.x;
+  const previousScale = model.scale.x || 1;
+  const scaleRatio = scale / previousScale;
+  model.scale.setScalar(scale);
+  modelBox.min.sub(model.position).multiplyScalar(scaleRatio).add(model.position);
+  modelBox.max.sub(model.position).multiplyScalar(scaleRatio).add(model.position);
+  modelSize.multiplyScalar(scaleRatio);
+  seatModel(model, modelBox);
+  return modelSize;
+}
+
 export function modelChildOf(holder: Object3D | null | undefined): Object3D | null {
   if (!holder) return null;
   for (const child of holder.children) {
@@ -288,23 +314,7 @@ export function createEnemyEntity(
   const gltf = AssetManager.getGLTF(spec.asset);
   if (!gltf) throw new Error(`${spec.asset} not preloaded`);
   const model = gltf.scene;
-  const modelBox = new Box3().setFromObject(model);
-  const modelSize = modelBox.getSize(new Vector3());
-  const width = modelSize.x;
-  const scale = (spec.widthTiles * TILE_SIZE) / width;
-  const previousScale = model.scale.x || 1;
-  const scaleRatio = scale / previousScale;
-  model.scale.setScalar(scale);
-  modelBox.min
-    .sub(model.position)
-    .multiplyScalar(scaleRatio)
-    .add(model.position);
-  modelBox.max
-    .sub(model.position)
-    .multiplyScalar(scaleRatio)
-    .add(model.position);
-  modelSize.multiplyScalar(scaleRatio);
-  seatModel(model, modelBox);
+  const modelSize = seatEnemyModel(model, spec.widthTiles);
   const visualYOffset = enemyVisualElevation(spec);
   model.position.y += visualYOffset;
 

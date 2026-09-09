@@ -6,6 +6,7 @@ import {
   Group,
   Mesh,
   MeshBasicMaterial,
+  Quaternion,
   type Object3D,
   RingGeometry,
   SphereGeometry,
@@ -23,6 +24,7 @@ import {
   ALIEN_REMNANT_REST_SECONDS,
   ALIEN_REMNANT_TOPPLE_RADIANS,
   ALIEN_REMNANT_TOPPLE_SECONDS,
+  ALIEN_REMNANT_WIDTH_TILES,
   COMMAND_CENTER_DOOR_NODES,
   GAMEPLAY_VFX_CARRY_ARRIVE_FRACTION,
   GAMEPLAY_VFX_CARRY_POOL_SIZE,
@@ -50,6 +52,7 @@ import { startRetreat } from "./objectTransitions.js";
 import { tracked } from "./resourceLifetime.js";
 import { boardState } from "./state.js";
 import { makeNonInteractive } from "./sharedGeometry.js";
+import { seatEnemyModel } from "./structures.js";
 
 /**
  * Short visual punctuation for economy, death and completion events.
@@ -136,8 +139,16 @@ interface RemnantSlot {
   object: Object3D;
   active: boolean;
   age: number;
-  /** Sign of the topple, so bodies do not all fall the same way. */
-  direction: number;
+  /**
+   * Horizontal axis the body rotates about, and the facing it died with.
+   *
+   * A quaternion rather than `rotation.x`, because Euler XYZ applies the X term
+   * in the PARENT frame: with a yaw already set, every corpse toppled about the
+   * board's X axis and they all ended up lying the same way.
+   */
+  axisX: number;
+  axisZ: number;
+  yaw: number;
   /** `startRetreat` is handed the object once, at the end of the rest. */
   fading: boolean;
 }
@@ -213,6 +224,10 @@ function nearestDoor(commandCenter: Object3D, fromWorld: Vector3, out: Vector3):
 }
 const tmpSize = new Vector3();
 const tmpBox = new Box3();
+const tmpAxis = new Vector3();
+const tmpFall = new Quaternion();
+const tmpYaw = new Quaternion();
+const UP = new Vector3(0, 1, 0);
 
 /** Colour and lifetime for each kind, so emitters carry no magic numbers. */
 const EFFECT_STYLE: Readonly<
@@ -406,6 +421,11 @@ function ensureRemnantPool(): boolean {
   for (let index = 0; index < ALIEN_REMNANT_POOL_SIZE; index += 1) {
     const body = AssetManager.getGLTF("alien")?.scene;
     if (!body) break;
+    // The SAME preparation a live alien gets. Without it the clone keeps the
+    // GLB's authored scale and origin, so it is the wrong size and pivots about
+    // a point that is not its feet — which threw the body sideways in an arc
+    // instead of laying it down.
+    seatEnemyModel(body, ALIEN_REMNANT_WIDTH_TILES);
     const holder = new Group();
     holder.add(body);
     holder.visible = false;
@@ -416,7 +436,15 @@ function ensureRemnantPool(): boolean {
     // from live aliens or from the flash pools.
     holder.userData.drawCat = "remnant";
     effectsWorld.createTransformEntity(holder, { parent: root });
-    remnantSlots.push({ object: holder, active: false, age: 0, direction: 1, fading: false });
+    remnantSlots.push({
+      object: holder,
+      active: false,
+      age: 0,
+      axisX: 1,
+      axisZ: 0,
+      yaw: 0,
+      fading: false,
+    });
   }
   warmObjectForRender(remnantSlots[0]?.object, "gameplay-remnant-pool");
   return remnantSlots.length > 0;
@@ -566,6 +594,19 @@ export function startCrystalCarry(
 }
 
 /**
+ * Point the body at `angle` radians of topple, keeping the facing it died with.
+ *
+ * Composed fall-then-yaw: the yaw turns the body in place, the fall rotates that
+ * whole result about a world-horizontal axis through its feet.
+ */
+function applyRemnantPose(slot: RemnantSlot, angle: number): void {
+  tmpAxis.set(slot.axisX, 0, slot.axisZ);
+  tmpFall.setFromAxisAngle(tmpAxis, angle);
+  tmpYaw.setFromAxisAngle(UP, slot.yaw);
+  slot.object.quaternion.copy(tmpFall).multiply(tmpYaw);
+}
+
+/**
  * A killed alien leaves its body, which goes over and lies there.
  *
  * Called from the combat kill path only, and — like every emitter here — while
@@ -585,14 +626,19 @@ export function startAlienRemnant(target: Entity | null, kind: string): void {
   target.object3D.getWorldPosition(tmpWorld);
   toRootLocal(tmpWorld);
   slot.object.position.copy(tmpWorld);
-  // Keep the facing it died with, and reset everything a previous life left
-  // behind — `startRetreat` restores scale and Y but never the topple.
-  slot.object.rotation.set(0, target.object3D.rotation.y, 0);
-  slot.object.scale.setScalar(1);
+  slot.yaw = target.object3D.rotation.y;
+  // Any horizontal direction, so a cluster of kills does not leave a row of
+  // bodies lying in parallel.
+  const theta = Math.random() * Math.PI * 2;
+  slot.axisX = Math.cos(theta);
+  slot.axisZ = Math.sin(theta);
   slot.active = true;
   slot.age = 0;
   slot.fading = false;
-  slot.direction = Math.random() < 0.5 ? -1 : 1;
+  // Reset what a previous life left behind: `startRetreat` restores scale and Y
+  // when it settles, but nothing restores the topple.
+  slot.object.scale.setScalar(1);
+  applyRemnantPose(slot, 0);
   slot.object.visible = true;
 }
 
@@ -768,14 +814,14 @@ export class GameplayEffectsSystem extends createSystem({}) {
 
       if (slot.age < ALIEN_REMNANT_TOPPLE_SECONDS) {
         // t-squared, so the body starts slow and accelerates into the ground.
-        // The model is seated on its base, so rotating the holder pivots it
-        // about its feet — no fall on Y is needed, and none is applied: a live
-        // alien already stands on the ground.
+        // `seatEnemyModel` put the model's feet at the holder's origin, so this
+        // pivots about the ground — no fall on Y is needed, and none is applied:
+        // a live alien already stands there.
         const t = slot.age / ALIEN_REMNANT_TOPPLE_SECONDS;
-        slot.object.rotation.x = slot.direction * ALIEN_REMNANT_TOPPLE_RADIANS * t * t;
+        applyRemnantPose(slot, ALIEN_REMNANT_TOPPLE_RADIANS * t * t);
         continue;
       }
-      slot.object.rotation.x = slot.direction * ALIEN_REMNANT_TOPPLE_RADIANS;
+      applyRemnantPose(slot, ALIEN_REMNANT_TOPPLE_RADIANS);
 
       if (slot.age < ALIEN_REMNANT_TOPPLE_SECONDS + ALIEN_REMNANT_REST_SECONDS) continue;
 

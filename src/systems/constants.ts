@@ -397,6 +397,14 @@ export const GAMEPLAY_VFX_CARRY_ARRIVE_FRACTION = 0.9;
 // delaying it would leave a corpse holding a tile claim and a ray target.
 export const ALIEN_REMNANT_POOL_SIZE = 6;
 /**
+ * Footprint the remnant clone is scaled to.
+ *
+ * Every enemy in `waveCatalog.ts` is 1 tile wide, and the body must match the
+ * alien that just died exactly — a corpse a different size from the thing that
+ * was standing there reads as a different creature.
+ */
+export const ALIEN_REMNANT_WIDTH_TILES = 1;
+/**
  * How long the body takes to go over.
  *
  * The angle follows t-squared rather than a straight ramp, so it starts slow and
