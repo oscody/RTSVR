@@ -389,6 +389,32 @@ export const GAMEPLAY_VFX_CARRY_STOP_SHORT = 0.35;
  */
 export const GAMEPLAY_VFX_CARRY_ARRIVE_FRACTION = 0.9;
 
+// A killed alien leaves its body behind for a moment instead of blinking out.
+//
+// Phase 1 of `plan/Game_balancing/2026-09-10-Phase-3-Death_Plan.md`: the basic
+// walker only, no smoke, no other unit types. The remnant is a POOLED clone, not
+// the dying entity — `releaseEntity` destroys that on the frame of the kill and
+// delaying it would leave a corpse holding a tile claim and a ray target.
+export const ALIEN_REMNANT_POOL_SIZE = 6;
+/**
+ * How long the body takes to go over.
+ *
+ * The angle follows t-squared rather than a straight ramp, so it starts slow and
+ * accelerates into the ground the way a falling body does. A linear topple reads
+ * as a door closing.
+ */
+export const ALIEN_REMNANT_TOPPLE_SECONDS = 0.45;
+/** Quarter turn: upright to flat. */
+export const ALIEN_REMNANT_TOPPLE_RADIANS = Math.PI / 2;
+/** Lying there before it goes. Long enough to register, short enough not to litter. */
+export const ALIEN_REMNANT_REST_SECONDS = 0.9;
+/** Reuses `startRetreat`, so this is only how long the slot stays claimed. */
+export const ALIEN_REMNANT_FADE_SECONDS = 0.3;
+/** What it shrinks to before it is hidden — small enough to read as gone. */
+export const ALIEN_REMNANT_FADE_SCALE = 0.15;
+/** Sinks as it goes, so the body settles into the ground rather than evaporating. */
+export const ALIEN_REMNANT_FADE_SINK = TILE_SIZE * 0.25;
+
 // A building death reads as a bigger event than a unit death.
 export const GAMEPLAY_VFX_BUILDING_DEATH_SCALE = 1.8;
 

@@ -16,6 +16,13 @@ import {
 import {
   GAMEPLAY_VFX_BODY_Y,
   GAMEPLAY_VFX_BUILDING_DEATH_SCALE,
+  ALIEN_REMNANT_FADE_SCALE,
+  ALIEN_REMNANT_FADE_SECONDS,
+  ALIEN_REMNANT_FADE_SINK,
+  ALIEN_REMNANT_POOL_SIZE,
+  ALIEN_REMNANT_REST_SECONDS,
+  ALIEN_REMNANT_TOPPLE_RADIANS,
+  ALIEN_REMNANT_TOPPLE_SECONDS,
   COMMAND_CENTER_DOOR_NODES,
   GAMEPLAY_VFX_CARRY_ARRIVE_FRACTION,
   GAMEPLAY_VFX_CARRY_POOL_SIZE,
@@ -39,6 +46,7 @@ import {
   GAMEPLAY_VFX_PULSE_POOL_SIZE,
 } from "./constants.ts";
 import { warmObjectForRender } from "./gpuWarmup.js";
+import { startRetreat } from "./objectTransitions.js";
 import { tracked } from "./resourceLifetime.js";
 import { boardState } from "./state.js";
 import { makeNonInteractive } from "./sharedGeometry.js";
@@ -116,6 +124,24 @@ interface CarrySlot {
   to: Vector3;
 }
 
+/**
+ * A killed alien's body, going over.
+ *
+ * No `owner`: unlike a carry, nothing ever needs to cancel one. The entity it
+ * came from is already destroyed when the slot is claimed, so there is no
+ * lifetime to stay in step with — which is also why it needs no death hook of
+ * its own beyond the one call.
+ */
+interface RemnantSlot {
+  object: Object3D;
+  active: boolean;
+  age: number;
+  /** Sign of the topple, so bodies do not all fall the same way. */
+  direction: number;
+  /** `startRetreat` is handed the object once, at the end of the rest. */
+  fading: boolean;
+}
+
 interface PulseSlot {
   mesh: Mesh;
   material: MeshBasicMaterial;
@@ -128,6 +154,7 @@ interface PulseSlot {
 const flashSlots: FlashSlot[] = [];
 const pulseSlots: PulseSlot[] = [];
 const carrySlots: CarrySlot[] = [];
+const remnantSlots: RemnantSlot[] = [];
 let pooledRoot: Object3D | null = null;
 let effectsWorld: World | null = null;
 
@@ -363,6 +390,38 @@ function ensureCarryPool(): boolean {
   return carrySlots.length > 0;
 }
 
+/**
+ * Build the remnant pool. Separate from {@link ensurePool} for the same reason
+ * as {@link ensureCarryPool}: it waits on a loaded GLTF, not just a board root.
+ *
+ * Clones the STATIC `alien` asset, not `alienWalkingSlam`. A corpse must not be
+ * mid-stride, and the static variant also carries no mixer to warm or stop.
+ */
+function ensureRemnantPool(): boolean {
+  if (remnantSlots.length > 0) return true;
+  const root = boardState.boardRoot;
+  if (!root || !root.object3D || !effectsWorld) return false;
+  if (!AssetManager.getGLTF("alien")?.scene) return false;
+
+  for (let index = 0; index < ALIEN_REMNANT_POOL_SIZE; index += 1) {
+    const body = AssetManager.getGLTF("alien")?.scene;
+    if (!body) break;
+    const holder = new Group();
+    holder.add(body);
+    holder.visible = false;
+    makeNonInteractive(holder);
+    holder.name = `AlienRemnant_${index}`;
+    // Its OWN census bucket, not `vfx` and not `alien`: Phase 2 has to be able
+    // to read what remnants cost off the `Draw` line without unpicking them
+    // from live aliens or from the flash pools.
+    holder.userData.drawCat = "remnant";
+    effectsWorld.createTransformEntity(holder, { parent: root });
+    remnantSlots.push({ object: holder, active: false, age: 0, direction: 1, fading: false });
+  }
+  warmObjectForRender(remnantSlots[0]?.object, "gameplay-remnant-pool");
+  return remnantSlots.length > 0;
+}
+
 /** Convert a world point into board-root local space, where the pool lives. */
 function toRootLocal(worldPoint: Vector3): void {
   const rootObject = boardState.boardRoot?.object3D;
@@ -507,6 +566,37 @@ export function startCrystalCarry(
 }
 
 /**
+ * A killed alien leaves its body, which goes over and lies there.
+ *
+ * Called from the combat kill path only, and — like every emitter here — while
+ * the target's `Object3D` still exists, since the pose is copied off it. The
+ * remnant then lives entirely on its own: the entity is destroyed on the same
+ * frame and nothing links the two afterwards.
+ *
+ * Phase 1 scope: the basic walker. Drakes die in the air and a mech falling like
+ * a body would look wrong; both wait for Phase 3 and its own timing profile.
+ */
+export function startAlienRemnant(target: Entity | null, kind: string): void {
+  if (kind !== "alien" || !target?.object3D || !ensureRemnantPool()) return;
+
+  const slot = remnantSlots.find((candidate) => !candidate.active);
+  if (!slot) return; // Pool full: drop it, exactly as the flash pools do.
+
+  target.object3D.getWorldPosition(tmpWorld);
+  toRootLocal(tmpWorld);
+  slot.object.position.copy(tmpWorld);
+  // Keep the facing it died with, and reset everything a previous life left
+  // behind — `startRetreat` restores scale and Y but never the topple.
+  slot.object.rotation.set(0, target.object3D.rotation.y, 0);
+  slot.object.scale.setScalar(1);
+  slot.active = true;
+  slot.age = 0;
+  slot.fading = false;
+  slot.direction = Math.random() < 0.5 ? -1 : 1;
+  slot.object.visible = true;
+}
+
+/**
  * Abandon a hand-over that will never be paid.
  *
  * Called wherever a miner stops mining — the base destroyed under it, the
@@ -567,6 +657,11 @@ export function clearGameplayEffects(): void {
     slot.owner = -1;
     slot.object.visible = false;
   }
+  for (const slot of remnantSlots) {
+    slot.active = false;
+    slot.fading = false;
+    slot.object.visible = false;
+  }
   // Drop the door lookup with them. A reset builds a new command center, and
   // holding its predecessor's nodes would keep a disposed subtree alive until
   // the next hand-over happened to notice the object had changed.
@@ -579,14 +674,17 @@ export function gameplayEffectsActive(): {
   flashes: number;
   pulses: number;
   carries: number;
+  remnants: number;
 } {
   let flashes = 0;
   let pulses = 0;
   let carries = 0;
   for (const slot of flashSlots) if (slot.active) flashes += 1;
   for (const slot of pulseSlots) if (slot.active) pulses += 1;
+  let remnants = 0;
   for (const slot of carrySlots) if (slot.active) carries += 1;
-  return { flashes, pulses, carries };
+  for (const slot of remnantSlots) if (slot.active) remnants += 1;
+  return { flashes, pulses, carries, remnants };
 }
 
 export class GameplayEffectsSystem extends createSystem({}) {
@@ -607,8 +705,9 @@ export class GameplayEffectsSystem extends createSystem({}) {
     //
     // Cheap to call every frame: it returns on an identity check once built.
     if (!ensurePool()) return;
-    // Retries until `rockCrystals` has loaded; a no-op length check after that.
+    // Retry until their assets have loaded; a no-op length check after that.
     ensureCarryPool();
+    ensureRemnantPool();
     const frameDelta = Math.max(0, delta);
 
     for (const slot of flashSlots) {
@@ -661,6 +760,44 @@ export class GameplayEffectsSystem extends createSystem({}) {
       const eased = t * t * (3 - 2 * t);
       slot.object.position.lerpVectors(slot.from, slot.to, eased);
       slot.object.rotation.y += frameDelta * GAMEPLAY_VFX_CARRY_SPIN;
+    }
+
+    for (const slot of remnantSlots) {
+      if (!slot.active) continue;
+      slot.age += frameDelta;
+
+      if (slot.age < ALIEN_REMNANT_TOPPLE_SECONDS) {
+        // t-squared, so the body starts slow and accelerates into the ground.
+        // The model is seated on its base, so rotating the holder pivots it
+        // about its feet — no fall on Y is needed, and none is applied: a live
+        // alien already stands on the ground.
+        const t = slot.age / ALIEN_REMNANT_TOPPLE_SECONDS;
+        slot.object.rotation.x = slot.direction * ALIEN_REMNANT_TOPPLE_RADIANS * t * t;
+        continue;
+      }
+      slot.object.rotation.x = slot.direction * ALIEN_REMNANT_TOPPLE_RADIANS;
+
+      if (slot.age < ALIEN_REMNANT_TOPPLE_SECONDS + ALIEN_REMNANT_REST_SECONDS) continue;
+
+      if (!slot.fading) {
+        // Reuse rather than a second easing curve. `startRetreat` shrinks it,
+        // sinks it and hides it at the end; a full transition pool snaps it
+        // away instead, which is the right degradation.
+        slot.fading = true;
+        startRetreat(
+          slot.object,
+          ALIEN_REMNANT_FADE_SECONDS,
+          ALIEN_REMNANT_FADE_SCALE,
+          ALIEN_REMNANT_FADE_SINK,
+        );
+      }
+      if (
+        slot.age >=
+        ALIEN_REMNANT_TOPPLE_SECONDS + ALIEN_REMNANT_REST_SECONDS + ALIEN_REMNANT_FADE_SECONDS
+      ) {
+        slot.active = false;
+        slot.fading = false;
+      }
     }
   }
 }

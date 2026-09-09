@@ -87,11 +87,11 @@ test("emitters never create entities, components, or timers", () => {
   // Two live in `ensurePool`, the third in `ensureCarryPool`, which is separate
   // because it waits on a loaded GLTF rather than just a board root.
   const creations = src.match(/createTransformEntity/g) ?? [];
-  assert.equal(creations.length, 3, "only the three pool builders may create entities");
+  assert.equal(creations.length, 4, "only the four pool builders may create entities");
   const builders = src.slice(src.indexOf("function ensurePool"), src.indexOf("function toRootLocal"));
   assert.equal(
     (builders.match(/createTransformEntity/g) ?? []).length,
-    3,
+    4,
     "every creation must sit inside a pool builder",
   );
 });
@@ -118,9 +118,11 @@ test("every effect mesh is non-interactive and counted as vfx", () => {
   // the census inherits `drawCat` down the tree, so tagging the holder covers
   // every mesh the GLTF brought with it.
   const nonInteractive = (src.match(/makeNonInteractive\((mesh|holder)\)/g) ?? []).length;
-  const categorised = (src.match(/userData\.drawCat = "vfx"/g) ?? []).length;
-  assert.equal(nonInteractive, 3, "all three pools must mark their objects non-interactive");
-  assert.equal(categorised, 3, "all three pools must set a draw category");
+  // Remnants get their own bucket rather than `vfx`, so Phase 2 can read what
+  // they cost off the `Draw` line without unpicking them from the flash pools.
+  const categorised = (src.match(/userData\.drawCat = "(vfx|remnant)"/g) ?? []).length;
+  assert.equal(nonInteractive, 4, "all four pools must mark their objects non-interactive");
+  assert.equal(categorised, 4, "all four pools must set a draw category");
 });
 
 test("both shader variants are GPU-warmed before the first event", () => {
@@ -389,4 +391,47 @@ test("an alien killed mid-entrance releases its transition slot", () => {
     src.includes("settleObject(modelChildOf(target.object3D), false)"),
     "a corpse must not hold a transition slot for the rest of the duration",
   );
+});
+
+// ── Phase 1 of the death plan: the alien remnant ───────────────────────────
+
+test("the remnant is a pooled object, not the dying entity", () => {
+  // `releaseEntity` destroys the entity on the frame of the kill, and delaying
+  // that would leave a corpse holding a tile claim and a ray target. So the
+  // body that falls has to outlive the entity, which means a pool.
+  const combat = source("src/systems/combat.ts");
+  const spawn = combat.indexOf("startAlienRemnant(target");
+  const release = combat.indexOf("releaseEntity(target)", spawn);
+  assert.ok(spawn > 0, "the kill path must start a remnant");
+  assert.ok(release > spawn, "the pose must be copied before the entity is released");
+
+  const effects = effectsCode();
+  const fn = effects.slice(effects.indexOf("export function startAlienRemnant"));
+  const body = fn.slice(0, fn.indexOf("\n}"));
+  assert.match(body, /remnantSlots\.find/, "it must claim a pooled slot");
+  assert.ok(!body.includes("new Group("), "a full pool must drop the body, not allocate one");
+});
+
+test("Phase 1 is the basic walker only", () => {
+  // Drakes die in the air and a mech toppling like a body would look wrong;
+  // both wait for Phase 3 and their own timing profiles.
+  const effects = effectsCode();
+  const fn = effects.slice(effects.indexOf("export function startAlienRemnant"));
+  assert.match(fn.slice(0, fn.indexOf("\n}")), /kind !== "alien"/);
+});
+
+test("the remnant is measurable on its own", () => {
+  // Phase 2 gates on numbers, so remnants need their own census bucket rather
+  // than sharing one with live aliens or with the flash pools.
+  assert.ok(
+    effectsCode().includes('userData.drawCat = "remnant"'),
+    "remnants must be countable separately on the Draw line",
+  );
+  assert.match(effects(), /remnants: number/, "and reported by gameplayEffectsActive");
+});
+
+test("a reset parks remnants with everything else", () => {
+  const clear = effects().slice(effects().indexOf("export function clearGameplayEffects"));
+  const body = clear.slice(0, clear.indexOf("\n}"));
+  assert.ok(body.includes("remnantSlots"), "a stale body must not survive a rebuild");
 });

@@ -11,7 +11,11 @@ import {
   type DamageResult,
   type DamageTargetType,
 } from "./combatRules.js";
-import { cancelCrystalCarry, emitDeathVfx } from "./gameplayEffects.js";
+import {
+  cancelCrystalCarry,
+  emitDeathVfx,
+  startAlienRemnant,
+} from "./gameplayEffects.js";
 import { settleObject } from "./objectTransitions.js";
 import { modelChildOf } from "./structures.js";
 import { ActionKind, logAction } from "./actionLog.js";
@@ -423,6 +427,11 @@ export class CombatSystem extends createSystem({
     // cancelled construction sites and discarded reserve aliens all look like
     // deaths.
     if (deathKind) emitDeathVfx(target, deathKind);
+    // Copies the corpse's pose, so it must run here too — one frame later the
+    // `Object3D` is gone. The remnant outlives the entity by design.
+    if (deathKind === "alien") {
+      startAlienRemnant(target, target.getValue(Enemy, "kind") ?? "alien");
+    }
     releaseEntity(target);
   }
 
