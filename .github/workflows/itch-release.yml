@@ -1,0 +1,67 @@
+# Publish the tested production HTML5 build to itch.io.
+#
+# GitHub Pages remains the deploy target for ordinary pushes to master. This
+# workflow follows the repository's release branch: every successful push to
+# master becomes the current playable build on the itch.io HTML5 channel.
+name: Publish HTML5 to itch.io
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: itch-html5
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Validate and trim upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/index.html
+          find dist -name .DS_Store -delete
+          if [[ -d dist/images/test ]]; then
+            find dist/images/test -type f -delete
+            find dist/images/test -depth -type d -empty -delete
+          fi
+          find dist -type f | grep -q .
+          echo "Ready to publish: $(du -sh dist | awk '{print $1}')"
+
+      # itch.io documents this action as a Butler CI integration. It installs
+      # the current Butler binary and uses the API key stored in GitHub Secrets.
+      - name: Set up Butler
+        uses: buildalon/setup-butler@v1
+        with:
+          api-key: ${{ secrets.BUTLER_API_KEY }}
+
+      - name: Publish to itch.io
+        run: butler push dist c0debuilds/rtsvr:html5
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          BUTLER_PUSH_SOURCE: github-actions
